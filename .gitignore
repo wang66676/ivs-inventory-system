@@ -22,3 +22,7 @@ tools/cloudflared*.exe
 tools/cloudflared-url.txt
 release/
 
+
+# 一次性问题截图
+/文字遮挡问题.png
+

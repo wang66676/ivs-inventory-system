@@ -176,11 +176,14 @@ async function submitChangePassword() {
 .brand-mark { display: grid; width: 44px; height: 40px; place-items: center; border-radius: 12px; background: #1677ff; font-weight: 700; font-size: 13px; }
 .brand-title { font-size: 16px; font-weight: 700; }
 .brand-subtitle { margin-top: 3px; color: rgba(255, 255, 255, 0.55); font-size: 12px; }
-.app-header { display: flex; align-items: center; justify-content: space-between; height: 72px; padding: 0 28px; background: #fff; border-bottom: 1px solid #eef2f7; }
-.header-title { color: #172033; font-size: 18px; font-weight: 700; }
-.header-note { margin-top: 2px; color: #8b96a8; font-size: 12px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; padding: 0 28px; background: #fff; border-bottom: 1px solid #eef2f7; line-height: normal; }
+.app-header > :first-child { flex: 1; min-width: 0; }
+.app-header > .ant-space { flex-shrink: 0; }
+.header-title { color: #172033; font-size: 18px; line-height: 1.4; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-note { margin-top: 2px; color: #8b96a8; font-size: 12px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-content { min-height: calc(100vh - 72px); padding: 24px; background: #f5f7fb; }
 </style>
+
 
 
 
