@@ -1,0 +1,24 @@
+# 构建产物
+backend/*/target/
+frontend/dist/
+frontend/node_modules/
+.pnpm-store/
+
+# 运行时数据与日志
+backend/data/
+logs/
+.run/
+.env.production
+backups/
+*.before-restore-*
+
+# 编辑器
+.idea/
+.vscode/
+*.iml
+
+# 本地在线部署工具与发布包
+tools/cloudflared*.exe
+tools/cloudflared-url.txt
+release/
+

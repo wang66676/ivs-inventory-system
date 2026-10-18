@@ -1,0 +1,58 @@
+/* 全局表格列宽行为：固定布局、内容不换行、超出隐藏，由表头右侧拖拽披露。 */
+.ant-table table {
+  table-layout: fixed !important;
+  width: var(--ivs-table-width, 100%) !important;
+  min-width: var(--ivs-table-width, 100%) !important;
+}
+
+/* 列宽由首行 th 控制，避免表格组件重渲染 colgroup 时覆盖拖拽结果。 */
+.ant-table colgroup > col {
+  width: auto !important;
+  min-width: auto !important;
+  max-width: none !important;
+}
+
+.ant-table-thead > tr > th,
+.ant-table-tbody > tr > td {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis;
+  word-break: keep-all;
+}
+
+.ant-table-thead > tr > th {
+  vertical-align: middle;
+}
+
+.ant-table-tbody > tr > td > .ant-space,
+.ant-table-tbody > tr > td > .ant-typography,
+.ant-table-tbody > tr > td > div,
+.ant-table-tbody > tr > td > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ant-table-content,
+.ant-table-body {
+  overflow-x: auto !important;
+}
+
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 6;
+  width: 7px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  background: transparent;
+}
+
+.column-resize-handle:focus-visible {
+  outline: 1px solid #1677ff;
+  outline-offset: -1px;
+  background: rgba(22, 119, 255, 0.12);
+}

@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ivs_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    clean-disabled: false
+
+ivs:
+  security:
+    session-hours: 1
+    bootstrap-admin:
+      enabled: true
+      username: admin
+      password: admin123
+  outbox:
+    dispatch-enabled: false
+    dispatch-interval-ms: 60000

@@ -1,0 +1,416 @@
+package com.ivs.sales.order;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ivs.sales.order.api.SalesApi;
+import com.ivs.sales.settlement.Receivable;
+import com.ivs.sales.settlement.ReceivableRepository;
+import com.ivs.shared.error.ConflictException;
+import com.ivs.shared.error.NotFoundException;
+import com.ivs.shared.event.EventEnvelope;
+import com.ivs.shared.event.EventPublisher;
+import com.ivs.shared.security.CurrentActorProvider;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * 销售订单与出库。
+ *
+ * <p>主链路：建单（自动取价 + 低价标记）→ 价格审批（如需要）→ 确认（信用额度校验）→ 锁货 →
+ * 出库（扣库存、结转成本、生成应收）→ 收款核销 → 开票。</p>
+ */
+@Service
+public class SalesOrderApplicationService {
+
+    private static final int DEFAULT_PAYMENT_TERM_DAYS = 30;
+
+    private final SalesOrderRepository orderRepository;
+    private final SalesOrderLineRepository lineRepository;
+    private final SalesDeliveryRepository deliveryRepository;
+    private final SalesDeliveryLineRepository deliveryLineRepository;
+    private final ReceivableRepository receivableRepository;
+    private final SalesMasterDataPort masterData;
+    private final SalesStockPort stockPort;
+    private final EventPublisher events;
+    private final CurrentActorProvider actors;
+    private final ObjectMapper objectMapper;
+
+    public SalesOrderApplicationService(SalesOrderRepository orderRepository,
+                                        SalesOrderLineRepository lineRepository,
+                                        SalesDeliveryRepository deliveryRepository,
+                                        SalesDeliveryLineRepository deliveryLineRepository,
+                                        ReceivableRepository receivableRepository,
+                                        SalesMasterDataPort masterData,
+                                        SalesStockPort stockPort,
+                                        EventPublisher events,
+                                        CurrentActorProvider actors,
+                                        ObjectMapper objectMapper) {
+        this.orderRepository = orderRepository;
+        this.lineRepository = lineRepository;
+        this.deliveryRepository = deliveryRepository;
+        this.deliveryLineRepository = deliveryLineRepository;
+        this.receivableRepository = receivableRepository;
+        this.masterData = masterData;
+        this.stockPort = stockPort;
+        this.events = events;
+        this.actors = actors;
+        this.objectMapper = objectMapper;
+    }
+
+    @Transactional(readOnly = true)
+    public List<SalesApi.SalesOrderView> list(String keyword, SalesOrderStatus status, UUID customerId) {
+        List<SalesOrder> orders;
+        if (keyword != null && !keyword.isBlank()) {
+            orders = orderRepository.searchByOrderNo("%" + keyword.trim().toLowerCase() + "%");
+        } else if (customerId != null) {
+            orders = orderRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+        } else if (status != null) {
+            orders = orderRepository.findByStatusOrderByCreatedAtDesc(status);
+        } else {
+            orders = orderRepository.findAllByOrderByCreatedAtDesc();
+        }
+        return orders.stream().map(this::toView).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SalesApi.SalesOrderView get(UUID id) {
+        return toView(find(id));
+    }
+
+    @Transactional
+    public SalesApi.SalesOrderView create(SalesApi.SaveSalesOrderCommand command) {
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new ConflictException("SALES_LINE_REQUIRED", "销售订单至少需要一行明细");
+        }
+        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
+        if (command.warehouseId() != null) {
+            masterData.requireWarehouse(command.warehouseId());
+        }
+        String orderNo = "SO-%06d".formatted(orderRepository.nextOrderSequence());
+        SalesOrder order = orderRepository.save(SalesOrder.create(orderNo, customer.id(), command.warehouseId(),
+                BigDecimal.ZERO, false, command.remark(), currentUserId()));
+        int lineNo = 1;
+        BigDecimal total = BigDecimal.ZERO;
+        boolean approvalRequired = false;
+        for (SalesApi.SaveSalesOrderLineCommand line : command.lines()) {
+            SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.productId());
+            SalesMasterDataPort.PriceInfo reference = masterData.lookupPrice(product.id(),
+                    customer.customerType(), LocalDate.now());
+            SalesMasterDataPort.PriceInfo price = line.unitPrice() == null
+                    ? reference
+                    : new SalesMasterDataPort.PriceInfo(line.unitPrice(), reference.minPrice(), "MANUAL");
+            List<UUID> serialIds = normalizeIds(line.serialIds());
+            BigDecimal quantity = "SERIAL".equals(product.trackingMode())
+                    ? (serialIds.isEmpty() ? line.quantity() : BigDecimal.valueOf(serialIds.size()))
+                    : line.quantity();
+            SalesOrderLine entity;
+            try {
+                entity = SalesOrderLine.create(order.getId(), lineNo++, product.id(), quantity, price.price(),
+                        price.minPrice(), null, serialIdsJson(serialIds), line.remark());
+            } catch (IllegalArgumentException exception) {
+                throw new ConflictException("SALES_LINE_INVALID", exception.getMessage());
+            }
+            if (entity.belowMinPrice()) {
+                approvalRequired = true;
+            }
+            lineRepository.save(entity);
+            total = total.add(entity.getAmount());
+        }
+        order.markPriceApprovalRequired(approvalRequired);
+        order.updateTotal(total);
+        orderRepository.save(order);
+        publish(order, "SalesOrderCreated", Map.of("orderNo", orderNo, "totalAmount", total));
+        return toView(order);
+    }
+
+    /** 价格审批：存在低于最低限价的明细时必须先审批才能确认订单。 */
+    @Transactional
+    public SalesApi.SalesOrderView approvePrice(UUID id) {
+        SalesOrder order = find(id);
+        if (!order.isPriceApprovalRequired()) {
+            throw new ConflictException("PRICE_APPROVAL_NOT_REQUIRED", "该订单不存在低于最低限价的明细");
+        }
+        order.approvePrice(currentUserId());
+        orderRepository.save(order);
+        publish(order, "SalesOrderPriceApproved", Map.of("orderNo", order.getOrderNo()));
+        return toView(order);
+    }
+
+    @Transactional
+    public SalesApi.SalesOrderView confirm(UUID id) {
+        SalesOrder order = find(id);
+        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(order.getCustomerId());
+        if (customer.creditLimit() != null && customer.creditLimit().signum() > 0
+                && order.getTotalAmount().compareTo(customer.creditLimit()) > 0) {
+            throw new ConflictException("CREDIT_LIMIT_EXCEEDED", "订单金额超过客户信用额度："
+                    + customer.creditLimit().toPlainString());
+        }
+        try {
+            order.confirm();
+        } catch (IllegalStateException exception) {
+            throw new ConflictException("SALES_STATUS_INVALID", exception.getMessage());
+        }
+        return toView(orderRepository.saveAndFlush(order));
+    }
+
+    /** 锁货：序列号商品按序列号逐台锁定，数量商品按数量锁定。 */
+    @Transactional
+    public SalesApi.SalesOrderView lockOrder(UUID id, UUID warehouseOverride) {
+        SalesOrder order = find(id);
+        if (order.getStatus() != SalesOrderStatus.CONFIRMED && order.getStatus() != SalesOrderStatus.PARTIALLY_DELIVERED) {
+            throw new ConflictException("SALES_STATUS_INVALID", "只有已确认的订单可以锁货");
+        }
+        UUID warehouseId = resolveWarehouseId(order, null);
+        List<SalesOrderLine> lines = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId());
+        List<SalesStockPort.LineLock> locks = new ArrayList<>();
+        for (SalesOrderLine line : lines) {
+            if (line.fullyDelivered()) {
+                continue;
+            }
+            locks.add(new SalesStockPort.LineLock(line.getId(), line.getProductId(), parseIds(line.getSerialIds()),
+                    line.remaining()));
+        }
+        stockPort.allocate(order.getId(), order.getOrderNo(), warehouseId, locks);
+        publish(order, "SalesOrderLocked", Map.of("orderNo", order.getOrderNo(), "lineCount", locks.size()));
+        return toView(order);
+    }
+
+    @Transactional
+    public SalesApi.SalesOrderView cancel(UUID id) {
+        SalesOrder order = find(id);
+        try {
+            order.cancel();
+        } catch (IllegalStateException exception) {
+            throw new ConflictException("SALES_STATUS_INVALID", exception.getMessage());
+        }
+        stockPort.releaseAll(order.getId());
+        return toView(orderRepository.saveAndFlush(order));
+    }
+
+    /** 出库：扣减库存、结转成本、生成应收，并处理锁定。 */
+    @Transactional
+    public SalesApi.SalesDeliveryView deliver(UUID orderId, SalesApi.DeliverCommand command) {
+        SalesOrder order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new NotFoundException("销售订单", orderId));
+        if (!order.deliverable()) {
+            throw new ConflictException("SALES_STATUS_INVALID", "当前订单状态不允许出库: " + order.getStatus());
+        }
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new ConflictException("DELIVERY_LINE_REQUIRED", "请至少填写一行出库明细");
+        }
+        UUID warehouseId = resolveWarehouseId(order, command.warehouseId());
+        masterData.requireWarehouse(warehouseId);
+
+        List<SalesOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(orderId);
+        Map<UUID, SalesOrderLine> byId = new LinkedHashMap<>();
+        orderLines.forEach(line -> byId.put(line.getId(), line));
+
+        // 第一遍：校验
+        List<PreparedDelivery> prepared = new ArrayList<>();
+        for (SalesApi.DeliverLineCommand deliverLine : command.lines()) {
+            SalesOrderLine orderLine = byId.get(deliverLine.orderLineId());
+            if (orderLine == null) {
+                throw new NotFoundException("销售明细", deliverLine.orderLineId());
+            }
+            SalesMasterDataPort.ProductInfo product = masterData.requireProduct(orderLine.getProductId());
+            List<UUID> serialIds = normalizeIds(deliverLine.serialIds());
+            BigDecimal quantity;
+            if ("SERIAL".equals(product.trackingMode())) {
+                if (serialIds.isEmpty()) {
+                    throw new ConflictException("DELIVERY_SERIAL_REQUIRED",
+                            "商品「" + product.name() + "」按序列号管理，请选择本次交付的 VIN / 电池 SN");
+                }
+                quantity = BigDecimal.valueOf(serialIds.size());
+            } else {
+                quantity = deliverLine.quantity() == null ? BigDecimal.ZERO : deliverLine.quantity();
+            }
+            if (quantity.signum() <= 0) {
+                throw new ConflictException("DELIVERY_QUANTITY_REQUIRED", "出库数量必须大于 0");
+            }
+            if (quantity.compareTo(orderLine.remaining()) > 0) {
+                throw new ConflictException("DELIVERY_QUANTITY_EXCEEDED", "商品「" + product.name()
+                        + "」出库数量超过剩余可出：" + orderLine.remaining().toPlainString());
+            }
+            stockPort.requireDeliverable(product.id(), warehouseId, quantity);
+            prepared.add(new PreparedDelivery(orderLine, product, quantity, serialIds));
+        }
+
+        // 第二遍：出库（写台账、结转成本）
+        String orderNo = order.getOrderNo();
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal totalCost = BigDecimal.ZERO;
+        List<Object[]> issued = new ArrayList<>();
+        for (PreparedDelivery item : prepared) {
+            BigDecimal cost = stockPort.issue(order.getId(), orderNo, warehouseId, item.orderLine().getId(),
+                    item.product().id(), item.serialIds(), item.quantity());
+            totalAmount = totalAmount.add(item.quantity().multiply(item.orderLine().getUnitPrice()));
+            totalCost = totalCost.add(cost);
+            issued.add(new Object[]{item, cost});
+        }
+
+        String deliveryNo = "DL-%06d".formatted(deliveryRepository.nextDeliverySequence());
+        SalesDelivery delivery = deliveryRepository.save(SalesDelivery.create(deliveryNo, order.getId(),
+                order.getCustomerId(), warehouseId, totalAmount, totalCost, command.remark()));
+        for (Object[] row : issued) {
+            PreparedDelivery item = (PreparedDelivery) row[0];
+            BigDecimal cost = (BigDecimal) row[1];
+            deliveryLineRepository.save(SalesDeliveryLine.create(delivery.getId(), item.orderLine().getId(),
+                    item.product().id(), item.quantity(), item.orderLine().getUnitPrice(), cost,
+                    serialIdsJson(item.serialIds())));
+            item.orderLine().deliver(item.quantity());
+            lineRepository.save(item.orderLine());
+            List<UUID> remainingSerialIds = new ArrayList<>(parseIds(item.orderLine().getSerialIds()));
+            remainingSerialIds.removeAll(item.serialIds());
+            stockPort.settleLocks(order.getId(), item.orderLine().getId(), item.product().id(), warehouseId,
+                    item.serialIds(), remainingSerialIds, item.orderLine().remaining());
+        }
+
+        // 生成应收（到期日 = 今天 + 客户账期天数，默认 30 天）
+        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(order.getCustomerId());
+        int termDays = customer.paymentTermDays() > 0 ? customer.paymentTermDays() : DEFAULT_PAYMENT_TERM_DAYS;
+        LocalDate dueDate = delivery.getDeliveredAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                .plusDays(termDays);
+        Receivable receivable = Receivable.create("AR-%06d".formatted(receivableRepository.nextReceivableSequence()),
+                order.getCustomerId(), order.getId(), delivery.getId(), totalAmount, dueDate, "出库 " + deliveryNo);
+        receivableRepository.save(receivable);
+
+        boolean fullyDelivered = orderLines.stream().allMatch(SalesOrderLine::fullyDelivered);
+        order.refreshDeliveryStatus(fullyDelivered);
+        if (fullyDelivered) {
+            stockPort.releaseAll(order.getId());
+        }
+        orderRepository.save(order);
+
+        publish(order, "SalesOrderDelivered", Map.of(
+                "orderNo", orderNo, "deliveryNo", deliveryNo, "amount", totalAmount, "cost", totalCost,
+                "grossProfit", totalAmount.subtract(totalCost)));
+        return toDeliveryView(delivery);
+    }
+
+    /** 款货两清后关闭订单（由收款核销流程调用）。 */
+    @Transactional
+    public void closeIfSettled(UUID orderId) {
+        SalesOrder order = orderRepository.findById(orderId).orElse(null);
+        if (order == null || order.getStatus() != SalesOrderStatus.DELIVERED) {
+            return;
+        }
+        order.close();
+        orderRepository.save(order);
+        publish(order, "SalesOrderClosed", Map.of("orderNo", order.getOrderNo()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SalesApi.SalesDeliveryView> listDeliveries() {
+        return deliveryRepository.findAllByOrderByDeliveredAtDesc().stream().map(this::toDeliveryView).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SalesApi.SalesDeliveryView getDelivery(UUID id) {
+        return deliveryRepository.findById(id).map(this::toDeliveryView)
+                .orElseThrow(() -> new NotFoundException("出库单", id));
+    }
+
+
+    private record PreparedDelivery(SalesOrderLine orderLine, SalesMasterDataPort.ProductInfo product,
+                                    BigDecimal quantity, List<UUID> serialIds) {
+    }
+
+    private UUID resolveWarehouseId(SalesOrder order, UUID override) {
+        UUID warehouseId = override != null ? override : order.getWarehouseId();
+        if (warehouseId == null) {
+            throw new ConflictException("SALES_WAREHOUSE_REQUIRED", "请指定出库仓库");
+        }
+        return warehouseId;
+    }
+
+    private List<UUID> normalizeIds(List<UUID> ids) {
+        if (ids == null) {
+            return List.of();
+        }
+        List<UUID> normalized = new ArrayList<>();
+        for (UUID id : ids) {
+            if (id != null && !normalized.contains(id)) {
+                normalized.add(id);
+            }
+        }
+        return normalized;
+    }
+
+    private String serialIdsJson(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(ids.stream().map(UUID::toString).toList());
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private List<UUID> parseIds(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<String> raw = objectMapper.readValue(json, new TypeReference<>() {
+            });
+            return raw.stream().map(UUID::fromString).toList();
+        } catch (Exception exception) {
+            return List.of();
+        }
+    }
+
+    private void publish(SalesOrder order, String eventType, Map<String, Object> payload) {
+        events.publish(new EventEnvelope(UUID.randomUUID(), eventType, "SalesOrder", order.getId(),
+                order.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
+    }
+
+    private UUID currentUserId() {
+        return actors.current().map(actor -> actor.userId()).orElse(null);
+    }
+
+    private SalesOrder find(UUID id) {
+        return orderRepository.findById(id).orElseThrow(() -> new NotFoundException("销售订单", id));
+    }
+
+    private SalesApi.SalesOrderView toView(SalesOrder order) {
+        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(order.getCustomerId());
+        String warehouseName = order.getWarehouseId() == null ? null
+                : masterData.requireWarehouse(order.getWarehouseId()).name();
+        List<SalesApi.SalesOrderLineView> lines = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()).stream()
+                .map(line -> {
+                    SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+                    return new SalesApi.SalesOrderLineView(line.getId(), line.getLineNo(), line.getProductId(),
+                            product.productNo(), product.name(), product.categoryCode(), product.trackingMode(),
+                            line.getQuantity(), line.getDeliveredQuantity(), line.remaining(), line.getUnitPrice(),
+                            line.getMinPrice(), line.getTaxRate(), line.getAmount(), line.belowMinPrice(),
+                            parseIds(line.getSerialIds()), line.getRemark());
+                })
+                .toList();
+        return SalesApi.SalesOrderView.from(order, customer.name(), customer.customerType(), warehouseName, lines);
+    }
+
+    private SalesApi.SalesDeliveryView toDeliveryView(SalesDelivery delivery) {
+        String orderNo = orderRepository.findById(delivery.getOrderId()).map(SalesOrder::getOrderNo).orElse(null);
+        String customerName = masterData.requireCustomer(delivery.getCustomerId()).name();
+        String warehouseName = masterData.requireWarehouse(delivery.getWarehouseId()).name();
+        List<SalesApi.SalesDeliveryLineView> lines = deliveryLineRepository.findByDeliveryId(delivery.getId())
+                .stream().map(line -> {
+                    SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+                    return new SalesApi.SalesDeliveryLineView(line.getId(), line.getProductId(), product.productNo(),
+                            product.name(), line.getQuantity(), line.getUnitPrice(), line.getCostAmount(),
+                            parseIds(line.getSerialIds()));
+                }).toList();
+        return SalesApi.SalesDeliveryView.from(delivery, orderNo, customerName, warehouseName, lines);
+    }
+}

@@ -1,0 +1,1 @@
+export interface AuditLogEntry { source:string; eventId:string; processId?:string; eventType:string; aggregateType?:string; aggregateId?:string; status?:string; attempts?:number; message?:string; traceId?:string; occurredAt:string }
