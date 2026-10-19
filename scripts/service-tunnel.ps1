@@ -1,8 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $cloudflared = Join-Path $root 'tools\cloudflared.exe'
-$outLog = Join-Path $root 'logs\tunnel.out.log'
-$errLog = Join-Path $root 'logs\tunnel.err.log'
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$outLog = Join-Path $root "logs\tunnel-$stamp.out.log"
+$errLog = Join-Path $root "logs\tunnel-$stamp.err.log"
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'logs') | Out-Null
 if (-not (Test-Path $cloudflared)) { throw "未找到 cloudflared：$cloudflared" }
 $process = Start-Process -FilePath $cloudflared `
