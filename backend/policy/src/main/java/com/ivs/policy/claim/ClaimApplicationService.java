@@ -333,13 +333,20 @@ public class ClaimApplicationService {
                     PolicyEntitlement entitlement = entitlementRepository.findById(line.getEntitlementId()).orElse(null);
                     PolicyReferencePort.RetailInfo retail = line.getRetailId() == null ? null
                             : references.retail(line.getRetailId());
+                    PolicyReferencePort.PurchaseOrderInfo purchaseOrder = retail == null ? null
+                            : references.purchaseOrderBySerialNo(retail.serialNo());
                     PromotionPolicy policy = line.getPolicyId() == null ? null
                             : policyRepository.findById(line.getPolicyId()).orElse(null);
                     return ClaimApi.ClaimLineView.from(line,
                             entitlement == null ? null : entitlement.getEntitlementNo(),
                             retail == null ? null : retail.retailNo(),
+                            retail == null ? null : retail.retailDate(),
                             policy == null ? null : policy.getName(),
-                            retail == null ? null : retail.serialNo());
+                            retail == null ? null : retail.serialNo(),
+                            purchaseOrder == null ? null : purchaseOrder.orderId(),
+                            purchaseOrder == null ? null
+                                    : purchaseOrder.externalOrderNo() != null ? purchaseOrder.externalOrderNo()
+                                    : purchaseOrder.orderNo());
                 }).toList();
         List<ClaimApi.DifferenceView> differences = differenceRepository
                 .findByClaimIdOrderByCreatedAtAsc(claim.getId()).stream()

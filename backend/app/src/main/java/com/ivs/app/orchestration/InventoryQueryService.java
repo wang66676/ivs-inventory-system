@@ -7,6 +7,7 @@ import com.ivs.inventory.stock.StockLedgerRepository;
 import com.ivs.inventory.stock.StockLock;
 import com.ivs.inventory.stock.StockLockRepository;
 import com.ivs.inventory.stock.StockLockStatus;
+import com.ivs.inventory.stock.StockMoveType;
 import com.ivs.inventory.stock.StockReconciliationService;
 import com.ivs.inventory.stock.api.InventoryApi;
 import com.ivs.masterdata.SerialStatus;
@@ -78,7 +79,8 @@ public class InventoryQueryService {
             InventoryApi.BalanceView view = toBalanceView(balance);
             if (kw != null && !kw.isEmpty()) {
                 String haystack = (view.productNo() + " " + view.productName() + " " + view.categoryCode()
-                        + " " + view.warehouseName()).toLowerCase();
+                        + " " + view.warehouseName() + " " + (view.purchaseOrderNo() == null ? "" : view.purchaseOrderNo()))
+                        .toLowerCase();
                 if (!haystack.contains(kw)) {
                     continue;
                 }
@@ -89,13 +91,15 @@ public class InventoryQueryService {
     }
 
     @Transactional(readOnly = true)
-    public List<InventoryApi.LedgerView> ledger(UUID productId, UUID warehouseId, int limit) {
+    public List<InventoryApi.LedgerView> ledger(UUID productId, UUID warehouseId, StockMoveType moveType,
+                                                int limit) {
         int max = Math.max(1, Math.min(limit, 500));
         List<StockLedger> rows = productId == null
                 ? ledgerRepository.findTop200ByOrderByOccurredAtDesc()
                 : ledgerRepository.findByProductIdOrderByOccurredAtDesc(productId);
         return rows.stream()
                 .filter(row -> warehouseId == null || warehouseId.equals(row.getWarehouseId()))
+                .filter(row -> moveType == null || moveType == row.getMoveType())
                 .limit(max)
                 .map(this::toLedgerView)
                 .toList();
@@ -179,10 +183,33 @@ public class InventoryQueryService {
     private InventoryApi.BalanceView toBalanceView(StockBalance balance) {
         MasterdataApi.ProductView product = productService.get(balance.getProductId());
         String warehouseName = warehouseService.get(balance.getWarehouseId()).name();
+        PurchaseOrderReference order = purchaseOrderOf(balance);
         return new InventoryApi.BalanceView(balance.getId(), balance.getProductId(), product.productNo(),
                 product.name(), product.categoryCode(), product.trackingMode().name(), balance.getWarehouseId(),
                 warehouseName, balance.getBatchNo(), balance.getOnHandQty(), balance.getLockedQty(),
-                balance.getAvailableQty(), balance.getUnitCost(), balance.getAmount(), balance.getUpdatedAt());
+                balance.getAvailableQty(), balance.getUnitCost(), balance.getAmount(), balance.getUpdatedAt(),
+                order == null ? null : order.id(), order == null ? null : order.orderNo());
+    }
+
+    private PurchaseOrderReference purchaseOrderOf(StockBalance balance) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select po.id, coalesce(po.external_order_no, po.order_no) as order_no
+                from ivs.stock_ledger sl
+                join ivs.purchase_receipt pr on pr.id = sl.biz_id
+                join ivs.purchase_order po on po.id = pr.order_id
+                where sl.product_id = ? and sl.warehouse_id = ?
+                  and sl.direction = 'IN' and sl.move_type = 'PURCHASE_IN'
+                order by sl.occurred_at desc
+                limit 1
+                """, balance.getProductId(), balance.getWarehouseId());
+        if (rows.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> row = rows.get(0);
+        return new PurchaseOrderReference((UUID) row.get("id"), String.valueOf(row.get("order_no")));
+    }
+
+    private record PurchaseOrderReference(UUID id, String orderNo) {
     }
 
     private InventoryApi.LedgerView toLedgerView(StockLedger ledger) {

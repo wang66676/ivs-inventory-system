@@ -39,7 +39,7 @@ public class CustomerController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('IVS_WRITE','IVS_RETAIL_WRITE','IVS_PRODUCT_MANAGE')")
     public ResponseEntity<MasterdataApi.CustomerView> create(@Valid @RequestBody MasterdataApi.SaveCustomerCommand command) {
         MasterdataApi.CustomerView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/customers/" + view.id())).body(view);

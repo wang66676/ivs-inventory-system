@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IVS 进销存系统 - 网页登录版</title>
+  <style>
+    :root { color-scheme: light; font-family: "Microsoft YaHei", system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: linear-gradient(135deg,#eef5ff,#f8fafc); color: #172033; }
+    main { width: min(680px, calc(100% - 32px)); padding: 36px; border-radius: 20px; background: #fff; box-shadow: 0 20px 60px rgba(30,64,175,.13); }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { color: #64748b; line-height: 1.7; }
+    label { display: block; margin: 24px 0 8px; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; height: 46px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; }
+    .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+    .primary { width: 100%; margin-top: 14px; border: 0; background: #1677ff; color: #fff; font-size: 16px; cursor: pointer; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    .secondary { border: 1px solid #bfdbfe; color: #1d4ed8; background: #eff6ff; }
+    .note { margin-top: 20px; padding: 14px; border-radius: 10px; background: #f8fafc; font-size: 13px; color: #475569; }
+    @media (max-width: 560px) { main { padding: 24px; } .actions { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>IVS 进销存系统</h1>
+    <p>网页登录版入口。登录、采购、库存、销售、实销、政策返利和资金池均在同一网页系统中。</p>
+    <label for="server-url">服务器地址</label>
+    <input id="server-url" type="url" placeholder="https://example.com/" />
+    <button id="open-system" class="primary">打开网页登录版</button>
+    <div class="actions">
+      <a class="secondary" href="https://github.com/wang66676/ivs-inventory-system/releases/latest" target="_blank">Windows / Android 下载</a>
+      <a class="secondary" href="https://github.com/wang66676/ivs-inventory-system/releases" target="_blank">全部历史版本</a>
+    </div>
+    <div class="note">
+      网页版由服务器统一更新。电脑版和 Android 版请在系统右上角“检查软件更新”中下载最新版；安装最新完整包会自动包含所有中间版本更新。
+    </div>
+  </main>
+  <script src="config.js"></script>
+  <script>
+    const input = document.getElementById('server-url');
+    input.value = localStorage.getItem('ivs_server_url') || window.IVS_SERVER_URL || '';
+    document.getElementById('open-system').addEventListener('click', () => {
+      const value = input.value.trim();
+      if (!/^https?:\/\//i.test(value)) { alert('请输入以 http:// 或 https:// 开头的服务器地址'); return; }
+      const normalized = value.endsWith('/') ? value : value + '/';
+      localStorage.setItem('ivs_server_url', normalized);
+      window.location.href = normalized;
+    });
+  </script>
+</body>
+</html>

@@ -2,23 +2,23 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="预享受项是订单选政策的结果，金额仅作预估。实销后生成正式权益；订单之后新增政策可通过「后加补挂」留痕加入。" />
+               message="采购单选择返利政策后自动同步预享受项，金额仅作预估。实销后按实销日期生成正式权益并申请兑现。" />
       <a-space wrap style="margin-bottom:12px">
-        <a-button v-if="canSelect" type="primary" @click="openCreate">订单选政策</a-button>
         <a-button @click="reload">刷新</a-button>
-        <a-input v-model:value="orderId" placeholder="订单 ID" allow-clear style="width:300px" @press-enter="reload" />
+        <a-input v-model:value="orderKeyword" placeholder="订单编号" allow-clear style="width:260px" />
       </a-space>
-      <a-table :data-source="rows" :columns="columns" row-key="id" size="middle" :pagination="{ pageSize: 15 }"
-               :scroll="{ x: 1250 }">
+      <a-table v-resizable-columns :data-source="filteredRows" :columns="columns" row-key="id" size="middle"
+               :pagination="{ pageSize: 15 }" :scroll="{ x: 1260 }">
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'amount'">{{ money(record.estimateAmount) }}</template>
+          <template v-if="column.key === 'serialNos'">{{ record.serialNos || '-' }}</template>
+          <template v-else-if="column.key === 'orderNo'">
+            <a @click="openOrderDetail(record)">{{ record.orderNo || '-' }}</a>
+          </template>
+          <template v-else-if="column.key === 'amount'">{{ money(record.estimateAmount) }}</template>
+          <template v-else-if="column.key === 'invoiceIssuedAt'">{{ formatDateTime(record.invoiceIssuedAt) }}</template>
+          <template v-else-if="column.key === 'retailDate'">{{ record.retailDate || '-' }}</template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ PRE_STATUS_LABELS[record.status] }}</a-tag>
-          </template>
-          <template v-else-if="column.key === 'added'">
-            <a-tag v-if="record.addedAfterOrder" color="orange">后加补挂</a-tag>
-            <span v-else>订单时选择</span>
-            <div v-if="record.addReason" class="sub">{{ record.addReason }}</div>
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-button v-if="canManage && record.status !== 'SETTLED' && record.status !== 'CANCELLED'"
@@ -28,80 +28,71 @@
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="formOpen" title="订单选择政策" :confirm-loading="saving" ok-text="生成预享受项"
-             cancel-text="取消" width="760px" @ok="save">
-      <a-form layout="vertical">
-        <a-row :gutter="16">
-          <a-col :span="12"><a-form-item label="订单 ID" required><a-input v-model:value="form.orderId" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="订单行 ID"><a-input v-model:value="form.orderLineId" placeholder="同订单行政策防重" /></a-form-item></a-col>
-          <a-col :span="12">
-            <a-form-item label="商品" required>
-              <a-select v-model:value="form.productId" :options="productOptions" show-search />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="序列号（可选）">
-              <a-select v-model:value="form.serialId" :options="serialOptions" show-search allow-clear />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="订单行金额" required>
-              <a-input-number v-model:value="form.orderLineAmount" :min="0" :precision="2" style="width:100%" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="是否后加政策">
-              <a-switch v-model:checked="form.addedAfterOrder" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="24">
-            <a-form-item label="选择政策（可多选，金额累加）" required>
-              <a-select v-model:value="form.policyIds" mode="multiple" :options="policyOptions" show-search allow-clear />
-            </a-form-item>
-          </a-col>
-          <a-col v-if="form.addedAfterOrder" :span="24">
-            <a-form-item label="补挂原因" required><a-textarea v-model:value="form.reason" :rows="2" /></a-form-item>
-          </a-col>
-        </a-row>
-      </a-form>
+    <a-modal v-model:open="orderDetailOpen" title="采购订单详情" footer="" width="1100px">
+      <a-spin :spinning="orderLoading">
+        <template v-if="orderDetail">
+          <a-descriptions bordered size="small" :column="3" style="margin-bottom:12px">
+            <a-descriptions-item label="订单编号">{{ orderDetail.externalOrderNo || orderDetail.orderNo }}</a-descriptions-item>
+            <a-descriptions-item label="供应商">{{ orderDetail.supplierName }}</a-descriptions-item>
+            <a-descriptions-item label="状态">{{ PURCHASE_STATUS_LABELS[orderDetail.status] }}</a-descriptions-item>
+            <a-descriptions-item label="预计到货">{{ orderDetail.expectedDate || '-' }}</a-descriptions-item>
+            <a-descriptions-item label="总金额">{{ money(orderDetail.totalAmount) }}</a-descriptions-item>
+            <a-descriptions-item label="备注">{{ orderDetail.remark || '-' }}</a-descriptions-item>
+          </a-descriptions>
+          <a-table :data-source="orderDetail.lines" row-key="id" size="small" :pagination="false" :scroll="{ x: 1100 }">
+            <a-table-column title="车系" :width="140"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
+            <a-table-column title="商品名称" :width="190"><template #default="{ record }">{{ record.productName }}</template></a-table-column>
+            <a-table-column title="配置" :width="160"><template #default="{ record }">{{ record.configText || record.configCode || '-' }}</template></a-table-column>
+            <a-table-column title="数量" data-index="quantity" :width="80" />
+            <a-table-column title="单价" :width="110"><template #default="{ record }">{{ money(record.unitPrice) }}</template></a-table-column>
+            <a-table-column title="总计车款" :width="120"><template #default="{ record }">{{ money(record.amount) }}</template></a-table-column>
+            <a-table-column title="返利政策" :width="220"><template #default="{ record }"><a-tag v-for="policy in record.policies" :key="policy.id" color="blue">{{ policy.name }}</a-tag></template></a-table-column>
+            <a-table-column title="收货仓库" :width="140"><template #default="{ record }">{{ record.warehouseName || orderDetail?.warehouseName || '-' }}</template></a-table-column>
+          </a-table>
+        </template>
+      </a-spin>
     </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { policyApi } from '../../api/policy'
-import { productApi, serialApi } from '../../api/masterdata'
+import { purchaseApi } from '../../api/procurement'
 import { useAuthStore } from '../../stores/auth'
 import { PRE_STATUS_LABELS } from '../../types/policy'
 import type { PreEntitlement } from '../../types/policy'
+import type { PurchaseOrder } from '../../types/procurement'
+import { PURCHASE_STATUS_LABELS } from '../../types/procurement'
 
 const auth = useAuthStore()
-const canSelect = auth.can('IVS_POLICY_SELECT')
 const canManage = auth.can('IVS_PRE_ENTITLEMENT_MANAGE')
 const rows = ref<PreEntitlement[]>([])
-const orderId = ref('')
-const formOpen = ref(false)
-const saving = ref(false)
-const policyOptions = ref<{ label: string; value: string }[]>([])
-const productOptions = ref<{ label: string; value: string }[]>([])
-const serialOptions = ref<{ label: string; value: string }[]>([])
-const form = reactive<Record<string, any>>({})
+const orderKeyword = ref('')
+const orderDetailOpen = ref(false)
+const orderLoading = ref(false)
+const orderDetail = ref<PurchaseOrder>()
+
+const filteredRows = computed(() => {
+  const keyword = orderKeyword.value.trim().toLowerCase()
+  if (!keyword) return rows.value
+  return rows.value.filter((row) => (row.orderNo || '').toLowerCase().includes(keyword))
+})
 
 const columns = [
-  { title: '预享受编号', key: 'preNo', dataIndex: 'preNo', width: 140 },
-  { title: '订单 ID', key: 'orderId', dataIndex: 'orderId', width: 260 },
+  { title: 'VIN/SN', key: 'serialNos', width: 220 },
+  { title: '订单编号', key: 'orderNo', width: 160 },
   { title: '政策', key: 'policyName', dataIndex: 'policyName', width: 240 },
   { title: '预计金额', key: 'amount', width: 140 },
   { title: '状态', key: 'status', width: 110 },
-  { title: '来源', key: 'added', width: 220 },
-  { title: '创建时间', key: 'createdAt', width: 170, customRender: ({ record }: any) => formatTime(record.createdAt) },
+  { title: '终端开票日期', key: 'invoiceIssuedAt', width: 130 },
+  { title: '实销时间', key: 'retailDate', width: 120 },
   { title: '操作', key: 'actions', width: 100 },
 ]
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
-function formatTime(value: string) { return value ? value.replace('T', ' ').slice(0, 19) : '-' }
+function formatDateTime(value?: string) { return value ? new Date(value).toLocaleDateString('sv-SE') : '-' }
 function statusColor(status: string) {
   if (status === 'READY') return 'blue'
   if (status === 'APPLIED') return 'orange'
@@ -110,54 +101,27 @@ function statusColor(status: string) {
   return 'default'
 }
 
-function openCreate() {
-  Object.keys(form).forEach((key) => delete form[key])
-  Object.assign(form, { addedAfterOrder: false, orderLineAmount: 0 })
-  formOpen.value = true
-}
-
-async function save() {
-  if (!form.orderId || !form.productId || !form.policyIds?.length) {
-    message.warning('请填写订单、商品并至少选择一条政策'); return
-  }
-  if (form.addedAfterOrder && !form.reason?.trim()) { message.warning('后加政策必须填写补挂原因'); return }
-  saving.value = true
-  try {
-    const created = await policyApi.applyPreEntitlement({
-      orderId: form.orderId,
-      orderLineId: form.orderLineId || null,
-      productId: form.productId,
-      serialId: form.serialId || null,
-      orderLineAmount: form.orderLineAmount,
-      policyIds: form.policyIds,
-      addedAfterOrder: !!form.addedAfterOrder,
-      reason: form.reason || null,
-    })
-    message.success(`已生成 ${created.length} 条预享受项，合计 ${money(created.reduce((sum, row) => sum + Number(row.estimateAmount), 0))}`)
-    formOpen.value = false
-    await reload()
-  } catch (error) { message.error((error as Error).message) } finally { saving.value = false }
-}
-
 async function cancel(record: PreEntitlement) {
   try { await policyApi.cancelPreEntitlement(record.id); message.success('预享受项已取消并释放额度'); await reload() }
   catch (error) { message.error((error as Error).message) }
 }
 
 async function reload() {
-  try { rows.value = await policyApi.preEntitlements({ orderId: orderId.value || undefined }) }
+  try { rows.value = await policyApi.preEntitlements() }
   catch (error) { message.error((error as Error).message) }
 }
 
+async function openOrderDetail(record: PreEntitlement) {
+  if (!record.orderId) return
+  orderDetailOpen.value = true
+  orderLoading.value = true
+  orderDetail.value = undefined
+  try { orderDetail.value = await purchaseApi.get(record.orderId) }
+  catch (error) { message.error((error as Error).message); orderDetailOpen.value = false }
+  finally { orderLoading.value = false }
+}
+
 onMounted(async () => {
-  try {
-    const [policies, products, serials] = await Promise.all([
-      policyApi.list({ status: 'PUBLISHED' }), productApi.list(), serialApi.list({ status: 'IN_STOCK' }),
-    ])
-    policyOptions.value = policies.map((item) => ({ label: `${item.name}（${item.policyNo}）`, value: item.id }))
-    productOptions.value = products.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
-    serialOptions.value = serials.map((item) => ({ label: item.serialNo, value: item.id }))
-  } catch { /* ignore */ }
   await reload()
 })
 </script>

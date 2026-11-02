@@ -69,14 +69,15 @@
           </a-col>
           <a-col :span="8">
             <a-form-item :label="form.benefitType === 'RATE' ? '比例（如 0.015）' : '单台金额'" required>
-              <a-input-number v-model:value="form.benefitValue" :min="0" :precision="4" style="width:100%" />
+              <MoneyInput v-if="form.benefitType === 'AMOUNT'" v-model:value="form.benefitValue" :min="0" :precision="2" style="width:100%" />
+              <a-input-number v-else v-model:value="form.benefitValue" :min="0" :precision="4" style="width:100%" />
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="单台上限"><a-input-number v-model:value="form.maxAmount" :min="0" :precision="2" style="width:100%" /></a-form-item>
+            <a-form-item label="单台上限"><MoneyInput v-model:value="form.maxAmount" :min="0" :precision="2" style="width:100%" /></a-form-item>
           </a-col>
-          <a-col :span="8"><a-form-item label="生效日期" required><a-date-picker v-model:value="form.effFrom" style="width:100%" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="失效日期" required><a-date-picker v-model:value="form.effTo" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="生效日期" required><a-date-picker v-model:value="form.effFrom" format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="失效日期" required><a-date-picker v-model:value="form.effTo" format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>
           <a-col :span="8">
             <a-form-item label="参考时间" required>
               <a-select v-model:value="form.referenceDateType" :options="referenceOptions" />
@@ -96,7 +97,7 @@
           </a-col>
           <a-col :span="12">
             <a-form-item label="额度池总额">
-              <a-input-number v-model:value="form.totalAmount" :min="0" :precision="2" style="width:100%"
+              <MoneyInput v-model:value="form.totalAmount" :min="0" :precision="2" style="width:100%"
                               :disabled="form.limitType === 'TIME_ONLY' || form.limitType === 'CONDITION'" />
             </a-form-item>
           </a-col>
@@ -146,7 +147,8 @@ const policyTypeOptions = Object.entries(POLICY_TYPE_LABELS).map(([value, label]
 const cycleOptions = Object.entries(CYCLE_LABELS).filter(([value]) => value !== 'MIXED').map(([value, label]) => ({ value, label }))
 const referenceOptions = [
   { value: 'RETAIL_DATE', label: '实销日期（默认）' }, { value: 'ORDER_DATE', label: '订单日期' },
-  { value: 'DELIVERY_DATE', label: '交付日期' }, { value: 'REGISTER_DATE', label: '上牌日期' },
+  { value: 'INVOICE_DATE', label: '终端开票时间' }, { value: 'DELIVERY_DATE', label: '交付日期' },
+  { value: 'REGISTER_DATE', label: '上牌日期' },
 ]
 const limitOptions = Object.entries(LIMIT_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 

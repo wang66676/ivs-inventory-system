@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="新增商品只需填写：商品、车系、产品名称、型号、单位、税率。商品编码自动生成；批量导入使用同一模板。" />
+               message="新增商品只需填写：商品、车系、型号、单位、税率。商品内部名称由车系和型号自动生成；批量导入使用同一模板。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">新增商品</a-button>
         <a-button v-if="canWrite" @click="importOpen = true">批量上传</a-button>
@@ -11,7 +11,7 @@
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="filterCategoryId" :options="categoryOptions" allow-clear
                   placeholder="按商品筛选" style="width:200px" @change="reload" />
-        <a-input v-model:value="keyword" placeholder="产品名称 / 型号 / 车系" allow-clear
+        <a-input v-model:value="keyword" placeholder="商品编码 / 型号 / 车系" allow-clear
                  style="width:220px" @press-enter="reload" />
         <a-button @click="reload">查询</a-button>
       </a-space>
@@ -49,7 +49,6 @@
             </a-form-item>
           </a-col>
           <a-col :span="12"><a-form-item label="车系"><a-input v-model:value="form.series" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="产品名称" required><a-input v-model:value="form.name" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="型号"><a-input v-model:value="form.model" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="单位"><a-input v-model:value="form.unit" /></a-form-item></a-col>
           <a-col :span="12">
@@ -64,9 +63,9 @@
             <a-col :span="8"><a-form-item label="商品编码"><a-input :value="editing.productNo" disabled /></a-form-item></a-col>
             <a-col :span="8"><a-form-item label="品牌"><a-input v-model:value="form.brand" /></a-form-item></a-col>
             <a-col :span="8"><a-form-item label="配置代码"><a-input v-model:value="form.configCode" /></a-form-item></a-col>
-            <a-col :span="8"><a-form-item label="最低限价"><a-input-number v-model:value="form.minPrice" :min="0" style="width:100%" /></a-form-item></a-col>
-            <a-col :span="8"><a-form-item label="指导价"><a-input-number v-model:value="form.salePriceGuide" :min="0" style="width:100%" /></a-form-item></a-col>
-            <a-col :span="8"><a-form-item label="参考进价"><a-input-number v-model:value="form.purchasePriceRef" :min="0" style="width:100%" /></a-form-item></a-col>
+            <a-col :span="8"><a-form-item label="最低限价"><MoneyInput v-model:value="form.minPrice" :min="0" :precision="2" style="width:100%" /></a-form-item></a-col>
+            <a-col :span="8"><a-form-item label="指导价"><MoneyInput v-model:value="form.salePriceGuide" :min="0" :precision="2" style="width:100%" /></a-form-item></a-col>
+            <a-col :span="8"><a-form-item label="参考进价"><MoneyInput v-model:value="form.purchasePriceRef" :min="0" :precision="2" style="width:100%" /></a-form-item></a-col>
           </a-row>
         </template>
         <a-divider v-if="editing && currentAttrDefs.length" orientation="left" style="font-size:13px">品类扩展属性</a-divider>
@@ -84,7 +83,7 @@
 
     <a-modal v-model:open="importOpen" title="批量上传商品" footer="" width="760px">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="请先下载模板，按“商品、车系、产品名称、型号、单位、税率”填写；商品编码会自动生成。" />
+               message="请先下载模板，按“商品、车系、型号、单位、税率”填写；商品编码和内部名称会自动生成。" />
       <a-upload :before-upload="handleFile" :show-upload-list="false" accept=".csv,text/csv">
         <a-button type="primary" :loading="importing">选择 CSV 文件</a-button>
       </a-upload>
@@ -130,7 +129,6 @@ const columns = [
   { title: '商品编码', key: 'productNo', dataIndex: 'productNo', width: 130 },
   { title: '商品', key: 'categoryName', dataIndex: 'categoryName', width: 120 },
   { title: '车系', key: 'series', dataIndex: 'series', width: 130 },
-  { title: '产品名称', key: 'name', dataIndex: 'name', width: 220 },
   { title: '型号', key: 'model', dataIndex: 'model', width: 140 },
   { title: '单位', key: 'unit', dataIndex: 'unit', width: 80 },
   { title: '税率', key: 'taxRate', width: 90 },
@@ -177,7 +175,7 @@ function openEdit(record: Product) {
   Object.keys(form).forEach((key) => delete form[key])
   Object.keys(attrs).forEach((key) => delete attrs[key])
   Object.assign(form, {
-    categoryId: record.categoryId, name: record.name, series: record.series, model: record.model,
+    categoryId: record.categoryId, series: record.series, model: record.model,
     unit: record.unit, taxRatePercent: record.taxRate == null ? 13 : Number(record.taxRate) * 100,
     brand: record.brand, configCode: record.configCode, minPrice: record.minPrice,
     salePriceGuide: record.salePriceGuide, purchasePriceRef: record.purchasePriceRef, remark: record.remark,
@@ -189,7 +187,6 @@ function openEdit(record: Product) {
 
 async function submit() {
   if (!form.categoryId) { message.warning('请选择商品'); return }
-  if (!form.name) { message.warning('请填写产品名称'); return }
   const missing = editing.value
     ? currentAttrDefs.value.filter((def) => def.required && !attrs[def.code])
     : []
@@ -197,7 +194,7 @@ async function submit() {
   saving.value = true
   try {
     const payload: Record<string, unknown> = {
-      categoryId: form.categoryId, series: form.series, name: form.name, model: form.model,
+      categoryId: form.categoryId, series: form.series, model: form.model,
       unit: form.unit, taxRate: form.taxRatePercent == null ? null : Number(form.taxRatePercent) / 100,
       brand: form.brand, configCode: form.configCode, minPrice: form.minPrice,
       salePriceGuide: form.salePriceGuide, purchasePriceRef: form.purchasePriceRef, remark: form.remark,
@@ -217,7 +214,7 @@ async function toggle(record: Product, enable: boolean) {
 }
 
 function downloadTemplate() {
-  const csv = '\ufeff商品,车系,产品名称,型号,单位,税率\n示例商品,示例车系,示例产品,示例型号,台,13\n'
+  const csv = '\ufeff商品,车系,型号,单位,税率\n示例商品,示例车系,示例型号,台,13\n'
   downloadBlob(csv, '商品导入模板.csv', 'text/csv;charset=utf-8')
 }
 
@@ -239,8 +236,8 @@ async function handleFile(file: File) {
     const text = await file.text()
     const lines = parseCsv(text.replace(/^\ufeff/, ''))
     const rowsToImport = lines.slice(1).filter((row) => row.some((cell) => cell.trim())).map((row) => ({
-      categoryCode: row[0]?.trim(), series: row[1]?.trim(), name: row[2]?.trim(),
-      model: row[3]?.trim(), unit: row[4]?.trim(), taxRate: row[5] ? Number(row[5]) : null,
+      categoryCode: row[0]?.trim(), series: row[1]?.trim(), model: row[2]?.trim(),
+      unit: row[3]?.trim(), taxRate: row[4] ? Number(row[4]) : null,
     }))
     if (!rowsToImport.length) throw new Error('CSV 没有有效数据行')
     const result = await productApi.batchImport(rowsToImport) as any

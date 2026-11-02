@@ -6,10 +6,15 @@ export const salesApi = {
     http.get<SalesOrder[]>('/ivs/sales-orders', { params }).then((r) => r.data),
   order: (id: string) => http.get<SalesOrder>(`/ivs/sales-orders/${id}`).then((r) => r.data),
   create: (body: Record<string, unknown>) => http.post<SalesOrder>('/ivs/sales-orders', body).then((r) => r.data),
+  update: (id: string, body: Record<string, unknown>) =>
+    http.put<SalesOrder>(`/ivs/sales-orders/${id}`, body).then((r) => r.data),
+  updatePrices: (id: string, lines: { orderLineId: string; unitPrice: number }[]) =>
+    http.put<SalesOrder>(`/ivs/sales-orders/${id}/prices`, { lines }).then((r) => r.data),
   approvePrice: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/approve-price`).then((r) => r.data),
   confirm: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/confirm`).then((r) => r.data),
   lock: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/lock`, {}).then((r) => r.data),
   cancel: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/cancel`).then((r) => r.data),
+  deleteOrder: (id: string) => http.delete(`/ivs/sales-orders/${id}`),
   deliver: (id: string, body: Record<string, unknown>) =>
     http.post<SalesDelivery>(`/ivs/sales-orders/${id}/deliver`, body).then((r) => r.data),
   deliveries: () => http.get<SalesDelivery[]>('/ivs/sales-deliveries').then((r) => r.data),

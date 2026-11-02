@@ -72,7 +72,7 @@
           <template #default="{ record }"><a-input-number v-model:value="record.quantity" :min="0.001" :precision="3" style="width:100px" /></template>
         </a-table-column>
         <a-table-column title="单价" :width="120">
-          <template #default="{ record }"><a-input-number v-model:value="record.unitPrice" :min="0" :precision="2" style="width:100px" /></template>
+          <template #default="{ record }"><MoneyInput v-model:value="record.unitPrice" :min="0" :precision="2" style="width:100px" /></template>
         </a-table-column>
         <a-table-column title="批次" :width="110">
           <template #default="{ record }"><a-input v-model:value="record.batchNo" /></template>

@@ -33,6 +33,9 @@ management:
         include: health,info,metrics
 
 ivs:
+  version: ${IVS_VERSION:1.0.0}
+  desktop:
+    open-browser: ${IVS_OPEN_BROWSER:false}
   security:
     session-hours: 12
     # 引导管理员：生产环境请用环境变量设置强密码，或首次登录后立即修改
@@ -43,3 +46,8 @@ ivs:
   outbox:
     dispatch-enabled: true
     dispatch-interval-ms: 3000
+
+info:
+  app:
+    name: IVS 进销存系统
+    version: ${ivs.version}

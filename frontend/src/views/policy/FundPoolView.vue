@@ -72,7 +72,7 @@
                message="人工调整仅用于期初余额或经批准的账务调整，必须填写依据单号与备注。" />
       <a-form layout="vertical">
         <a-form-item label="厂家" required><a-select v-model:value="creditForm.supplierId" :options="supplierOptions" show-search /></a-form-item>
-        <a-form-item label="金额" required><a-input-number v-model:value="creditForm.amount" :min="0.01" :precision="2" style="width:100%" /></a-form-item>
+        <a-form-item label="金额" required><MoneyInput v-model:value="creditForm.amount" :min="0.01" :precision="2" style="width:100%" /></a-form-item>
         <a-form-item label="依据单号"><a-input v-model:value="creditForm.sourceNo" /></a-form-item>
         <a-form-item label="备注" required><a-textarea v-model:value="creditForm.remark" :rows="2" /></a-form-item>
       </a-form>

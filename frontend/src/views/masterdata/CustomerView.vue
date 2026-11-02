@@ -1,7 +1,7 @@
 <template>
   <MasterDataCrudView
     title="客户"
-    description="客户档案：个人 / 单位 / 大客户（车队）。信用额度供 M3 销售与收款环节使用；编码留空自动生成 CUS-000001。"
+    description="客户档案：个人 / 单位 / 大客户（车队）。信用额度供销售与收款环节使用；系统自动生成内部客户编码。"
     :can-write="canWrite"
     :columns="columns"
     :fields="fields"
@@ -23,7 +23,6 @@ const auth = useAuthStore()
 const canWrite = auth.can('IVS_PRODUCT_MANAGE')
 
 const columns: CrudColumn[] = [
-  { key: 'code', title: '编码', width: 120 },
   { key: 'name', title: '客户名称', width: 240 },
   { key: 'customerType', title: '类型', width: 130, render: (row) => CUSTOMER_TYPE_LABELS[(row as unknown as Customer).customerType] },
   { key: 'contactName', title: '联系人', width: 110 },
@@ -32,7 +31,6 @@ const columns: CrudColumn[] = [
 ]
 
 const fields: CrudField[] = [
-  { key: 'code', label: '编码（留空自动生成）' },
   { key: 'name', label: '客户名称', required: true },
   {
     key: 'customerType', label: '客户类型', type: 'select', required: true,
@@ -41,7 +39,7 @@ const fields: CrudField[] = [
   { key: 'contactName', label: '联系人' },
   { key: 'contactPhone', label: '联系电话' },
   { key: 'taxNo', label: '税号' },
-  { key: 'creditLimit', label: '信用额度', type: 'number' },
+  { key: 'creditLimit', label: '信用额度', type: 'money' },
   { key: 'remark', label: '备注', type: 'textarea' },
 ]
 

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $db = Join-Path $root 'data\ivs.mv.db'
 $backupDir = Join-Path $root 'backups'

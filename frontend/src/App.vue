@@ -25,6 +25,7 @@
           <a-menu-item key="/system/roles">角色权限</a-menu-item>
           <a-menu-item key="/system/approvals">审批配置</a-menu-item>
           <a-menu-item key="/system/settings">全局参数</a-menu-item>
+          <a-menu-item key="/system/update">在线更新</a-menu-item>
           <a-menu-item key="/system/migration">数据迁移</a-menu-item>
           <a-menu-item key="/system/audit">审计日志</a-menu-item>
         </a-sub-menu>
@@ -44,6 +45,8 @@
               <a-menu>
                 <a-menu-item disabled>{{ auth.user?.roles?.join(' / ') }}</a-menu-item>
                 <a-menu-divider />
+                <a-menu-item @click="openModuleSettings">模块显示设置</a-menu-item>
+                <a-menu-item @click="router.push('/system/update')">检查软件更新</a-menu-item>
                 <a-menu-item @click="openChangePassword">修改密码</a-menu-item>
                 <a-menu-item @click="handleLogout">退出登录</a-menu-item>
               </a-menu>
@@ -65,10 +68,25 @@
       <a-form-item label="确认新密码"><a-input-password v-model:value="passwordForm.confirmPassword" /></a-form-item>
     </a-form>
   </a-modal>
+
+  <a-modal v-model:open="moduleSettingsOpen" title="模块显示设置" ok-text="完成" cancel-text="取消"
+           width="560px" @ok="moduleSettingsOpen = false">
+    <a-alert type="info" show-icon style="margin-bottom:16px"
+             message="重复内容模块可在此隐藏；隐藏后仅从左侧菜单移除，已有权限和业务数据不受影响。" />
+    <div v-for="page in visibleHideablePages" :key="page.path" class="module-visibility-row">
+      <div>
+        <div class="module-title">{{ page.title }}</div>
+        <div class="module-note">{{ page.description }}</div>
+      </div>
+      <a-switch :checked="!hiddenMenuPaths.includes(page.path)" checked-children="显示" un-checked-children="隐藏"
+                @change="handleMenuVisibilityChange(page.path, $event)" />
+    </div>
+    <a-button @click="showAllModules">恢复显示全部模块</a-button>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -77,7 +95,7 @@ import {
 } from '@ant-design/icons-vue'
 import { useAuthStore } from './stores/auth'
 import { authApi } from './api/auth'
-import { menuGroups, pageTitles } from './router'
+import { hideablePages, menuGroups, pageTitles } from './router'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,13 +113,57 @@ const groupIcons: Record<string, unknown> = {
 }
 
 const isLogin = computed(() => route.path === '/login')
+const hiddenMenuPaths = ref<string[]>([])
+const moduleSettingsOpen = ref(false)
+const hiddenMenuStorageKey = computed(() => `ivs.hidden-menus.${auth.user?.username || 'anonymous'}`)
+const visibleHideablePages = computed(() => hideablePages.filter((page) =>
+  !page.permission || auth.can(page.permission)))
 
 const visibleGroups = computed(() => menuGroups
   .map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.permission || auth.can(item.permission)),
+    items: group.items.filter((item) => (!item.permission || auth.can(item.permission))
+      && !hiddenMenuPaths.value.includes(item.path)),
   }))
   .filter((group) => group.items.length > 0))
+
+function loadHiddenMenus() {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const stored = JSON.parse(localStorage.getItem(hiddenMenuStorageKey.value) || '[]')
+    const validPaths = new Set(hideablePages.map((page) => page.path))
+    hiddenMenuPaths.value = Array.isArray(stored) ? stored.filter((path): path is string => validPaths.has(path)) : []
+  } catch {
+    hiddenMenuPaths.value = []
+  }
+}
+
+function persistHiddenMenus() {
+  localStorage.setItem(hiddenMenuStorageKey.value, JSON.stringify(hiddenMenuPaths.value))
+}
+
+function setMenuVisible(path: string, visible: boolean) {
+  hiddenMenuPaths.value = visible
+    ? hiddenMenuPaths.value.filter((item) => item !== path)
+    : [...new Set([...hiddenMenuPaths.value, path])]
+  persistHiddenMenus()
+}
+
+function handleMenuVisibilityChange(path: string, checked: boolean | string | number) {
+  setMenuVisible(path, Boolean(checked))
+}
+
+function showAllModules() {
+  hiddenMenuPaths.value = []
+  persistHiddenMenus()
+}
+
+function openModuleSettings() {
+  moduleSettingsOpen.value = true
+}
+
+watch(hiddenMenuStorageKey, loadHiddenMenus, { immediate: true })
+onMounted(loadHiddenMenus)
 
 const openKeys = ref<string[]>(['masterdata'])
 function handleMenuOpenChange(keys: (string | number)[]) {
@@ -130,6 +192,7 @@ const systemTitles: Record<string, string> = {
   '/system/audit': '审计日志',
   '/system/migration': '数据迁移',
   '/system/settings': '全局参数',
+  '/system/update': '在线更新',
 }
 
 function handleMenuClick(info: { key: string }) {
@@ -182,6 +245,9 @@ async function submitChangePassword() {
 .header-title { color: #172033; font-size: 18px; line-height: 1.4; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .header-note { margin-top: 2px; color: #8b96a8; font-size: 12px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-content { min-height: calc(100vh - 72px); padding: 24px; background: #f5f7fb; }
+.module-visibility-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid #eef2f7; }
+.module-title { color: #172033; font-weight: 600; }
+.module-note { margin-top: 3px; color: #8b96a8; font-size: 12px; line-height: 1.5; }
 </style>
 
 

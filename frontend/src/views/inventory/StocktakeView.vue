@@ -107,7 +107,7 @@
         </a-table-column>
         <a-table-column title="单位成本" :width="140">
           <template #default="{ record }">
-            <a-input-number v-model:value="record.unitCost" :min="0" :precision="2" style="width:120px" />
+            <MoneyInput v-model:value="record.unitCost" :min="0" :precision="2" style="width:120px" />
           </template>
         </a-table-column>
         <a-table-column title="差异原因" :width="230">

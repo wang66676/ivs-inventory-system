@@ -65,6 +65,7 @@ class ClaimWorkflowIntegrationTest {
         assertThat(claim.periodCode()).isEqualTo("2026-10");
         assertThat(claim.status()).isEqualTo("DRAFT");
         assertThat(claim.lines()).hasSize(1);
+        assertThat(claim.lines().get(0).retailDate()).isEqualTo(LocalDate.of(2026, 10, 15));
 
         ClaimApi.ClaimView submitted = post("/api/ivs/oem-claims/" + claim.id() + "/submit", Map.of(),
                 ClaimApi.ClaimView.class);
@@ -83,6 +84,7 @@ class ClaimWorkflowIntegrationTest {
         assertThat(confirmed.differences()).hasSize(1);
         assertThat(confirmed.differences().get(0).reason()).isEqualTo("厂家按政策口径核减");
         assertThat(confirmed.differences().get(0).disposition()).isEqualTo("SELF_BORNE");
+        assertThat(confirmed.lines().get(0).dispositionTime()).isNotNull();
 
         Map<String, Object> redBody = new HashMap<>();
         redBody.put("supplierId", supplierId.toString());

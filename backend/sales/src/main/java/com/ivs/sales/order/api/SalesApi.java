@@ -22,17 +22,18 @@ public final class SalesApi {
     }
 
     public record SalesOrderView(
-            UUID id, String orderNo, UUID customerId, String customerName, String customerType,
+            UUID id, String orderNo, String externalOrderNo, UUID customerId, String customerName, String customerType,
             UUID warehouseId, String warehouseName, SalesOrderStatus status, BigDecimal totalAmount,
-            boolean priceApprovalRequired, boolean priceApproved, String remark, Instant createdAt,
+            boolean priceApprovalRequired, boolean priceApproved, Instant lockedAt, String remark, Instant createdAt,
             List<SalesOrderLineView> lines
     ) {
         public static SalesOrderView from(SalesOrder order, String customerName, String customerType,
                                           String warehouseName, List<SalesOrderLineView> lines) {
-            return new SalesOrderView(order.getId(), order.getOrderNo(), order.getCustomerId(), customerName,
-                    customerType, order.getWarehouseId(), warehouseName, order.getStatus(), order.getTotalAmount(),
-                    order.isPriceApprovalRequired(), order.getPriceApprovedBy() != null, order.getRemark(),
-                    order.getCreatedAt(), lines);
+            return new SalesOrderView(order.getId(), order.getOrderNo(), order.getExternalOrderNo(),
+                    order.getCustomerId(), customerName, customerType, order.getWarehouseId(), warehouseName,
+                    order.getStatus(), order.getTotalAmount(),
+                    order.isPriceApprovalRequired(), order.getPriceApprovedBy() != null, order.getLockedAt(),
+                    order.getRemark(), order.getCreatedAt(), lines);
         }
     }
 
@@ -40,12 +41,13 @@ public final class SalesApi {
             UUID id, int lineNo, UUID productId, String productNo, String productName, String categoryCode,
             String trackingMode, BigDecimal quantity, BigDecimal deliveredQuantity, BigDecimal remainingQuantity,
             BigDecimal unitPrice, BigDecimal minPrice, BigDecimal taxRate, BigDecimal amount, boolean belowMinPrice,
-            List<UUID> serialIds, String remark
+            List<UUID> serialIds, List<UUID> remainingSerialIds, String remark
     ) {
     }
 
     public record SaveSalesOrderCommand(
-            UUID customerId, UUID warehouseId, String remark, List<SaveSalesOrderLineCommand> lines
+            String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
+            List<SaveSalesOrderLineCommand> lines
     ) {
     }
 
@@ -55,6 +57,12 @@ public final class SalesApi {
     }
 
     public record DeliverLineCommand(UUID orderLineId, BigDecimal quantity, List<UUID> serialIds) {
+    }
+
+    public record UpdatePriceLineCommand(UUID orderLineId, BigDecimal unitPrice) {
+    }
+
+    public record UpdatePricesCommand(List<UpdatePriceLineCommand> lines) {
     }
 
     public record DeliverCommand(UUID warehouseId, String remark, List<DeliverLineCommand> lines) {

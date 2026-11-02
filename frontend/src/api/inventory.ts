@@ -4,7 +4,7 @@ import type { InventorySummary, LedgerEntry, StockBalance, StockLock } from '../
 export const inventoryApi = {
   balances: (params?: { warehouseId?: string; keyword?: string }) =>
     http.get<StockBalance[]>('/ivs/inventory/balances', { params }).then((r) => r.data),
-  ledger: (params?: { productId?: string; warehouseId?: string; limit?: number }) =>
+  ledger: (params?: { productId?: string; warehouseId?: string; moveType?: string; limit?: number }) =>
     http.get<LedgerEntry[]>('/ivs/inventory/ledger', { params }).then((r) => r.data),
   locks: (params?: { status?: string }) =>
     http.get<StockLock[]>('/ivs/inventory/locks', { params }).then((r) => r.data),

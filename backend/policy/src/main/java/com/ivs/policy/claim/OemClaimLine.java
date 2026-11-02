@@ -89,4 +89,5 @@ public class OemClaimLine {
     public String getDifferenceReason() { return differenceReason; }
     public String getDifferenceDisposition() { return differenceDisposition; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

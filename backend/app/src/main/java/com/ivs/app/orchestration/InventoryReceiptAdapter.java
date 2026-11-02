@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 收货入库端口的实现：把采购收货落到库存台账与余额。
@@ -51,26 +52,50 @@ public class InventoryReceiptAdapter implements InventoryReceiptPort {
     public void postReceipt(ReceiptPosting posting) {
         for (ReceiptPostingLine line : posting.lines()) {
             MasterdataApi.ProductView product = productService.get(line.productId());
+            UUID warehouseId = line.warehouseId() == null ? posting.warehouseId() : line.warehouseId();
             if (product.trackingMode().name().equals("SERIAL")) {
-                postSerialLines(posting, line, product);
+                postSerialLines(posting, line, product, warehouseId);
             } else {
-                stockService.receive(product.id(), null, posting.warehouseId(), line.batchNo(),
+                stockService.receive(product.id(), null, warehouseId, line.batchNo(),
                         line.quantity(), line.unitPrice(), true, StockMoveType.PURCHASE_IN,
                         BIZ_TYPE, posting.receiptId(), posting.receiptNo(), "采购按数量收货");
             }
         }
     }
 
-    private void postSerialLines(ReceiptPosting posting, ReceiptPostingLine line, MasterdataApi.ProductView product) {
+    @Override
+    public void updateCertificateApplicationDate(List<String> serialNos, java.time.LocalDate certificateApplicationDate) {
+        serialService.updateCertificateApplicationDate(serialNos, certificateApplicationDate);
+    }
+
+    @Override
+    public void relocateSerial(String serialNo, UUID productId, UUID fromWarehouseId, UUID toWarehouseId,
+                               UUID receiptId, String receiptNo) {
+        ProductSerial serial = serialRepository.findBySerialNo(serialNo)
+                .orElseThrow(() -> new ConflictException("SERIAL_NOT_FOUND", "VIN/SN 档案不存在：" + serialNo));
+        if (!serial.getProductId().equals(productId)) {
+            throw new ConflictException("SERIAL_PRODUCT_MISMATCH", "VIN/SN 所属商品与收货明细不一致");
+        }
+        BigDecimal cost = serial.getPurchasePrice() == null ? BigDecimal.ZERO : serial.getPurchasePrice();
+        stockService.issue(productId, serial.getId(), fromWarehouseId, null, BigDecimal.ONE,
+                StockMoveType.TRANSFER_OUT, "RECEIPT_WAREHOUSE_CHANGE", receiptId, receiptNo, "收货仓库调整转出");
+        stockService.receive(productId, serial.getId(), toWarehouseId, null, BigDecimal.ONE, cost, false,
+                StockMoveType.TRANSFER_IN, "RECEIPT_WAREHOUSE_CHANGE", receiptId, receiptNo, "收货仓库调整转入");
+        serialService.applyInbound(serial.getId(), toWarehouseId, null, null, null);
+    }
+
+    private void postSerialLines(ReceiptPosting posting, ReceiptPostingLine line, MasterdataApi.ProductView product,
+                                 UUID warehouseId) {
         ProductCategory category = categoryService.find(product.categoryId());
         SerialStatusTemplate template = category.statusTemplate();
         for (String serialNo : line.serialNos()) {
             ProductSerial serial = serialRepository.findBySerialNo(serialNo).orElse(null);
             if (serial == null) {
-                // VIN 不预先建档：采购收货时录入 VIN 与单车采购价，系统自动建立一物一档。
+                // VIN 不预先建档：采购收货时录入 VIN、单车采购价和申请合格证日期，系统自动建立一物一档。
                 serialService.create(new MasterdataApi.SaveSerialCommand(serialNo, product.id(),
-                        posting.warehouseId(), null, null, line.unitPrice(), java.time.Instant.now(),
-                        null, null, com.ivs.masterdata.OwnershipType.OWNED, null, "采购收货自动建档"));
+                        warehouseId, null, null, line.unitPrice(), java.time.Instant.now(),
+                        line.certificateApplicationDate(), null, null,
+                        com.ivs.masterdata.OwnershipType.OWNED, null, null));
                 serial = serialRepository.findBySerialNo(serialNo)
                         .orElseThrow(() -> new ConflictException("SERIAL_CREATE_FAILED", "VIN 自动建档失败：" + serialNo));
             } else {
@@ -85,8 +110,9 @@ public class InventoryReceiptAdapter implements InventoryReceiptPort {
                     serialService.moveStatus(serial.getId(), step);
                 }
             }
-            serialService.applyInbound(serial.getId(), posting.warehouseId(), line.unitPrice(), null);
-            stockService.receive(product.id(), serial.getId(), posting.warehouseId(), null,
+            serialService.applyInbound(serial.getId(), warehouseId, line.unitPrice(), null,
+                    line.certificateApplicationDate());
+            stockService.receive(product.id(), serial.getId(), warehouseId, null,
                     BigDecimal.ONE, line.unitPrice(), false, StockMoveType.PURCHASE_IN,
                     BIZ_TYPE, posting.receiptId(), posting.receiptNo(), "采购按序列号收货");
         }

@@ -11,6 +11,7 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** 收货明细：数量商品只填数量，序列号商品以 serial_nos 记录本次到店的 VIN / 电池 SN。 */
@@ -29,6 +30,12 @@ public class PurchaseReceiptLine {
 
     @Column(name = "product_id", nullable = false)
     private UUID productId;
+
+    @Column(name = "warehouse_id")
+    private UUID warehouseId;
+
+    @Column(name = "certificate_application_date")
+    private LocalDate certificateApplicationDate;
 
     @Column(nullable = false, precision = 18, scale = 3)
     private BigDecimal quantity;
@@ -60,13 +67,16 @@ public class PurchaseReceiptLine {
     }
 
     public static PurchaseReceiptLine create(UUID receiptId, UUID orderLineId, UUID productId,
-                                             BigDecimal quantity, BigDecimal unitPrice, String batchNo,
-                                             String serialNos, String remark) {
+                                             UUID warehouseId, BigDecimal quantity, BigDecimal unitPrice,
+                                             String batchNo, String serialNos, LocalDate certificateApplicationDate,
+                                             String remark) {
         PurchaseReceiptLine line = new PurchaseReceiptLine();
         line.id = UUID.randomUUID();
         line.receiptId = receiptId;
         line.orderLineId = orderLineId;
         line.productId = productId;
+        line.warehouseId = warehouseId;
+        line.certificateApplicationDate = certificateApplicationDate;
         line.quantity = (quantity == null ? BigDecimal.ZERO : quantity).setScale(3, RoundingMode.HALF_UP);
         line.unitPrice = (unitPrice == null ? BigDecimal.ZERO : unitPrice).setScale(2, RoundingMode.HALF_UP);
         line.batchNo = batchNo;
@@ -98,10 +108,20 @@ public class PurchaseReceiptLine {
     public UUID getReceiptId() { return receiptId; }
     public UUID getOrderLineId() { return orderLineId; }
     public UUID getProductId() { return productId; }
+    public UUID getWarehouseId() { return warehouseId; }
+    public LocalDate getCertificateApplicationDate() { return certificateApplicationDate; }
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }
     public String getBatchNo() { return batchNo; }
     public String getSerialNos() { return serialNos; }
     public String getRemark() { return remark; }
     public long getVersion() { return version; }
+
+    public void updateCertificateApplicationDate(LocalDate certificateApplicationDate) {
+        this.certificateApplicationDate = certificateApplicationDate;
+    }
+
+    public void updateWarehouse(UUID warehouseId) {
+        this.warehouseId = warehouseId;
+    }
 }

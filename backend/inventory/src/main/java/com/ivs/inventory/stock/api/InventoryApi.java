@@ -24,7 +24,8 @@ public final class InventoryApi {
             UUID id, UUID productId, String productNo, String productName, String categoryCode,
             String trackingMode, UUID warehouseId, String warehouseName, String batchNo,
             BigDecimal onHandQty, BigDecimal lockedQty, BigDecimal availableQty,
-            BigDecimal unitCost, BigDecimal amount, Instant updatedAt
+            BigDecimal unitCost, BigDecimal amount, Instant updatedAt,
+            UUID purchaseOrderId, String purchaseOrderNo
     ) {
     }
 

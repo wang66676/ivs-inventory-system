@@ -21,10 +21,9 @@ import type { Supplier } from '../../types/masterdata'
 
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_PRODUCT_MANAGE')
-const description = '供应商档案。整车厂标记为 OEM，是返利申报、红字发票与返利资金池的主体；编码留空自动生成 SUP-000001。'
+const description = '供应商档案。整车厂标记为 OEM，是返利申报、红字发票与返利资金池的主体；系统自动生成内部供应商编码。'
 
 const columns: CrudColumn[] = [
-  { key: 'code', title: '编码', width: 120 },
   { key: 'name', title: '名称', width: 220 },
   { key: 'supplierType', title: '类型', width: 140, render: (row) => SUPPLIER_TYPE_LABELS[(row as unknown as Supplier).supplierType] },
   { key: 'contactName', title: '联系人', width: 110 },
@@ -33,7 +32,6 @@ const columns: CrudColumn[] = [
 ]
 
 const fields: CrudField[] = [
-  { key: 'code', label: '编码（留空自动生成）' },
   { key: 'name', label: '供应商名称', required: true },
   {
     key: 'supplierType', label: '供应商类型', type: 'select', required: true,

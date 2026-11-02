@@ -11,6 +11,7 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** 采购明细行。 */
@@ -29,6 +30,21 @@ public class PurchaseOrderLine {
 
     @Column(name = "product_id", nullable = false)
     private UUID productId;
+
+    /** 采购明细人工填写的配置文本。 */
+    @Column(name = "config_text", length = 200)
+    private String configText;
+
+    /** 该明细计划的收货仓库，可在收货时按 VIN 覆盖。 */
+    @Column(name = "warehouse_id")
+    private UUID warehouseId;
+
+    /** 一车一 VIN：采购明细按 VIN/SN 逐台录入。 */
+    @Column(name = "serial_no", length = 60)
+    private String serialNo;
+
+    @Column(name = "certificate_application_date")
+    private LocalDate certificateApplicationDate;
 
     @Column(nullable = false, precision = 18, scale = 3)
     private BigDecimal quantity;
@@ -62,12 +78,25 @@ public class PurchaseOrderLine {
     }
 
     public static PurchaseOrderLine create(UUID orderId, int lineNo, UUID productId, BigDecimal quantity,
-                                           BigDecimal unitPrice, BigDecimal taxRate, String remark) {
+                                           BigDecimal unitPrice, BigDecimal taxRate, String configText,
+                                           UUID warehouseId, String remark) {
+        return create(orderId, lineNo, productId, quantity, unitPrice, taxRate, configText, warehouseId,
+                null, null, remark);
+    }
+
+    public static PurchaseOrderLine create(UUID orderId, int lineNo, UUID productId, BigDecimal quantity,
+                                           BigDecimal unitPrice, BigDecimal taxRate, String configText,
+                                           UUID warehouseId, String serialNo, LocalDate certificateApplicationDate,
+                                           String remark) {
         PurchaseOrderLine line = new PurchaseOrderLine();
         line.id = UUID.randomUUID();
         line.orderId = orderId;
         line.lineNo = lineNo;
         line.productId = productId;
+        line.configText = normalize(configText);
+        line.warehouseId = warehouseId;
+        line.serialNo = normalize(serialNo == null ? null : serialNo.toUpperCase());
+        line.certificateApplicationDate = certificateApplicationDate;
         line.quantity = qty(quantity);
         if (line.quantity.signum() <= 0) {
             throw new IllegalArgumentException("采购数量必须大于 0");
@@ -129,6 +158,12 @@ public class PurchaseOrderLine {
         updatedAt = Instant.now();
     }
 
+    private static String normalize(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private static BigDecimal qty(BigDecimal value) {
         return (value == null ? BigDecimal.ZERO : value).setScale(3, RoundingMode.HALF_UP);
     }
@@ -141,6 +176,10 @@ public class PurchaseOrderLine {
     public UUID getOrderId() { return orderId; }
     public int getLineNo() { return lineNo; }
     public UUID getProductId() { return productId; }
+    public String getConfigText() { return configText; }
+    public UUID getWarehouseId() { return warehouseId; }
+    public String getSerialNo() { return serialNo; }
+    public LocalDate getCertificateApplicationDate() { return certificateApplicationDate; }
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getReceivedQuantity() { return receivedQuantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }

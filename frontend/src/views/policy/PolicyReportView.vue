@@ -33,7 +33,9 @@
           <a-table :data-source="unitCosts" :columns="unitColumns" row-key="entitlementId" size="small"
                    :pagination="{ pageSize: 15 }" :scroll="{ x: 1350 }">
             <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'sale'">{{ money(record.salePrice) }}</template>
+              <template v-if="column.key === 'invoiceIssuedAt'">{{ formatDate(record.invoiceIssuedAt) }}</template>
+              <template v-else-if="column.key === 'sale'">{{ money(record.salePrice) }}</template>
+              <template v-else-if="column.key === 'purchaseCost'">{{ money(record.purchaseCost) }}</template>
               <template v-else-if="column.key === 'cost'">{{ money(record.policyCost) }}</template>
               <template v-else-if="column.key === 'net'">{{ money(record.netPrice) }}</template>
               <template v-else-if="column.key === 'status'"><a-tag>{{ record.status }}</a-tag></template>
@@ -91,12 +93,13 @@ const rateColumns = [
 ]
 const unitColumns = [
   { title: '期间', key: 'periodCode', dataIndex: 'periodCode', width: 100 },
-  { title: '权益编号', key: 'entitlementNo', dataIndex: 'entitlementNo', width: 140 },
-  { title: '实销单', key: 'retailNo', dataIndex: 'retailNo', width: 150 },
+  { title: '采购订单编号', key: 'purchaseOrderNo', dataIndex: 'purchaseOrderNo', width: 160 },
+  { title: '终端开票日期', key: 'invoiceIssuedAt', width: 130 },
   { title: 'VIN / SN', key: 'serialNo', dataIndex: 'serialNo', width: 180 },
   { title: '商品', key: 'productName', dataIndex: 'productName', width: 200 },
   { title: '政策', key: 'policyName', dataIndex: 'policyName', width: 220 },
   { title: '成交价', key: 'sale', width: 130 },
+  { title: '采购成本', key: 'purchaseCost', width: 130 },
   { title: '政策成本', key: 'cost', width: 130 },
   { title: '净车价', key: 'net', width: 130 },
   { title: '状态', key: 'status', width: 100 },
@@ -113,6 +116,7 @@ const differenceColumns = [
 ]
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
+function formatDate(value?: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '-' }
 
 function agingKey(row: ReceivableAgingRow) { return [row.supplierId, row.policyId, row.periodCode].join('|') }
 function rateKey(row: CostRateRow) { return [row.periodCode, row.productId].join('|') }

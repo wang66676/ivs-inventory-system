@@ -6,12 +6,14 @@ import App from './App.vue'
 import { router } from './router'
 import { pinia } from './stores'
 import { installGlobalTableColumnBehavior, resizableColumns } from './directives/resizableColumns'
+import MoneyInput from './components/MoneyInput.vue'
 
 const app = createApp(App)
 app
   .use(pinia)
   .use(router)
   .use(Antd)
+  .component('MoneyInput', MoneyInput)
   .directive('resizable-columns', resizableColumns)
   .mount('#app')
 

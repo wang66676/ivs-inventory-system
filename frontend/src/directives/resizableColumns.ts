@@ -20,8 +20,13 @@ let scanFrame = 0
 
 type StoredWidths = Array<number | null>
 
+function ownTable(el: HTMLElement): HTMLTableElement | null {
+  return Array.from(el.querySelectorAll('table')).find((table) => table.closest('.ant-table') === el) ?? null
+}
+
 function headerCells(el: HTMLElement): HTMLElement[] {
-  return Array.from(el.querySelectorAll('.ant-table-thead > tr > th')) as HTMLElement[]
+  const table = ownTable(el)
+  return Array.from(table?.querySelectorAll(':scope > thead > tr > th') ?? []) as HTMLElement[]
 }
 
 function headerSignature(ths: HTMLElement[]): string {
@@ -115,8 +120,8 @@ function clearStoredColumnWidths() {
 
 function resetTableWidths(el: HTMLElement) {
   const ths = headerCells(el)
-  const cols = Array.from(el.querySelectorAll('.ant-table colgroup > col')) as HTMLElement[]
-  const table = el.querySelector('table') as HTMLElement | null
+  const table = ownTable(el)
+  const cols = Array.from(table?.querySelectorAll(':scope > colgroup > col') ?? []) as HTMLElement[]
   if (ths.length) {
     applyAllColumnWidths(ths, table, getInitialWidths(el, ths, cols))
   } else {
@@ -222,9 +227,9 @@ function enhance(el: HTMLElement) {
     el.setAttribute(KEY_ATTR, tableKey(el, ths))
   }
 
-  const table = el.querySelector('table') as HTMLElement | null
+  const table = ownTable(el)
   if (table) table.style.tableLayout = 'fixed'
-  const cols = Array.from(el.querySelectorAll('.ant-table colgroup > col')) as HTMLElement[]
+  const cols = Array.from(table?.querySelectorAll(':scope > colgroup > col') ?? []) as HTMLElement[]
   const key = el.getAttribute(KEY_ATTR) ?? tableKey(el, ths)
   const initial = getInitialWidths(el, ths, cols)
   const stored = readStoredWidths(key)

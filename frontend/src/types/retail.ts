@@ -1,4 +1,16 @@
+import type { ProductSerial } from './masterdata'
+
 export type RetailStatus = 'DRAFT' | 'SUBMITTED' | 'VERIFIED' | 'REVERSED'
+
+export interface RetailCandidate {
+  serial: ProductSerial
+  orderId?: string
+  orderNo?: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+  customerId?: string
+  customerName?: string
+}
 
 export interface RetailRecord {
   id: string

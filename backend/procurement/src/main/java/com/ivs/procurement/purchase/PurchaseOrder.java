@@ -123,6 +123,19 @@ public class PurchaseOrder {
         this.totalAmount = money(total);
     }
 
+    /** 草稿补全：订单编号、供应商、预计到货、备注与初始仓库均可后续调整。 */
+    public void updateDraft(String externalOrderNo, UUID supplierId, UUID warehouseId,
+                            LocalDate expectedDate, String remark) {
+        if (status != PurchaseOrderStatus.DRAFT) {
+            throw new IllegalStateException("只有草稿采购单可以编辑: " + status);
+        }
+        this.externalOrderNo = normalize(externalOrderNo);
+        this.supplierId = supplierId;
+        this.warehouseId = warehouseId;
+        this.expectedDate = expectedDate;
+        this.remark = remark;
+    }
+
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();

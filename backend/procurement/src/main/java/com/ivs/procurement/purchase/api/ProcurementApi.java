@@ -33,9 +33,11 @@ public final class ProcurementApi {
 
     public record PurchaseOrderLineView(
             UUID id, int lineNo, UUID productId, String productNo, String productName, String series, String configCode,
+            String configText, String serialNo, String cabType, LocalDate certificateApplicationDate,
+            UUID warehouseId, String warehouseName,
             String categoryCode, String trackingMode, BigDecimal quantity, BigDecimal receivedQuantity,
             BigDecimal remainingQuantity, BigDecimal unitPrice, BigDecimal taxRate, BigDecimal amount,
-            String remark, List<PolicyRefView> policies
+            String remark, String lineStatus, List<PolicyRefView> policies
     ) {
     }
 
@@ -61,18 +63,29 @@ public final class ProcurementApi {
 
     public record SavePurchaseOrderLineCommand(
             UUID productId, BigDecimal quantity, BigDecimal unitPrice, BigDecimal taxRate, String remark,
-            List<UUID> policyIds
+            List<UUID> policyIds, String configText, UUID warehouseId, String serialNo,
+            LocalDate certificateApplicationDate
     ) {
-        /** 兼容旧调用：采购明细不关联返利政策。 */
+        /** 兼容旧调用：不关联返利政策、配置文本和明细仓库。 */
         public SavePurchaseOrderLineCommand(UUID productId, BigDecimal quantity, BigDecimal unitPrice,
                                             BigDecimal taxRate, String remark) {
-            this(productId, quantity, unitPrice, taxRate, remark, List.of());
+            this(productId, quantity, unitPrice, taxRate, remark, List.of(), null, null, null, null);
+        }
+
+        public SavePurchaseOrderLineCommand(UUID productId, BigDecimal quantity, BigDecimal unitPrice,
+                                            BigDecimal taxRate, String remark, List<UUID> policyIds) {
+            this(productId, quantity, unitPrice, taxRate, remark, policyIds, null, null, null, null);
         }
     }
 
     public record ReceiveLineCommand(
-            UUID orderLineId, BigDecimal quantity, List<String> serialNos, String batchNo, BigDecimal unitPrice
+            UUID orderLineId, BigDecimal quantity, List<String> serialNos, String batchNo, BigDecimal unitPrice,
+            UUID warehouseId, LocalDate certificateApplicationDate
     ) {
+        public ReceiveLineCommand(UUID orderLineId, BigDecimal quantity, List<String> serialNos, String batchNo,
+                                  BigDecimal unitPrice) {
+            this(orderLineId, quantity, serialNos, batchNo, unitPrice, null, null);
+        }
     }
 
     public record ReceivePurchaseOrderCommand(
@@ -97,10 +110,20 @@ public final class ProcurementApi {
     }
 
     public record PurchaseReceiptLineView(
-            UUID id, UUID productId, String productNo, String productName, BigDecimal quantity,
-            BigDecimal unitPrice, String batchNo, List<String> serialNos
+            UUID id, UUID productId, String productNo, String productName, String series, String configText,
+            UUID warehouseId, String warehouseName, String cabType, BigDecimal quantity, BigDecimal unitPrice,
+            String batchNo, List<String> serialNos,
+            LocalDate certificateApplicationDate
     ) {
     }
+
+    public record UpdateCertificateDateCommand(LocalDate certificateApplicationDate) {
+    }
+
+    public record UpdateReceiptWarehouseCommand(UUID warehouseId) {
+    }
+
+    public record PurchaseOrderLinkView(UUID orderId, String orderNo, String externalOrderNo,
+                                        BigDecimal purchasePrice) {
+    }
 }
-
-

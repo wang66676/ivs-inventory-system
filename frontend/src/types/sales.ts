@@ -21,12 +21,14 @@ export interface SalesOrderLine {
   amount: number
   belowMinPrice: boolean
   serialIds: string[]
+  remainingSerialIds: string[]
   remark?: string
 }
 
 export interface SalesOrder {
   id: string
   orderNo: string
+  externalOrderNo?: string
   customerId: string
   customerName: string
   customerType: string
@@ -36,6 +38,7 @@ export interface SalesOrder {
   totalAmount: number
   priceApprovalRequired: boolean
   priceApproved: boolean
+  lockedAt?: string
   remark?: string
   createdAt: string
   lines: SalesOrderLine[]

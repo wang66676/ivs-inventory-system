@@ -2,6 +2,7 @@ package com.ivs.app.web;
 
 import com.ivs.app.orchestration.InventoryQueryService;
 import com.ivs.inventory.stock.StockLockStatus;
+import com.ivs.inventory.stock.StockMoveType;
 import com.ivs.inventory.stock.api.InventoryApi;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,8 +35,9 @@ public class InventoryQueryController {
     @PreAuthorize("hasAuthority('IVS_READ')")
     public List<InventoryApi.LedgerView> ledger(@RequestParam(required = false) UUID productId,
                                                 @RequestParam(required = false) UUID warehouseId,
+                                                @RequestParam(required = false) StockMoveType moveType,
                                                 @RequestParam(defaultValue = "200") int limit) {
-        return service.ledger(productId, warehouseId, limit);
+        return service.ledger(productId, warehouseId, moveType, limit);
     }
 
     @GetMapping("/locks")

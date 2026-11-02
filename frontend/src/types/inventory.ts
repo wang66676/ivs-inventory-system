@@ -17,6 +17,8 @@ export interface StockBalance {
   unitCost: number
   amount: number
   updatedAt: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
 }
 
 export interface LedgerEntry {

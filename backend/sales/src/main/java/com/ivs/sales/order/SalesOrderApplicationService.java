@@ -97,18 +97,65 @@ public class SalesOrderApplicationService {
             masterData.requireWarehouse(command.warehouseId());
         }
         String orderNo = "SO-%06d".formatted(orderRepository.nextOrderSequence());
-        SalesOrder order = orderRepository.save(SalesOrder.create(orderNo, customer.id(), command.warehouseId(),
-                BigDecimal.ZERO, false, command.remark(), currentUserId()));
+        SalesOrder order = orderRepository.save(SalesOrder.create(orderNo, command.externalOrderNo(), customer.id(),
+                command.warehouseId(), BigDecimal.ZERO, false, command.remark(), currentUserId()));
+        PreparedOrder prepared = prepareLines(order, customer, command.lines());
+        order.markPriceApprovalRequired(prepared.approvalRequired());
+        order.updateTotal(prepared.total());
+        orderRepository.save(order);
+        publish(order, "SalesOrderCreated", Map.of("orderNo", orderNo, "totalAmount", prepared.total()));
+        return toView(order);
+    }
+
+    /** 草稿订单补全 VIN、客户、仓库或备注；一旦确认锁货后不可再修改。 */
+    @Transactional
+    public SalesApi.SalesOrderView update(UUID id, SalesApi.SaveSalesOrderCommand command) {
+        SalesOrder order = orderRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("销售订单", id));
+        if (order.getStatus() != SalesOrderStatus.DRAFT) {
+            throw new ConflictException("SALES_STATUS_INVALID", "只有草稿订单可以编辑: " + order.getStatus());
+        }
+        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
+        if (command.warehouseId() != null) {
+            masterData.requireWarehouse(command.warehouseId());
+        }
+        try {
+            order.updateDraft(command.externalOrderNo(), customer.id(), command.warehouseId(), command.remark());
+        } catch (IllegalStateException exception) {
+            throw new ConflictException("SALES_STATUS_INVALID", exception.getMessage());
+        }
+        List<SalesOrderLine> existing = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId());
+        lineRepository.deleteAll(existing);
+        lineRepository.flush();
+
+        PreparedOrder prepared = prepareLines(order, customer, command.lines());
+        order.resetPriceApproval();
+        order.markPriceApprovalRequired(prepared.approvalRequired());
+        order.updateTotal(prepared.total());
+        SalesOrder saved = orderRepository.saveAndFlush(order);
+        publish(saved, "SalesOrderUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", prepared.total()));
+        return toView(saved);
+    }
+
+    private PreparedOrder prepareLines(SalesOrder order, SalesMasterDataPort.CustomerInfo customer,
+                                       List<SalesApi.SaveSalesOrderLineCommand> commands) {
+        if (commands == null || commands.isEmpty()) {
+            throw new ConflictException("SALES_LINE_REQUIRED", "销售订单至少需要一行明细");
+        }
         int lineNo = 1;
         BigDecimal total = BigDecimal.ZERO;
         boolean approvalRequired = false;
-        for (SalesApi.SaveSalesOrderLineCommand line : command.lines()) {
+        for (SalesApi.SaveSalesOrderLineCommand line : commands) {
             SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.productId());
             SalesMasterDataPort.PriceInfo reference = masterData.lookupPrice(product.id(),
                     customer.customerType(), LocalDate.now());
             SalesMasterDataPort.PriceInfo price = line.unitPrice() == null
                     ? reference
                     : new SalesMasterDataPort.PriceInfo(line.unitPrice(), reference.minPrice(), "MANUAL");
+            if (price.price() == null || price.price().signum() <= 0) {
+                throw new ConflictException("SALES_PRICE_REQUIRED",
+                        "商品「" + product.name() + "」成交价必须大于 0，请填写成交价后再保存订单");
+            }
             List<UUID> serialIds = normalizeIds(line.serialIds());
             BigDecimal quantity = "SERIAL".equals(product.trackingMode())
                     ? (serialIds.isEmpty() ? line.quantity() : BigDecimal.valueOf(serialIds.size()))
@@ -126,11 +173,55 @@ public class SalesOrderApplicationService {
             lineRepository.save(entity);
             total = total.add(entity.getAmount());
         }
-        order.markPriceApprovalRequired(approvalRequired);
+        return new PreparedOrder(total, approvalRequired);
+    }
+
+    /** 已确认订单在出库前补录成交价，不改变商品、数量和已锁定的 VIN。 */
+    @Transactional
+    public SalesApi.SalesOrderView updatePrices(UUID id, SalesApi.UpdatePricesCommand command) {
+        SalesOrder order = orderRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("销售订单", id));
+        if (order.getStatus() != SalesOrderStatus.DRAFT && order.getStatus() != SalesOrderStatus.CONFIRMED) {
+            throw new ConflictException("SALES_STATUS_INVALID", "当前订单状态不允许修改成交价: " + order.getStatus());
+        }
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new ConflictException("SALES_PRICE_REQUIRED", "请填写成交价");
+        }
+        List<SalesOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(id);
+        if (orderLines.stream().anyMatch(line -> line.getDeliveredQuantity().signum() > 0)) {
+            throw new ConflictException("SALES_STATUS_INVALID", "已有出库的订单不能修改成交价");
+        }
+        Map<UUID, BigDecimal> prices = new LinkedHashMap<>();
+        for (SalesApi.UpdatePriceLineCommand priceLine : command.lines()) {
+            if (priceLine.orderLineId() != null && priceLine.unitPrice() != null) {
+                prices.put(priceLine.orderLineId(), priceLine.unitPrice());
+            }
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (SalesOrderLine line : orderLines) {
+            BigDecimal price = prices.get(line.getId());
+            if (price == null || price.signum() <= 0) {
+                SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+                throw new ConflictException("SALES_PRICE_REQUIRED",
+                        "商品「" + product.name() + "」成交价必须大于 0");
+            }
+            try {
+                line.updateUnitPrice(price);
+            } catch (IllegalArgumentException exception) {
+                throw new ConflictException("SALES_PRICE_REQUIRED", exception.getMessage());
+            }
+            if (line.belowMinPrice()) {
+                throw new ConflictException("SALES_PRICE_BELOW_MIN", "成交价低于最低限价，请通过草稿编辑并完成价格审批");
+            }
+            lineRepository.save(line);
+            total = total.add(line.getAmount());
+        }
+        order.resetPriceApproval();
+        order.markPriceApprovalRequired(false);
         order.updateTotal(total);
-        orderRepository.save(order);
-        publish(order, "SalesOrderCreated", Map.of("orderNo", orderNo, "totalAmount", total));
-        return toView(order);
+        SalesOrder saved = orderRepository.saveAndFlush(order);
+        publish(saved, "SalesOrderPricesUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", total));
+        return toView(saved);
     }
 
     /** 价格审批：存在低于最低限价的明细时必须先审批才能确认订单。 */
@@ -170,19 +261,32 @@ public class SalesOrderApplicationService {
         if (order.getStatus() != SalesOrderStatus.CONFIRMED && order.getStatus() != SalesOrderStatus.PARTIALLY_DELIVERED) {
             throw new ConflictException("SALES_STATUS_INVALID", "只有已确认的订单可以锁货");
         }
-        UUID warehouseId = resolveWarehouseId(order, null);
+        if (order.isLocked()) {
+            return toView(order);
+        }
+        UUID warehouseId = resolveWarehouseId(order, warehouseOverride);
         List<SalesOrderLine> lines = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId());
         List<SalesStockPort.LineLock> locks = new ArrayList<>();
         for (SalesOrderLine line : lines) {
             if (line.fullyDelivered()) {
                 continue;
             }
-            locks.add(new SalesStockPort.LineLock(line.getId(), line.getProductId(), parseIds(line.getSerialIds()),
-                    line.remaining()));
+            SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+            List<UUID> serialIds = parseIds(line.getSerialIds());
+            if ("SERIAL".equals(product.trackingMode())) {
+                BigDecimal selected = BigDecimal.valueOf(serialIds.size());
+                if (serialIds.isEmpty() || selected.compareTo(line.remaining()) != 0) {
+                    throw new ConflictException("SALES_VIN_REQUIRED",
+                            "商品「" + product.name() + "」需先补全并选定全部 VIN 后才能锁货");
+                }
+            }
+            locks.add(new SalesStockPort.LineLock(line.getId(), line.getProductId(), serialIds, line.remaining()));
         }
         stockPort.allocate(order.getId(), order.getOrderNo(), warehouseId, locks);
-        publish(order, "SalesOrderLocked", Map.of("orderNo", order.getOrderNo(), "lineCount", locks.size()));
-        return toView(order);
+        order.markLocked();
+        SalesOrder saved = orderRepository.saveAndFlush(order);
+        publish(saved, "SalesOrderLocked", Map.of("orderNo", saved.getOrderNo(), "lineCount", locks.size()));
+        return toView(saved);
     }
 
     @Transactional
@@ -197,6 +301,18 @@ public class SalesOrderApplicationService {
         return toView(orderRepository.saveAndFlush(order));
     }
 
+    /** 已取消订单可直接删除；业务上取消前不允许存在出库记录。 */
+    @Transactional
+    public void deleteCancelled(UUID id) {
+        SalesOrder order = orderRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("销售订单", id));
+        if (order.getStatus() != SalesOrderStatus.CANCELLED) {
+            throw new ConflictException("SALES_STATUS_INVALID", "只有已取消订单可以删除");
+        }
+        lineRepository.deleteAll(lineRepository.findByOrderIdOrderByLineNoAsc(id));
+        orderRepository.delete(order);
+    }
+
     /** 出库：扣减库存、结转成本、生成应收，并处理锁定。 */
     @Transactional
     public SalesApi.SalesDeliveryView deliver(UUID orderId, SalesApi.DeliverCommand command) {
@@ -204,6 +320,9 @@ public class SalesOrderApplicationService {
                 .orElseThrow(() -> new NotFoundException("销售订单", orderId));
         if (!order.deliverable()) {
             throw new ConflictException("SALES_STATUS_INVALID", "当前订单状态不允许出库: " + order.getStatus());
+        }
+        if (!order.isLocked()) {
+            throw new ConflictException("SALES_NOT_LOCKED", "请先选定 VIN 并完成锁货，锁货后才能出库");
         }
         if (command.lines() == null || command.lines().isEmpty()) {
             throw new ConflictException("DELIVERY_LINE_REQUIRED", "请至少填写一行出库明细");
@@ -223,12 +342,21 @@ public class SalesOrderApplicationService {
                 throw new NotFoundException("销售明细", deliverLine.orderLineId());
             }
             SalesMasterDataPort.ProductInfo product = masterData.requireProduct(orderLine.getProductId());
+            if (orderLine.getUnitPrice() == null || orderLine.getUnitPrice().signum() <= 0) {
+                throw new ConflictException("SALES_PRICE_REQUIRED",
+                        "商品「" + product.name() + "」成交价为 0，请先补录成交价再出库");
+            }
             List<UUID> serialIds = normalizeIds(deliverLine.serialIds());
             BigDecimal quantity;
             if ("SERIAL".equals(product.trackingMode())) {
                 if (serialIds.isEmpty()) {
                     throw new ConflictException("DELIVERY_SERIAL_REQUIRED",
                             "商品「" + product.name() + "」按序列号管理，请选择本次交付的 VIN / 电池 SN");
+                }
+                List<UUID> lockedSerialIds = parseIds(orderLine.getSerialIds());
+                if (!lockedSerialIds.containsAll(serialIds)) {
+                    throw new ConflictException("DELIVERY_SERIAL_NOT_IN_ORDER",
+                            "商品「" + product.name() + "」本次选择的 VIN 不属于该订单已锁定范围");
                 }
                 quantity = BigDecimal.valueOf(serialIds.size());
             } else {
@@ -321,6 +449,9 @@ public class SalesOrderApplicationService {
     }
 
 
+    private record PreparedOrder(BigDecimal total, boolean approvalRequired) {
+    }
+
     private record PreparedDelivery(SalesOrderLine orderLine, SalesMasterDataPort.ProductInfo product,
                                     BigDecimal quantity, List<UUID> serialIds) {
     }
@@ -390,11 +521,16 @@ public class SalesOrderApplicationService {
         List<SalesApi.SalesOrderLineView> lines = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()).stream()
                 .map(line -> {
                     SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+                    List<UUID> serialIds = parseIds(line.getSerialIds());
+                    List<UUID> deliveredSerialIds = deliveryLineRepository.findByOrderLineId(line.getId()).stream()
+                            .flatMap(deliveryLine -> parseIds(deliveryLine.getSerialIds()).stream()).toList();
+                    List<UUID> remainingSerialIds = new ArrayList<>(serialIds);
+                    remainingSerialIds.removeAll(deliveredSerialIds);
                     return new SalesApi.SalesOrderLineView(line.getId(), line.getLineNo(), line.getProductId(),
                             product.productNo(), product.name(), product.categoryCode(), product.trackingMode(),
                             line.getQuantity(), line.getDeliveredQuantity(), line.remaining(), line.getUnitPrice(),
                             line.getMinPrice(), line.getTaxRate(), line.getAmount(), line.belowMinPrice(),
-                            parseIds(line.getSerialIds()), line.getRemark());
+                            serialIds, remainingSerialIds, line.getRemark());
                 })
                 .toList();
         return SalesApi.SalesOrderView.from(order, customer.name(), customer.customerType(), warehouseName, lines);

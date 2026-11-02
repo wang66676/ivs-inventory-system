@@ -22,6 +22,12 @@
 
 .ant-table-thead > tr > th {
   vertical-align: middle;
+  text-align: center !important;
+}
+
+/* 数据内容保持左对齐，表头单独居中。 */
+.ant-table-tbody > tr > td {
+  text-align: left !important;
 }
 
 .ant-table-tbody > tr > td > .ant-space,

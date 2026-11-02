@@ -28,7 +28,7 @@
              width="560px" @ok="submit">
       <a-form layout="vertical">
         <a-form-item label="客户" required><a-select v-model:value="form.customerId" :options="customerOptions" show-search /></a-form-item>
-        <a-form-item label="收款金额" required><a-input-number v-model:value="form.amount" :min="0.01" style="width:100%" /></a-form-item>
+        <a-form-item label="收款金额" required><MoneyInput v-model:value="form.amount" :min="0.01" :precision="2" style="width:100%" /></a-form-item>
         <a-form-item label="收款方式">
           <a-select v-model:value="form.method" :options="methodOptions" />
         </a-form-item>

@@ -26,6 +26,9 @@ public class SalesOrder {
     @Column(name = "order_no", nullable = false, unique = true, length = 40)
     private String orderNo;
 
+    @Column(name = "external_order_no", length = 80)
+    private String externalOrderNo;
+
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
 
@@ -49,6 +52,10 @@ public class SalesOrder {
     @Column(name = "price_approved_at")
     private Instant priceApprovedAt;
 
+    /** 锁货时间。未锁货的订单不能出库。 */
+    @Column(name = "locked_at")
+    private Instant lockedAt;
+
     @Column(length = 300)
     private String remark;
 
@@ -68,11 +75,13 @@ public class SalesOrder {
     protected SalesOrder() {
     }
 
-    public static SalesOrder create(String orderNo, UUID customerId, UUID warehouseId, BigDecimal totalAmount,
+    public static SalesOrder create(String orderNo, String externalOrderNo, UUID customerId, UUID warehouseId,
+                                    BigDecimal totalAmount,
                                     boolean priceApprovalRequired, String remark, UUID ownerId) {
         SalesOrder order = new SalesOrder();
         order.id = UUID.randomUUID();
         order.orderNo = orderNo;
+        order.externalOrderNo = normalize(externalOrderNo) == null ? orderNo : normalize(externalOrderNo);
         order.customerId = customerId;
         order.warehouseId = warehouseId;
         order.status = SalesOrderStatus.DRAFT;
@@ -91,6 +100,23 @@ public class SalesOrder {
 
     public void markPriceApprovalRequired(boolean required) {
         this.priceApprovalRequired = required;
+    }
+
+    /** 草稿被补全或修改后，原低价审批失效，需要按新明细重新判断。 */
+    public void resetPriceApproval() {
+        this.priceApprovedBy = null;
+        this.priceApprovedAt = null;
+    }
+
+    /** 草稿补全客户、仓库与备注。 */
+    public void updateDraft(String externalOrderNo, UUID customerId, UUID warehouseId, String remark) {
+        if (status != SalesOrderStatus.DRAFT) {
+            throw new IllegalStateException("只有草稿订单可以编辑: " + status);
+        }
+        this.customerId = customerId;
+        this.externalOrderNo = normalize(externalOrderNo) == null ? orderNo : normalize(externalOrderNo);
+        this.warehouseId = warehouseId;
+        this.remark = remark;
     }
 
     /** 低价审批：仅当存在低于最低限价的明细时需要。 */
@@ -123,6 +149,16 @@ public class SalesOrder {
             throw new IllegalStateException("当前订单状态不允许出库: " + status);
         }
         this.status = fullyDelivered ? SalesOrderStatus.DELIVERED : SalesOrderStatus.PARTIALLY_DELIVERED;
+    }
+
+    public void markLocked() {
+        if (lockedAt == null) {
+            lockedAt = Instant.now();
+        }
+    }
+
+    public boolean isLocked() {
+        return lockedAt != null;
     }
 
     public void close() {
@@ -172,8 +208,15 @@ public class SalesOrder {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private static String normalize(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     public UUID getId() { return id; }
     public String getOrderNo() { return orderNo; }
+    public String getExternalOrderNo() { return externalOrderNo == null ? orderNo : externalOrderNo; }
     public UUID getCustomerId() { return customerId; }
     public UUID getWarehouseId() { return warehouseId; }
     public SalesOrderStatus getStatus() { return status; }
@@ -181,6 +224,7 @@ public class SalesOrder {
     public boolean isPriceApprovalRequired() { return priceApprovalRequired; }
     public UUID getPriceApprovedBy() { return priceApprovedBy; }
     public Instant getPriceApprovedAt() { return priceApprovedAt; }
+    public Instant getLockedAt() { return lockedAt; }
     public String getRemark() { return remark; }
     public UUID getOwnerId() { return ownerId; }
     public Instant getCreatedAt() { return createdAt; }

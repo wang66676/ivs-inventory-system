@@ -73,6 +73,7 @@ class SalesSettlementIntegrationTest {
                         List.of(serial.id()), null)));
         assertThat(order.status()).isEqualTo(SalesOrderStatus.DRAFT);
         assertThat(order.lines().get(0).unitPrice()).isEqualByComparingTo("460000.00");
+        assertThat(order.lines().get(0).remainingSerialIds()).containsExactly(serial.id());
         assertThat(order.priceApprovalRequired()).isFalse();
 
         order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
@@ -98,6 +99,7 @@ class SalesSettlementIntegrationTest {
 
         order = get("/api/ivs/sales-orders/" + order.id(), SalesApi.SalesOrderView.class);
         assertThat(order.status()).isEqualTo(SalesOrderStatus.DELIVERED);
+        assertThat(order.lines().get(0).remainingSerialIds()).isEmpty();
 
         assertThat(getSerial(serial.id()).status()).isEqualTo(SerialStatus.DELIVERED);
         InventoryApi.BalanceView afterDelivery = balanceOf(warehouse, product);
@@ -152,6 +154,58 @@ class SalesSettlementIntegrationTest {
     }
 
     @Test
+    void 草稿订单可后补VIN且未锁货不能出库() {
+        MasterdataApi.CategoryView vehicle = createCategory("VEHICLE-EDIT", "整车", TrackingMode.SERIAL,
+                "VEHICLE", "台");
+        MasterdataApi.ProductView product = createProduct("Q3 后补VIN", vehicle.id(), "台", "某厂", "Q3", "T31",
+                new BigDecimal("430000"), new BigDecimal("460000"));
+        MasterdataApi.WarehouseView warehouse = createWarehouse("WH-EDIT", "整车仓");
+        MasterdataApi.SupplierView oem = createSupplier("后补VIN整车厂", SupplierType.OEM);
+        MasterdataApi.CustomerView customer = createCustomer("后补VIN客户", CustomerType.COMPANY,
+                new BigDecimal("5000000"), 30);
+        MasterdataApi.SerialView serial = createSerial("LZZ1CLWB0NA900099", product.id());
+        purchaseAndReceive(oem, warehouse, product, serial);
+
+        SalesApi.SalesOrderView order = createOrder(customer, warehouse,
+                List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), BigDecimal.ONE,
+                        new BigDecimal("460000"), null, null)));
+        assertThat(order.lines().get(0).serialIds()).isEmpty();
+
+        Map<String, Object> update = new HashMap<>();
+        update.put("customerId", customer.id().toString());
+        update.put("warehouseId", warehouse.id().toString());
+        update.put("lines", List.of(Map.of(
+                "productId", product.id().toString(),
+                "quantity", 1,
+                "unitPrice", 460000,
+                "serialIds", List.of(serial.id().toString())
+        )));
+        SalesApi.SalesOrderView updated = restTemplate.exchange(
+                "/api/ivs/sales-orders/" + order.id(), org.springframework.http.HttpMethod.PUT,
+                new org.springframework.http.HttpEntity<>(update), SalesApi.SalesOrderView.class).getBody();
+        assertThat(updated).isNotNull();
+        assertThat(updated.lines().get(0).serialIds()).containsExactly(serial.id());
+
+        order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
+        ResponseEntity<Map> deliverBeforeLock = restTemplate.postForEntity(
+                "/api/ivs/sales-orders/" + order.id() + "/deliver",
+                Map.of("warehouseId", warehouse.id().toString(), "lines", List.of(
+                        Map.of("orderLineId", order.lines().get(0).id().toString(),
+                                "serialIds", List.of(serial.id().toString())))), Map.class);
+        assertThat(deliverBeforeLock.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(deliverBeforeLock.getBody().get("code")).isEqualTo("SALES_NOT_LOCKED");
+
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
+        assertThat(order.lockedAt()).isNotNull();
+        assertThat(getSerial(serial.id()).status()).isEqualTo(SerialStatus.LOCKED);
+
+        MasterdataApi.SerialView[] inStock = restTemplate.getForEntity(
+                "/api/ivs/product-serials?status=IN_STOCK", MasterdataApi.SerialView[].class).getBody();
+        assertThat(inStock).isNotNull();
+        assertThat(inStock).noneMatch(item -> item.id().equals(serial.id()));
+    }
+
+    @Test
     void 低于最低限价需先价格审批才能确认() {
         MasterdataApi.CategoryView vehicle = createCategory("VEHICLE", "整车", TrackingMode.SERIAL, "VEHICLE", "台");
         MasterdataApi.ProductView product = createProduct("T31 自卸车", vehicle.id(), "台", "某厂", "T31", "自卸",
@@ -194,6 +248,78 @@ class SalesSettlementIntegrationTest {
     }
 
     @Test
+    void 已取消销售订单可以删除() {
+        MasterdataApi.CategoryView part = createCategory("PART-DEL", "配件", TrackingMode.QUANTITY, "SIMPLE", "件");
+        MasterdataApi.ProductView product = createProduct("可删除订单商品", part.id(), "件", null, null, "DEL-1",
+                BigDecimal.ZERO, new BigDecimal("100"));
+        MasterdataApi.WarehouseView warehouse = createWarehouse("WH-DEL", "删除测试仓");
+        MasterdataApi.CustomerView customer = createCustomer("删除测试客户", CustomerType.INDIVIDUAL, null, 30);
+        SalesApi.SalesOrderView order = createOrder(customer, warehouse,
+                List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), BigDecimal.ONE,
+                        new BigDecimal("100"), null, null)));
+        post("/api/ivs/sales-orders/" + order.id() + "/cancel", Map.of(), SalesApi.SalesOrderView.class);
+        var deleted = restTemplate.exchange("/api/ivs/sales-orders/" + order.id(), org.springframework.http.HttpMethod.DELETE,
+                null, Void.class);
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        var missing = restTemplate.getForEntity("/api/ivs/sales-orders/" + order.id(), Map.class);
+        assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void 零价订单出库前返回业务提示并可补录成交价后出库() {
+        MasterdataApi.CategoryView vehicle = createCategory("VEHICLE-ZERO-PRICE", "整车", TrackingMode.SERIAL,
+                "VEHICLE", "台");
+        MasterdataApi.ProductView product = createProduct("Q3 零价修复测试车", vehicle.id(), "台", "某厂", "Q3", "T31",
+                BigDecimal.ZERO, BigDecimal.ZERO);
+        MasterdataApi.WarehouseView warehouse = createWarehouse("WH-ZERO", "零价修复仓");
+        MasterdataApi.SupplierView oem = createSupplier("零价修复整车厂", SupplierType.OEM);
+        MasterdataApi.CustomerView customer = createCustomer("零价修复客户", CustomerType.COMPANY,
+                new BigDecimal("5000000"), 30);
+        MasterdataApi.SerialView serial = createSerial("LZZZEROPRICE000001", product.id());
+        purchaseAndReceive(oem, warehouse, product, serial);
+
+        ResponseEntity<Map> zeroCreate = restTemplate.postForEntity("/api/ivs/sales-orders", Map.of(
+                "customerId", customer.id().toString(), "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 1,
+                        "unitPrice", 0, "serialIds", List.of(serial.id().toString())))), Map.class);
+        assertThat(zeroCreate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(zeroCreate.getBody().get("code")).isEqualTo("SALES_PRICE_REQUIRED");
+
+        SalesApi.SalesOrderView order = createOrder(customer, warehouse,
+                List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), BigDecimal.ONE,
+                        BigDecimal.ONE, List.of(serial.id()), null)));
+        order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
+        UUID lineId = order.lines().get(0).id();
+
+        // 模拟旧版本已经生成的 0 元订单，验证不会再抛 HTTP 500。
+        jdbcTemplate.update("update ivs.sales_order_line set unit_price = 0, amount = 0 where id = ?", lineId);
+        jdbcTemplate.update("update ivs.sales_order set total_amount = 0 where id = ?", order.id());
+        ResponseEntity<Map> zeroDelivery = restTemplate.postForEntity(
+                "/api/ivs/sales-orders/" + order.id() + "/deliver",
+                Map.of("warehouseId", warehouse.id().toString(), "lines", List.of(
+                        Map.of("orderLineId", lineId.toString(), "serialIds", List.of(serial.id().toString())))),
+                Map.class);
+        assertThat(zeroDelivery.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(zeroDelivery.getBody().get("code")).isEqualTo("SALES_PRICE_REQUIRED");
+
+        SalesApi.SalesOrderView priced = restTemplate.exchange(
+                "/api/ivs/sales-orders/" + order.id() + "/prices", org.springframework.http.HttpMethod.PUT,
+                new org.springframework.http.HttpEntity<>(Map.of("lines", List.of(Map.of(
+                        "orderLineId", lineId.toString(), "unitPrice", 450000)))),
+                SalesApi.SalesOrderView.class).getBody();
+        assertThat(priced).isNotNull();
+        assertThat(priced.totalAmount()).isEqualByComparingTo("450000.00");
+        assertThat(priced.lines().get(0).unitPrice()).isEqualByComparingTo("450000.00");
+
+        SalesApi.SalesDeliveryView delivery = post("/api/ivs/sales-orders/" + order.id() + "/deliver",
+                Map.of("warehouseId", warehouse.id().toString(), "lines", List.of(
+                        Map.of("orderLineId", lineId.toString(), "serialIds", List.of(serial.id().toString())))),
+                SalesApi.SalesDeliveryView.class);
+        assertThat(delivery.amount()).isEqualByComparingTo("450000.00");
+    }
+
+    @Test
     void 库存不足无法出库且部分出库按剩余重新锁定() {
         MasterdataApi.CategoryView part = createCategory("PART", "配件", TrackingMode.QUANTITY, "SIMPLE", "件");
         MasterdataApi.ProductView product = createProduct("刹车片", part.id(), "件", null, null, "BP-1",
@@ -210,10 +336,7 @@ class SalesSettlementIntegrationTest {
                 List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), new BigDecimal("20"), null, null, null)));
         shortageOrder = post("/api/ivs/sales-orders/" + shortageOrder.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
         ResponseEntity<Map> shortage = restTemplate.postForEntity(
-                "/api/ivs/sales-orders/" + shortageOrder.id() + "/deliver",
-                Map.of("warehouseId", warehouse.id().toString(), "lines", List.of(
-                        Map.of("orderLineId", shortageOrder.lines().get(0).id().toString(), "quantity", 20))),
-                Map.class);
+                "/api/ivs/sales-orders/" + shortageOrder.id() + "/lock", Map.of(), Map.class);
         assertThat(shortage.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(shortage.getBody().get("code")).isEqualTo("STOCK_NOT_AVAILABLE");
 
@@ -265,6 +388,7 @@ class SalesSettlementIntegrationTest {
         SalesApi.SalesOrderView order = createOrder(customer, warehouse,
                 List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), BigDecimal.ONE, null, null, null)));
         order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
         post("/api/ivs/sales-orders/" + order.id() + "/deliver",
                 Map.of("warehouseId", warehouse.id().toString(),
                         "lines", List.of(Map.of("orderLineId", order.lines().get(0).id().toString(), "quantity", 1))),

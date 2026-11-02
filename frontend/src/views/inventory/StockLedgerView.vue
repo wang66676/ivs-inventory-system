@@ -7,7 +7,12 @@
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="productId" :options="productOptions" allow-clear show-search placeholder="按商品筛选"
                   style="width:280px" @change="reload" />
+        <a-select v-model:value="warehouseId" :options="warehouseOptions" allow-clear placeholder="按仓库筛选"
+                  style="width:190px" @change="reload" />
+        <a-select v-model:value="moveType" :options="moveTypeOptions" allow-clear placeholder="按类型筛选"
+                  style="width:170px" @change="reload" />
         <a-input-number v-model:value="limit" :min="10" :max="500" style="width:120px" @change="reload" />
+        <a-button @click="exportLedger">导出</a-button>
         <span class="hint">共 {{ rows.length }} 条</span>
       </a-space>
       <a-table :data-source="rows" :columns="columns" row-key="id" size="middle"
@@ -37,14 +42,19 @@
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { inventoryApi } from '../../api/inventory'
-import { productApi } from '../../api/masterdata'
+import { productApi, warehouseApi } from '../../api/masterdata'
 import { MOVE_TYPE_LABELS } from '../../types/inventory'
 import type { LedgerEntry } from '../../types/inventory'
+import { exportCsv, exportTimestamp } from '../../utils/csvExport'
 
 const rows = ref<LedgerEntry[]>([])
 const productId = ref<string | undefined>(undefined)
+const warehouseId = ref<string | undefined>(undefined)
+const moveType = ref<string | undefined>(undefined)
 const limit = ref(200)
 const productOptions = ref<{ label: string; value: string }[]>([])
+const warehouseOptions = ref<{ label: string; value: string }[]>([])
+const moveTypeOptions = Object.entries(MOVE_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 
 const columns = [
   { title: '发生时间', key: 'occurredAt', width: 170 },
@@ -62,16 +72,39 @@ const columns = [
 
 async function reload() {
   try {
-    rows.value = await inventoryApi.ledger({ productId: productId.value, limit: limit.value })
+    rows.value = await inventoryApi.ledger({
+      productId: productId.value, warehouseId: warehouseId.value, moveType: moveType.value, limit: limit.value,
+    })
   } catch (error) {
     message.error((error as Error).message)
   }
 }
 
+function exportLedger() {
+  if (!rows.value.length) { message.warning('当前没有可导出的库存台账数据'); return }
+  exportCsv<LedgerEntry>(`库存台账-${exportTimestamp()}`, [
+    { title: '发生时间', value: (row) => String(row.occurredAt).replace('T', ' ').slice(0, 19) },
+    { title: '商品编码', value: (row) => row.productNo },
+    { title: '商品名称', value: (row) => row.productName },
+    { title: 'VIN/SN', value: (row) => row.serialNo },
+    { title: '仓库', value: (row) => row.warehouseName },
+    { title: '方向', value: (row) => row.direction === 'IN' ? '入库' : '出库' },
+    { title: '类型', value: (row) => MOVE_TYPE_LABELS[row.moveType] ?? row.moveType },
+    { title: '数量', value: (row) => row.quantity },
+    { title: '单位成本', value: (row) => row.unitCost },
+    { title: '金额', value: (row) => row.amount },
+    { title: '变动后余额', value: (row) => row.balanceAfter },
+    { title: '业务单据', value: (row) => row.bizNo },
+    { title: '备注', value: (row) => row.remark },
+  ], rows.value)
+  message.success('库存台账已导出')
+}
+
 onMounted(async () => {
   try {
-    const products = await productApi.list()
+    const [products, warehouses] = await Promise.all([productApi.list(), warehouseApi.list()])
     productOptions.value = products.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
+    warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
   } catch { /* ignore */ }
   await reload()
 })

@@ -64,12 +64,23 @@ public class PolicySubsidyPool {
      * @return 实际可享受金额（0 表示额度已用尽）
      */
     public BigDecimal reserve(BigDecimal requested) {
+        return reserve(requested, true);
+    }
+
+    /**
+     * 采购单选择政策时允许先形成预享受项：金额仍正常预占，但条件类政策不因尚未人工确认而阻断采购录单。
+     */
+    public BigDecimal reserveProvisional(BigDecimal requested) {
+        return reserve(requested, false);
+    }
+
+    private BigDecimal reserve(BigDecimal requested, boolean requireConditionMet) {
         BigDecimal want = money(requested);
         if (limitType == LimitType.TIME_ONLY) {
             return want;
         }
         if (limitType == LimitType.CONDITION || limitType == LimitType.AMOUNT_AND_CONDITION) {
-            if (!conditionMet) {
+            if (requireConditionMet && !conditionMet) {
                 throw new IllegalStateException("政策条件尚未达成，不能享受：" +
                         (conditionDesc == null ? "" : conditionDesc));
             }

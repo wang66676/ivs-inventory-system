@@ -69,6 +69,7 @@ class ReportIntegrationTest {
                 "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 4, "unitPrice", 100))),
                 SalesApi.SalesOrderView.class);
         order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
         var delivery = post("/api/ivs/sales-orders/" + order.id() + "/deliver", Map.of(
                 "warehouseId", warehouse.id().toString(),
                 "lines", List.of(Map.of("orderLineId", order.lines().get(0).id().toString(), "quantity", 4))),

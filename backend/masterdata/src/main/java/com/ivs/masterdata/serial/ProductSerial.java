@@ -16,6 +16,7 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -54,6 +55,9 @@ public class ProductSerial {
     @Column(name = "inbound_at")
     private Instant inboundAt;
 
+    @Column(name = "certificate_application_date")
+    private LocalDate certificateApplicationDate;
+
     @Column(name = "warranty_start")
     private Instant warrantyStart;
 
@@ -89,7 +93,8 @@ public class ProductSerial {
 
     public static ProductSerial create(String serialNo, UUID productId, UUID warehouseId, String locationCode,
                                        String batchNo, BigDecimal purchasePrice, Instant inboundAt,
-                                       Instant warrantyStart, Instant warrantyEnd, OwnershipType ownershipType,
+                                       LocalDate certificateApplicationDate, Instant warrantyStart,
+                                       Instant warrantyEnd, OwnershipType ownershipType,
                                        String attrsJson, String remark) {
         ProductSerial serial = new ProductSerial();
         serial.id = UUID.randomUUID();
@@ -104,6 +109,7 @@ public class ProductSerial {
         serial.batchNo = normalize(batchNo);
         serial.purchasePrice = money(purchasePrice);
         serial.inboundAt = inboundAt;
+        serial.certificateApplicationDate = certificateApplicationDate;
         serial.warrantyStart = warrantyStart;
         serial.warrantyEnd = warrantyEnd;
         serial.ownershipType = ownershipType == null ? OwnershipType.OWNED : ownershipType;
@@ -115,13 +121,14 @@ public class ProductSerial {
     }
 
     public void update(UUID warehouseId, String locationCode, String batchNo, BigDecimal purchasePrice,
-                       Instant inboundAt, Instant warrantyStart, Instant warrantyEnd,
-                       OwnershipType ownershipType, String attrsJson, String remark) {
+                       Instant inboundAt, LocalDate certificateApplicationDate, Instant warrantyStart,
+                       Instant warrantyEnd, OwnershipType ownershipType, String attrsJson, String remark) {
         this.warehouseId = warehouseId;
         this.locationCode = normalize(locationCode);
         this.batchNo = normalize(batchNo);
         this.purchasePrice = money(purchasePrice);
         this.inboundAt = inboundAt;
+        this.certificateApplicationDate = certificateApplicationDate;
         this.warrantyStart = warrantyStart;
         this.warrantyEnd = warrantyEnd;
         if (ownershipType != null) {
@@ -133,6 +140,11 @@ public class ProductSerial {
 
     /** 收货入库回写：仓库、采购价与首次入库时间（首次入库时间只在为空时写入）。 */
     public void applyInbound(UUID warehouseId, BigDecimal inboundPrice, Instant inboundAt) {
+        applyInbound(warehouseId, inboundPrice, inboundAt, null);
+    }
+
+    public void applyInbound(UUID warehouseId, BigDecimal inboundPrice, Instant inboundAt,
+                             LocalDate certificateApplicationDate) {
         if (warehouseId != null) {
             this.warehouseId = warehouseId;
         }
@@ -142,6 +154,13 @@ public class ProductSerial {
         if (this.inboundAt == null) {
             this.inboundAt = inboundAt == null ? Instant.now() : inboundAt;
         }
+        if (certificateApplicationDate != null) {
+            this.certificateApplicationDate = certificateApplicationDate;
+        }
+    }
+
+    public void updateCertificateApplicationDate(LocalDate certificateApplicationDate) {
+        this.certificateApplicationDate = certificateApplicationDate;
     }
 
     /** 按产品大项配置的状态机模板迁移状态，非法迁移直接拒绝。 */
@@ -211,6 +230,7 @@ public class ProductSerial {
     public String getBatchNo() { return batchNo; }
     public BigDecimal getPurchasePrice() { return purchasePrice; }
     public Instant getInboundAt() { return inboundAt; }
+    public LocalDate getCertificateApplicationDate() { return certificateApplicationDate; }
     public Instant getWarrantyStart() { return warrantyStart; }
     public Instant getWarrantyEnd() { return warrantyEnd; }
     public OwnershipType getOwnershipType() { return ownershipType; }

@@ -4,7 +4,15 @@ import { useAuthStore } from '../stores/auth'
 
 const Placeholder = () => import('../views/dashboard/ModulePlaceholderView.vue')
 
-type MenuPage = { path: string; name: string; title: string; description: string; permission?: string; component?: () => Promise<unknown> }
+type MenuPage = {
+  path: string
+  name: string
+  title: string
+  description: string
+  permission?: string
+  component?: () => Promise<unknown>
+  hideable?: boolean
+}
 
 /** 业务页面（M0 为占位，M1–M4 逐个替换为真实页面）。 */
 const modulePages: MenuPage[] = [
@@ -26,7 +34,7 @@ const modulePages: MenuPage[] = [
   // 库存
   { path: '/inventory/dashboard', name: 'inventory-dashboard', component: () => import('../views/inventory/InventoryDashboardView.vue'), title: '库存看板', description: '按产品大项/仓库/品牌/状态与库龄分档汇总，含超期未实销预警。', permission: 'IVS_READ' },
   { path: '/inventory/stock', name: 'stock-balance', component: () => import('../views/inventory/StockQueryView.vue'), title: '库存查询', description: '按商品与仓库查询在库、锁定、可用数量与成本。', permission: 'IVS_READ' },
-  { path: '/inventory/vin', name: 'vin-inventory', component: () => import('../views/inventory/VinInventoryView.vue'), title: 'VIN/SN 库存', description: '采购收货自动生成的一物一档库存明细：VIN/SN、商品、仓库、单车采购价与状态。', permission: 'IVS_READ' },
+  { path: '/inventory/vin', name: 'vin-inventory', component: () => import('../views/inventory/VinInventoryView.vue'), title: 'VIN/SN 库存', description: '按 VIN/SN 展示一物一档库存明细：商品、仓库、单车采购价与状态。', permission: 'IVS_READ' },
   { path: '/inventory/ledger', name: 'stock-ledger', component: () => import('../views/inventory/StockLedgerView.vue'), title: '库存台账', description: '只追加的库存事实表：入库、出库、调拨、盘点、抵扣兑换。', permission: 'IVS_READ' },
   { path: '/inventory/locks', name: 'stock-lock', component: () => import('../views/inventory/StockLockView.vue'), title: '库存锁定', description: '销售订单锁货与超时自动释放。', permission: 'IVS_READ' },
   { path: '/inventory/stocktakes', name: 'stocktake', component: () => import('../views/inventory/StocktakeView.vue'), title: '库存盘点', description: '盘点单：草稿 → 过账，差异写台账。', permission: 'IVS_STOCK_ADJUST' },
@@ -43,18 +51,18 @@ const modulePages: MenuPage[] = [
 
   // 实销
   { path: '/retail/records', name: 'retail-record', component: () => import('../views/retail/RetailView.vue'), title: '实销登记', description: '实销登记：车辆使用人、手机号、终端发票开票时间（必填），车牌照号（选填）；实销日期须晚于开票时间。', permission: 'IVS_RETAIL_WRITE' },
-  { path: '/retail/verify', name: 'retail-verify', component: () => import('../views/retail/RetailView.vue'), title: '实销复核', description: '实销复核、确认与冲正；确认后触发政策匹配与预享受项转可申请。', permission: 'IVS_RETAIL_VERIFY' },
-  { path: '/retail/ledger', name: 'retail-ledger', component: () => import('../views/retail/RetailView.vue'), title: '实销台账', description: '按期间/门店/车型的实销台账。', permission: 'IVS_READ' },
+  { path: '/retail/verify', name: 'retail-verify', component: () => import('../views/retail/RetailView.vue'), title: '实销复核', description: '实销复核、确认与冲正；确认后触发政策匹配与预享受项转可申请。', permission: 'IVS_RETAIL_VERIFY', hideable: true },
+  { path: '/retail/ledger', name: 'retail-ledger', component: () => import('../views/retail/RetailView.vue'), title: '实销台账', description: '按期间/门店/车型的实销台账。', permission: 'IVS_READ', hideable: true },
   { path: '/retail/pending', name: 'retail-pending', title: '未实销预警', description: '已交付未实销清单（直接影响返利申报，必须预警）。', permission: 'IVS_READ' },
 
   // 政策与返利
   { path: '/policy/policies', name: 'policy', component: () => import('../views/policy/PolicyView.vue'), title: '政策管理', description: '政策手工录入：名目、车型多选、金额或比例、生效与失效日期、限制维度（时间/金额/条件）、参考时间、周期与截止日。', permission: 'IVS_POLICY_WRITE' },
   { path: '/policy/subsidy-pools', name: 'subsidy-pool', component: () => import('../views/policy/SubsidyPoolView.vue'), title: '政策额度池', description: '每条政策一个额度池：时间/金额/条件限制，逐台原子扣减，返完为止。', permission: 'IVS_SUBSIDY_POOL_MANAGE' },
-  { path: '/policy/pre-entitlements', name: 'pre-entitlement', component: () => import('../views/policy/PreEntitlementView.vue'), title: '预享受项', description: '订单选政策生成的预享受项：待实销 → 可申请 → 已申请 → 已兑现；支持后加政策补挂。', permission: 'IVS_PRE_ENTITLEMENT_MANAGE' },
+  { path: '/policy/pre-entitlements', name: 'pre-entitlement', component: () => import('../views/policy/PreEntitlementView.vue'), title: '预享受项', description: '采购单选择返利政策后自动同步：待实销 → 可申请 → 已申请 → 已兑现。', permission: 'IVS_PRE_ENTITLEMENT_MANAGE' },
   { path: '/policy/applications', name: 'entitlement-apply', component: () => import('../views/policy/EntitlementView.vue'), title: '兑现申请', description: '实销后申请兑现（可批量），按政策周期归集到申报单。', permission: 'IVS_ENTITLEMENT_APPLY' },
-  { path: '/policy/entitlements', name: 'entitlement', component: () => import('../views/policy/EntitlementView.vue'), title: '权益台账', description: '实销后生成的正式权益：面值、申报额、确认额、已兑现额。', permission: 'IVS_READ' },
+  { path: '/policy/entitlements', name: 'entitlement', component: () => import('../views/policy/EntitlementView.vue'), title: '权益台账', description: '实销后生成的正式权益：面值、申报额、确认额、已兑现额。', permission: 'IVS_READ', hideable: true },
   { path: '/policy/claims', name: 'oem-claim', component: () => import('../views/policy/ClaimView.vue'), title: '申报单', description: '按厂家 + 政策 + 周期生成（可单张或合并），提交与差异登记。', permission: 'IVS_CLAIM_SUBMIT' },
-  { path: '/policy/oem-confirm', name: 'oem-confirm', component: () => import('../views/policy/ClaimView.vue'), title: '厂家确认', description: '厂家确认结果登记与申报差异处置。', permission: 'IVS_CLAIM_CONFIRM' },
+  { path: '/policy/oem-confirm', name: 'oem-confirm', component: () => import('../views/policy/ClaimView.vue'), title: '厂家确认', description: '厂家确认结果登记与申报差异处置。', permission: 'IVS_CLAIM_CONFIRM', hideable: true },
   { path: '/policy/fund-pool', name: 'fund-pool', component: () => import('../views/policy/FundPoolView.vue'), title: '返利资金池', description: '一个资金池按厂家分账；入库单确认时抵扣同一厂家车款，余额分批使用，不允许预抵扣。', permission: 'IVS_FUND_POOL_VIEW' },
   { path: '/policy/reports', name: 'policy-report', component: () => import('../views/policy/PolicyReportView.vue'), title: '政策报表', description: '返利应收账龄、额度池进度、资金池台账、单车政策成本与申报差异。', permission: 'IVS_FINANCE_READ' },
 
@@ -82,6 +90,8 @@ export const menuGroups = [
   { key: 'reports', title: '报表', items: modulePages.filter((p) => p.path.startsWith('/reports/')) },
 ]
 
+export const hideablePages = modulePages.filter((page) => page.hideable)
+
 export const pageTitles: Record<string, string> = Object.fromEntries(
   modulePages.map((page) => [page.path, page.title]),
 )
@@ -105,6 +115,7 @@ export const router = createRouter({
     { path: '/system/audit', name: 'audit-log', component: () => import('../views/system/AuditLogView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/migration', name: 'data-migration', component: () => import('../views/system/DataMigrationView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/settings', name: 'system-settings', component: () => import('../views/system/SystemSettingView.vue'), meta: { permission: 'USER_MANAGE' } },
+    { path: '/system/update', name: 'system-update', component: () => import('../views/system/SystemUpdateView.vue'), meta: { permission: 'IVS_READ' } },
     { path: '/system/approvals', name: 'approval-placeholder', component: Placeholder, props: { title: '审批配置', description: '审批矩阵：低价审批、库存调整、政策发布、额度池调整、资金池调整等阈值配置。' }, meta: { permission: 'USER_MANAGE' } },
   ],
 })

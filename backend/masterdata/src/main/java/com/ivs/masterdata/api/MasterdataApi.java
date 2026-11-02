@@ -110,7 +110,8 @@ public final class MasterdataApi {
     public record SerialView(
             UUID id, String serialNo, UUID productId, String productNo, String productName, String categoryCode,
             SerialStatus status, UUID warehouseId, String warehouseName, String locationCode, String batchNo,
-            BigDecimal purchasePrice, Instant inboundAt, Instant warrantyStart, Instant warrantyEnd,
+            BigDecimal purchasePrice, Instant inboundAt, LocalDate certificateApplicationDate,
+            Instant warrantyStart, Instant warrantyEnd,
             OwnershipType ownershipType, String attrsJson, String remark,
             List<SerialStatus> allowedNextStatuses, Instant createdAt
     ) {
@@ -124,7 +125,7 @@ public final class MasterdataApi {
                     product == null ? null : product.getProductNo(), product == null ? null : product.getName(),
                     category == null ? null : category.getCode(), serial.getStatus(), serial.getWarehouseId(),
                     warehouseName, serial.getLocationCode(), serial.getBatchNo(), serial.getPurchasePrice(),
-                    serial.getInboundAt(), serial.getWarrantyStart(), serial.getWarrantyEnd(),
+                    serial.getInboundAt(), serial.getCertificateApplicationDate(), serial.getWarrantyStart(), serial.getWarrantyEnd(),
                     serial.getOwnershipType(), serial.getAttrsJson(), serial.getRemark(),
                     List.copyOf(next), serial.getCreatedAt());
         }
@@ -132,9 +133,18 @@ public final class MasterdataApi {
 
     public record SaveSerialCommand(
             String serialNo, UUID productId, UUID warehouseId, String locationCode, String batchNo,
-            BigDecimal purchasePrice, Instant inboundAt, Instant warrantyStart, Instant warrantyEnd,
+            BigDecimal purchasePrice, Instant inboundAt, LocalDate certificateApplicationDate,
+            Instant warrantyStart, Instant warrantyEnd,
             OwnershipType ownershipType, String attrsJson, String remark
     ) {
+        /** 兼容旧调用：不填写申请合格证日期。 */
+        public SaveSerialCommand(String serialNo, UUID productId, UUID warehouseId, String locationCode,
+                                 String batchNo, BigDecimal purchasePrice, Instant inboundAt,
+                                 Instant warrantyStart, Instant warrantyEnd, OwnershipType ownershipType,
+                                 String attrsJson, String remark) {
+            this(serialNo, productId, warehouseId, locationCode, batchNo, purchasePrice, inboundAt,
+                    null, warrantyStart, warrantyEnd, ownershipType, attrsJson, remark);
+        }
     }
 
     public record MoveSerialStatusCommand(SerialStatus targetStatus) {

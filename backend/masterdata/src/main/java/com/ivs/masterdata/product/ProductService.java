@@ -51,17 +51,14 @@ public class ProductService {
     @Transactional
     public MasterdataApi.ProductView create(MasterdataApi.SaveProductCommand command) {
         ProductCategory category = categoryService.requireActive(command.categoryId());
-        if (category.managesSerials() && (command.model() == null || command.model().isBlank())
-                && (command.name() == null || command.name().isBlank())) {
-            throw new ConflictException("PRODUCT_NAME_REQUIRED", "序列号商品必须填写名称");
-        }
+        String name = resolveProductName(command.name(), command.series(), command.model(), category.getName());
         String productNo = command.productNo() == null || command.productNo().isBlank()
                 ? "PRD-%06d".formatted(productRepository.nextProductSequence())
                 : command.productNo().trim().toUpperCase();
         if (productRepository.existsByProductNo(productNo)) {
             throw new ConflictException("PRODUCT_NO_DUPLICATE", "商品编码已存在：" + productNo);
         }
-        Product product = Product.create(productNo, command.name(), category.getId(), command.unit(),
+        Product product = Product.create(productNo, name, category.getId(), command.unit(),
                 command.brand(), command.series(), command.model(), command.configCode(),
                 command.taxRate(), command.minPrice(), command.salePriceGuide(), command.purchasePriceRef(),
                 command.specJson(), command.remark());
@@ -90,8 +87,7 @@ public class ProductService {
                 if (category.getStatus() != com.ivs.masterdata.MasterStatus.ACTIVE) {
                     throw new IllegalArgumentException("商品已停用：" + row.categoryCode());
                 }
-                String name = row.name() == null || row.name().isBlank() ? row.model() : row.name().trim();
-                if (name == null || name.isBlank()) throw new IllegalArgumentException("产品名称不能为空");
+                String name = resolveProductName(null, row.series(), row.model(), category.getName());
                 MasterdataApi.ProductView view = create(new MasterdataApi.SaveProductCommand(
                         null, name, category.getId(), row.unit() == null || row.unit().isBlank() ? category.getUnit() : row.unit(),
                         null, row.series(), row.model(), null,
@@ -112,7 +108,8 @@ public class ProductService {
     @Transactional
     public MasterdataApi.ProductView update(UUID id, MasterdataApi.SaveProductCommand command) {
         Product product = find(id);
-        product.update(command.name(), command.unit(), command.brand(), command.series(), command.model(),
+        String name = resolveProductName(command.name(), command.series(), command.model(), product.getName());
+        product.update(name, command.unit(), command.brand(), command.series(), command.model(),
                 command.configCode(), command.taxRate(), command.minPrice(), command.salePriceGuide(),
                 command.purchasePriceRef(), command.specJson(), command.remark());
         return toView(productRepository.save(product));
@@ -142,6 +139,16 @@ public class ProductService {
         List<ProductAttrDef> attrDefs = attrDefRepository
                 .findByCategoryIdOrderBySortOrderAscCodeAsc(product.getCategoryId());
         return MasterdataApi.ProductView.from(product, category, attrDefs);
+    }
+
+    private String resolveProductName(String requestedName, String series, String model, String fallback) {
+        if (requestedName != null && !requestedName.isBlank()) {
+            return requestedName.trim();
+        }
+        String seriesText = series == null ? "" : series.trim();
+        String modelText = model == null ? "" : model.trim();
+        String combined = (seriesText + " " + modelText).trim();
+        return combined.isEmpty() ? fallback : combined;
     }
 }
 

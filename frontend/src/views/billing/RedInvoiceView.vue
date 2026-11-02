@@ -42,7 +42,7 @@
           </a-col>
           <a-col :span="12">
             <a-form-item label="红字金额" required>
-              <a-input-number v-model:value="form.amount" :min="0.01" :precision="2" style="width:100%" />
+              <MoneyInput v-model:value="form.amount" :min="0.01" :precision="2" style="width:100%" />
             </a-form-item>
           </a-col>
           <a-col :span="12">

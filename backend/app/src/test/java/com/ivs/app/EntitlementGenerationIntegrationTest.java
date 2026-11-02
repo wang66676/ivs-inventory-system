@@ -68,9 +68,10 @@ class EntitlementGenerationIntegrationTest {
 
         // 实销日期 2026-10-15 → 归期 2026-10
         UUID retailId = UUID.randomUUID();
+        UUID serialId = UUID.randomUUID();
         EntitlementApi[] created = restTemplate.postForEntity(
                 "/api/ivs/entitlements/generate?orderId=" + orderId + "&retailId=" + retailId
-                        + "&retailDate=2026-10-15&serialId=" + UUID.randomUUID(),
+                        + "&retailDate=2026-10-15&serialId=" + serialId,
                 Map.of(), EntitlementApi[].class).getBody();
         assertThat(created).isNotNull().hasSize(1);
         assertThat(created[0].entitlementNo()).startsWith("ENT-");
@@ -79,10 +80,13 @@ class EntitlementGenerationIntegrationTest {
         assertThat(created[0].retailId()).isEqualTo(retailId);
         assertThat(created[0].status()).isEqualTo("PENDING_CLAIM");
 
-        // 重复生成同一订单 → 没有待转预享受项
+        // 重复生成同一 VIN → 幂等返回已生成权益，不重复落账
         var again = restTemplate.postForEntity(
                 "/api/ivs/entitlements/generate?orderId=" + orderId + "&retailId=" + retailId
-                        + "&retailDate=2026-10-15", Map.of(), Map.class);
-        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                        + "&retailDate=2026-10-15&serialId=" + serialId, Map.of(),
+                EntitlementApi[].class);
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(again.getBody()).isNotNull().hasSize(1);
+        assertThat(again.getBody()[0].entitlementNo()).isEqualTo(created[0].entitlementNo());
     }
 }

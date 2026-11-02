@@ -5,6 +5,6 @@
   "entry": "backend/app/target/ivs-app-0.1.0-SNAPSHOT.jar",
   "port": 8090,
   "app_name": "IVS",
-  "android_server_url": "",
-  "skip_dirs": ["backend/data", "logs", "backups", "release", "frontend/node_modules", "frontend/dist", ".run", ".git"]
+  "android_server_url": "https://ooo-thousands-block-hereby.trycloudflare.com/",
+  "skip_dirs": ["backend/data", "logs", "backups", "release", "frontend/node_modules", "frontend/dist", ".run", ".git", "android-app/.gradle", "android-app/app/build"]
 }

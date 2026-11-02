@@ -13,9 +13,9 @@
             <a-table-column title="数量" data-index="quantity" :width="100" />
             <a-table-column title="成交价" data-index="unitPrice" :width="120" />
             <a-table-column title="结转成本" data-index="costAmount" :width="130" />
-            <a-table-column title="序列号" :width="220">
+            <a-table-column title="VIN/SN" :width="220">
               <template #default="{ record: line }">
-                <a-tag v-for="id in line.serialIds" :key="id">{{ shortId(id) }}</a-tag>
+                <a-tag v-for="id in line.serialIds" :key="id">{{ serialNoOf(id) }}</a-tag>
               </template>
             </a-table-column>
           </a-table>
@@ -34,9 +34,12 @@
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { salesApi } from '../../api/sales'
+import { serialApi } from '../../api/masterdata'
 import type { SalesDelivery } from '../../types/sales'
+import type { ProductSerial } from '../../types/masterdata'
 
 const rows = ref<SalesDelivery[]>([])
+const serials = ref<ProductSerial[]>([])
 const columns = [
   { title: '出库单号', key: 'deliveryNo', dataIndex: 'deliveryNo', width: 150 },
   { title: '订单号', key: 'orderNo', dataIndex: 'orderNo', width: 150 },
@@ -48,7 +51,7 @@ const columns = [
   { title: '出库时间', key: 'deliveredAt', width: 180 },
 ]
 
-const shortId = (id: string) => id.slice(0, 8)
+const serialNoOf = (id: string) => serials.value.find((item) => item.id === id)?.serialNo || id
 
 async function reload() {
   try {
@@ -58,5 +61,8 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+onMounted(async () => {
+  try { serials.value = await serialApi.list() } catch { /* ignore */ }
+  await reload()
+})
 </script>

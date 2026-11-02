@@ -9,4 +9,6 @@ public interface PurchaseOrderLineRepository extends JpaRepository<PurchaseOrder
     List<PurchaseOrderLine> findByOrderIdOrderByLineNoAsc(UUID orderId);
 
     void deleteByOrderId(UUID orderId);
+
+    boolean existsBySerialNoIgnoreCase(String serialNo);
 }

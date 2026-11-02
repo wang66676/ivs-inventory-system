@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Continue'
+﻿$ErrorActionPreference = 'Continue'
 Write-Host '本机访问：http://localhost:8090'
 Write-Host '局域网访问地址：'
 try {

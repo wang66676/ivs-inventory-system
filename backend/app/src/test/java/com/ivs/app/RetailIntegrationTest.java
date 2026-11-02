@@ -135,6 +135,58 @@ class RetailIntegrationTest {
     }
 
     @Test
+    void 实销候选只返回已锁定且尚未实销的VIN() {
+        MasterdataApi.CategoryView vehicle = createCategory("VEHICLE-CANDIDATE", "整车", TrackingMode.SERIAL);
+        MasterdataApi.ProductView product = createProduct("候选VIN测试车", vehicle.id());
+        MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
+                "code", "CAND-WH", "name", "候选仓", "type", "MAIN"), MasterdataApi.WarehouseView.class);
+        MasterdataApi.SerialView first = post("/api/ivs/product-serials", Map.of(
+                "serialNo", "LZZCANDIDATE000001", "productId", product.id().toString(),
+                "warehouseId", warehouse.id().toString(), "inboundAt", "2026-10-01T00:00:00Z"),
+                MasterdataApi.SerialView.class);
+        MasterdataApi.SerialView second = post("/api/ivs/product-serials", Map.of(
+                "serialNo", "LZZCANDIDATE000002", "productId", product.id().toString(),
+                "warehouseId", warehouse.id().toString(), "inboundAt", "2026-10-01T00:00:00Z"),
+                MasterdataApi.SerialView.class);
+        MasterdataApi.CustomerView customer = post("/api/ivs/customers", Map.of(
+                "name", "候选VIN客户", "customerType", "INDIVIDUAL"), MasterdataApi.CustomerView.class);
+        var order = post("/api/ivs/sales-orders", Map.of(
+                "customerId", customer.id().toString(), "warehouseId", warehouse.id().toString(),
+                "lines", java.util.List.of(Map.of("productId", product.id().toString(), "quantity", 1,
+                        "unitPrice", 450000, "serialIds", java.util.List.of(first.id().toString())))),
+                com.ivs.sales.order.api.SalesApi.SalesOrderView.class);
+
+        Map[] beforeLock = restTemplate.getForEntity("/api/ivs/retail-candidates", Map[].class).getBody();
+        assertThat(beforeLock).isNotNull().isEmpty();
+
+        // 聚焦候选查询规则：直接构造“订单已锁货 + VIN 已锁定”的状态（完整锁货流程由销售测试覆盖）。
+        jdbcTemplate.update("update ivs.product_serial set status = 'LOCKED' where id = ?", first.id());
+        jdbcTemplate.update("update ivs.sales_order set locked_at = current_timestamp where id = ?", order.id());
+
+        Map[] before = restTemplate.getForEntity("/api/ivs/retail-candidates", Map[].class).getBody();
+        assertThat(before).isNotNull();
+        assertThat(java.util.Arrays.stream(before).map(this::candidateSerialId).toList())
+                .contains(first.id())
+                .doesNotContain(second.id());
+        assertThat(java.util.Arrays.stream(before).filter(row -> candidateSerialId(row).equals(first.id()))
+                .findFirst().orElseThrow().get("orderId")).isEqualTo(order.id().toString());
+        assertThat(java.util.Arrays.stream(before).filter(row -> candidateSerialId(row).equals(first.id()))
+                .findFirst().orElseThrow().get("orderNo")).isEqualTo(order.orderNo());
+
+        post("/api/ivs/retails", Map.of(
+                "retailDate", "2026-10-05", "invoiceIssuedAt", "2026-10-01T02:00:00Z",
+                "serialId", first.id().toString(), "userName", "张三", "userMobile", "13800000000"),
+                RetailApi.RetailView.class);
+
+        Map[] after = restTemplate.getForEntity("/api/ivs/retail-candidates", Map[].class).getBody();
+        assertThat(after).isNotNull().isEmpty();
+    }
+
+    private UUID candidateSerialId(Map<?, ?> candidate) {
+        return UUID.fromString(((Map<?, ?>) candidate.get("serial")).get("id").toString());
+    }
+
+    @Test
     void 数量管理商品不能做实销() {
         MasterdataApi.CategoryView part = createCategory("PART", "配件", TrackingMode.QUANTITY);
         MasterdataApi.ProductView product = createProduct("机油滤芯", part.id());

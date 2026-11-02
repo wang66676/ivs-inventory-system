@@ -103,6 +103,14 @@ class ProcurementInventoryIntegrationTest {
             assertThat(item.serialNo()).isNotBlank();
             assertThat(item.bizNo()).startsWith("RC-");
         });
+        InventoryApi.LedgerView[] filteredLedger = restTemplate.getForEntity(
+                "/api/ivs/inventory/ledger?warehouseId=" + warehouse.id() + "&moveType=PURCHASE_IN",
+                InventoryApi.LedgerView[].class).getBody();
+        assertThat(filteredLedger).isNotNull().hasSize(2);
+        InventoryApi.LedgerView[] noSaleOut = restTemplate.getForEntity(
+                "/api/ivs/inventory/ledger?warehouseId=" + warehouse.id() + "&moveType=SALE_OUT",
+                InventoryApi.LedgerView[].class).getBody();
+        assertThat(noSaleOut).isNotNull().isEmpty();
 
         // 序列号状态推进到在库，并回写入库时间
         for (UUID serialId : List.of(serial1.id(), serial2.id())) {
@@ -153,6 +161,12 @@ class ProcurementInventoryIntegrationTest {
         order = receive(order, warehouse, order.lines().get(0).id(), "3", null);
         assertThat(order.status()).isEqualTo(PurchaseOrderStatus.RECEIVED);
         assertThat(order.lines().get(0).remainingQuantity()).isEqualByComparingTo("0.000");
+
+        ResponseEntity<Map> repeated = receiveRaw(order.id(), warehouse.id(), List.of(
+                Map.of("orderLineId", order.lines().get(0).id().toString(), "quantity", 1)));
+        assertThat(repeated.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(repeated.getBody().get("code")).isEqualTo("PURCHASE_ALREADY_RECEIVED");
+        assertThat(repeated.getBody().get("message")).isEqualTo("采购单已全部收货，无需重复收货");
     }
 
     @Test
@@ -187,6 +201,14 @@ class ProcurementInventoryIntegrationTest {
                 Map.of("orderLineId", order.lines().get(1).id().toString(), "serialNos", List.of("XXX-1"))));
         assertThat(serialNotAllowed.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(serialNotAllowed.getBody().get("code")).isEqualTo("RECEIVE_SERIAL_NOT_ALLOWED");
+
+        // 同一次请求内 VIN 重复必须明确拒绝
+        ResponseEntity<Map> duplicateSerial = receiveRaw(order.id(), warehouse.id(), List.of(
+                Map.of("orderLineId", order.lines().get(0).id().toString(), "serialNos",
+                        List.of("LZZ1CLWB0NA288888", "LZZ1CLWB0NA288888"))));
+        assertThat(duplicateSerial.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(duplicateSerial.getBody().get("code")).isEqualTo("RECEIVE_SERIAL_DUPLICATE");
+        assertThat(duplicateSerial.getBody().get("message")).isEqualTo("有重复项，请核查后再提交");
 
         // 未建档的 VIN：采购收货时自动建立 VIN 档案
         ResponseEntity<Map> autoRegistered = receiveRaw(order.id(), warehouse.id(), List.of(

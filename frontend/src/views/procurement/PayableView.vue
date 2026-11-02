@@ -30,7 +30,7 @@
       <a-form layout="vertical">
         <a-form-item label="应付单">{{ current?.payableNo }}</a-form-item>
         <a-form-item label="未付金额">{{ money(current?.outstanding) }}</a-form-item>
-        <a-form-item label="本次付款" required><a-input-number v-model:value="payAmount" :min="0.01" :max="current?.outstanding" :precision="2" style="width:100%" /></a-form-item>
+        <a-form-item label="本次付款" required><MoneyInput v-model:value="payAmount" :min="0.01" :max="current?.outstanding" :precision="2" style="width:100%" /></a-form-item>
         <a-form-item label="备注"><a-input v-model:value="payRemark" /></a-form-item>
       </a-form>
     </a-modal>

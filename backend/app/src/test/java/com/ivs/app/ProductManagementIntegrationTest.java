@@ -16,7 +16,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 产品大项删除与商品六字段批量导入/导出。 */
+/** 产品大项删除与商品五字段批量导入/导出。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class ProductManagementIntegrationTest {
@@ -49,23 +49,24 @@ class ProductManagementIntegrationTest {
     }
 
     @Test
-    void 商品六字段批量导入并导出() {
+    void 商品五字段批量导入并导出() {
         var category = post("/api/ivs/product-categories", Map.of("code", "IMP-" + UUID.randomUUID().toString().substring(0, 6),
                 "name", "导入商品", "trackingMode", "QUANTITY", "statusTemplate", "SIMPLE", "unit", "台", "sortOrder", 0),
                 MasterdataApi.CategoryView.class);
         MasterdataApi.ProductBatchImportResult result = post("/api/ivs/products/batch-import", List.of(
-                Map.of("categoryCode", category.code(), "series", "S1", "name", "批量商品", "model", "M1", "unit", "台", "taxRate", 13),
-                Map.of("categoryCode", "不存在", "series", "S2", "name", "失败商品", "model", "M2", "unit", "台", "taxRate", 13)
+                Map.of("categoryCode", category.code(), "series", "S1", "model", "M1", "unit", "台", "taxRate", 13),
+                Map.of("categoryCode", "不存在", "series", "S2", "model", "M2", "unit", "台", "taxRate", 13)
         ), MasterdataApi.ProductBatchImportResult.class);
         assertThat(result.created()).isEqualTo(1);
         assertThat(result.failed()).isEqualTo(1);
         assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).name()).isEqualTo("S1 M1");
         assertThat(result.items().get(0).taxRate()).isEqualByComparingTo("0.1300");
 
         var export = restTemplate.getForEntity("/api/ivs/products/export", byte[].class);
         assertThat(export.getStatusCode()).isEqualTo(HttpStatus.OK);
         String csv = new String(export.getBody(), java.nio.charset.StandardCharsets.UTF_8);
-        assertThat(csv).contains("商品,车系,产品名称,型号,单位,税率").contains("批量商品");
+        assertThat(csv).contains("商品,车系,产品名称,型号,单位,税率").contains("S1 M1");
     }
 
     private <T> T post(String url, Object body, Class<T> type) {

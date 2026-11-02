@@ -1,6 +1,7 @@
 package com.ivs.procurement.purchase;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,10 +15,15 @@ public interface InventoryReceiptPort {
 
     void postReceipt(ReceiptPosting posting);
 
+    void updateCertificateApplicationDate(List<String> serialNos, LocalDate certificateApplicationDate);
+
+    void relocateSerial(String serialNo, UUID productId, UUID fromWarehouseId, UUID toWarehouseId,
+                        UUID receiptId, String receiptNo);
+
     record ReceiptPosting(UUID receiptId, String receiptNo, UUID warehouseId, List<ReceiptPostingLine> lines) {
     }
 
-    record ReceiptPostingLine(UUID productId, BigDecimal quantity, BigDecimal unitPrice, String batchNo,
-                              List<String> serialNos) {
+    record ReceiptPostingLine(UUID productId, UUID warehouseId, BigDecimal quantity, BigDecimal unitPrice,
+                              String batchNo, List<String> serialNos, LocalDate certificateApplicationDate) {
     }
 }

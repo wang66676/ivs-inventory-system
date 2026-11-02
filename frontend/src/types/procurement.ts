@@ -15,6 +15,12 @@ export interface PurchaseOrderLine {
   productName: string
   series?: string
   configCode?: string
+  configText?: string
+  serialNo?: string
+  cabType?: string
+  certificateApplicationDate?: string
+  warehouseId?: string
+  warehouseName?: string
   categoryCode: string
   trackingMode: 'QUANTITY' | 'SERIAL'
   quantity: number
@@ -23,6 +29,7 @@ export interface PurchaseOrderLine {
   unitPrice: number
   taxRate?: number
   amount: number
+  lineStatus?: string
   remark?: string
   policies: PurchasePolicyRef[]
 }
@@ -49,10 +56,16 @@ export interface PurchaseReceiptLine {
   productId: string
   productNo: string
   productName: string
+  series?: string
+  configText?: string
+  cabType?: string
+  warehouseId?: string
+  warehouseName?: string
   quantity: number
   unitPrice: number
   batchNo?: string
   serialNos: string[]
+  certificateApplicationDate?: string
 }
 
 export interface PurchaseReceipt {
@@ -67,6 +80,8 @@ export interface PurchaseReceipt {
   status: ReceiptStatus
   receivedAt: string
   amount: number
+  offsetAmount?: number
+  netAmount?: number
   remark?: string
   lines: PurchaseReceiptLine[]
 }

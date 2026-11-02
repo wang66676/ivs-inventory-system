@@ -19,7 +19,8 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID> {
 
     List<SalesOrder> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
 
-    @Query("select o from SalesOrder o where lower(o.orderNo) like :keyword order by o.createdAt desc")
+    @Query("select o from SalesOrder o where lower(o.orderNo) like :keyword "
+            + "or lower(coalesce(o.externalOrderNo, '')) like :keyword order by o.createdAt desc")
     List<SalesOrder> searchByOrderNo(@Param("keyword") String keyword);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

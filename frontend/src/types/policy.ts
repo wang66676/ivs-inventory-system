@@ -54,6 +54,10 @@ export interface PreEntitlement {
   status: PreEntitlementStatus
   addedAfterOrder: boolean
   addReason?: string
+  serialNos?: string
+  orderNo?: string
+  invoiceIssuedAt?: string
+  retailDate?: string
   createdAt: string
 }
 
@@ -73,6 +77,10 @@ export interface Entitlement {
   periodCode: string
   status: string
   createdAt: string
+  policyName?: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+  invoiceIssuedAt?: string
 }
 
 export interface ClaimLine {
@@ -81,15 +89,19 @@ export interface ClaimLine {
   entitlementNo?: string
   retailId?: string
   retailNo?: string
+  retailDate?: string
   policyId?: string
   policyName?: string
   serialId?: string
   serialNo?: string
+  purchaseOrderId?: string
+  orderNo?: string
   amount: number
   confirmedAmount: number
   differenceAmount: number
   differenceReason?: string
   differenceDisposition?: string
+  dispositionTime?: string
 }
 
 export interface ClaimDifference {
@@ -243,7 +255,11 @@ export interface UnitCostRow {
   productName?: string
   policyId: string
   policyName?: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+  invoiceIssuedAt?: string
   salePrice?: number
+  purchaseCost?: number
   policyCost: number
   netPrice?: number
 }
@@ -330,4 +346,5 @@ export const DISPOSITION_LABELS: Record<string, string> = {
   NEXT_CLAIM: '下一期补回',
   SELF_BORNE: '转自担费用',
   APPEAL: '申诉',
+  RED_INVOICE: '开具红字发票',
 }

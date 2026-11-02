@@ -57,10 +57,10 @@
           <a-col :span="6"><a-form-item label="批次"><a-input v-model:value="form.batchNo" /></a-form-item></a-col>
         </a-row>
         <a-row :gutter="12">
-          <a-col :span="8"><a-form-item label="采购单价"><a-input-number v-model:value="form.purchasePrice" :min="0" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="采购单价"><MoneyInput v-model:value="form.purchasePrice" :min="0" :precision="2" style="width:100%" /></a-form-item></a-col>
           <a-col :span="8">
             <a-form-item label="入库日期（填写即视为在库）">
-              <a-date-picker v-model:value="form.inboundDate" value-format="YYYY-MM-DD" style="width:100%" />
+              <a-date-picker v-model:value="form.inboundDate" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
             </a-form-item>
           </a-col>
           <a-col :span="8"><a-form-item label="所有权"><a-select v-model:value="form.ownershipType" :options="ownershipOptions" /></a-form-item></a-col>

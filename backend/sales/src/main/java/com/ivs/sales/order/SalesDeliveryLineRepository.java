@@ -7,4 +7,6 @@ import java.util.UUID;
 
 public interface SalesDeliveryLineRepository extends JpaRepository<SalesDeliveryLine, UUID> {
     List<SalesDeliveryLine> findByDeliveryId(UUID deliveryId);
+
+    List<SalesDeliveryLine> findByOrderLineId(UUID orderLineId);
 }

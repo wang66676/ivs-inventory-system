@@ -42,7 +42,9 @@ public final class PolicyReportApi {
     public record UnitCostRow(
             UUID entitlementId, String entitlementNo, String status, String periodCode,
             UUID retailId, String retailNo, UUID serialId, String serialNo, String productNo, String productName,
-            UUID policyId, String policyName, BigDecimal salePrice, BigDecimal policyCost, BigDecimal netPrice
+            UUID policyId, String policyName, UUID purchaseOrderId, String purchaseOrderNo,
+            Instant invoiceIssuedAt, BigDecimal salePrice, BigDecimal purchaseCost, BigDecimal policyCost,
+            BigDecimal netPrice
     ) {
     }
 

@@ -73,6 +73,7 @@ export interface ProductSerial {
   batchNo?: string
   purchasePrice?: number
   inboundAt?: string
+  certificateApplicationDate?: string
   warrantyStart?: string
   warrantyEnd?: string
   ownershipType: OwnershipType
@@ -165,7 +166,7 @@ export const SERIAL_STATUS_LABELS: Record<SerialStatus, string> = {
   IN_TRANSIT: '在途',
   ARRIVED: '到店',
   IN_STOCK: '在库',
-  LOCKED: '锁定',
+  LOCKED: '已锁定',
   SOLD: '已售',
   DELIVERED: '已交付',
   RETURNED: '退回',

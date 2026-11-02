@@ -36,6 +36,8 @@
                     allow-clear :placeholder="field.placeholder" />
           <a-textarea v-else-if="field.type === 'textarea'" v-model:value="form[field.key]" :rows="3"
                       :placeholder="field.placeholder" />
+          <MoneyInput v-else-if="field.type === 'money'" v-model:value="form[field.key]"
+                      :min="0" :precision="2" style="width:100%" :placeholder="field.placeholder" />
           <a-input-number v-else-if="field.type === 'number'" v-model:value="form[field.key]"
                           style="width:100%" :placeholder="field.placeholder" />
           <a-input v-else v-model:value="form[field.key]" :placeholder="field.placeholder" />
@@ -52,7 +54,7 @@ import { message } from 'ant-design-vue'
 export interface CrudField {
   key: string
   label: string
-  type?: 'text' | 'number' | 'select' | 'textarea'
+  type?: 'text' | 'number' | 'money' | 'select' | 'textarea'
   required?: boolean
   options?: { label: string; value: string }[]
   placeholder?: string

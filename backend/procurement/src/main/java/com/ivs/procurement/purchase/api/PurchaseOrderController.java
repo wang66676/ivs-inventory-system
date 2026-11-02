@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,6 +48,13 @@ public class PurchaseOrderController {
             @Valid @RequestBody ProcurementApi.SavePurchaseOrderCommand command) {
         ProcurementApi.PurchaseOrderView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/purchase-orders/" + view.id())).body(view);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('IVS_WRITE')")
+    public ProcurementApi.PurchaseOrderView update(@PathVariable("id") UUID id,
+                                                   @Valid @RequestBody ProcurementApi.SavePurchaseOrderCommand command) {
+        return service.update(id, command);
     }
 
     @PostMapping("/{id}/approve")

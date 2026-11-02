@@ -6,6 +6,7 @@ import com.ivs.policy.claim.OemClaimLine;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,16 +18,19 @@ public final class ClaimApi {
 
     public record ClaimLineView(
             UUID id, UUID entitlementId, String entitlementNo, UUID retailId, String retailNo,
-            UUID policyId, String policyName, UUID serialId, String serialNo, BigDecimal amount,
+            LocalDate retailDate, UUID policyId, String policyName, UUID serialId, String serialNo,
+            UUID purchaseOrderId, String orderNo, BigDecimal amount,
             BigDecimal confirmedAmount, BigDecimal differenceAmount, String differenceReason,
-            String differenceDisposition
+            String differenceDisposition, Instant dispositionTime
     ) {
         public static ClaimLineView from(OemClaimLine line, String entitlementNo, String retailNo,
-                                         String policyName, String serialNo) {
+                                         LocalDate retailDate, String policyName, String serialNo,
+                                         UUID purchaseOrderId, String orderNo) {
             return new ClaimLineView(line.getId(), line.getEntitlementId(), entitlementNo, line.getRetailId(),
-                    retailNo, line.getPolicyId(), policyName, line.getSerialId(), serialNo, line.getAmount(),
-                    line.getConfirmedAmount(), line.getDifferenceAmount(), line.getDifferenceReason(),
-                    line.getDifferenceDisposition());
+                    retailNo, retailDate, line.getPolicyId(), policyName, line.getSerialId(), serialNo,
+                    purchaseOrderId, orderNo, line.getAmount(), line.getConfirmedAmount(),
+                    line.getDifferenceAmount(), line.getDifferenceReason(), line.getDifferenceDisposition(),
+                    line.getDifferenceDisposition() == null ? null : line.getUpdatedAt());
         }
     }
 

@@ -42,7 +42,7 @@
                     @change="onOrderChange" />
         </a-form-item>
         <a-form-item label="开票金额（留空取该订单已出库金额）">
-          <a-input-number v-model:value="form.amount" :min="0" style="width:100%" />
+          <MoneyInput v-model:value="form.amount" :min="0" :precision="2" style="width:100%" />
         </a-form-item>
         <a-form-item label="税率（如 0.13）">
           <a-input-number v-model:value="form.taxRate" :min="0" :max="1" :step="0.01" style="width:100%" />

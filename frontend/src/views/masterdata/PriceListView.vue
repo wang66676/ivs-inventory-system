@@ -40,8 +40,8 @@
           <a-select v-model:value="form.customerType" :options="customerTypeOptions" allow-clear />
         </a-form-item>
         <a-row :gutter="12">
-          <a-col :span="12"><a-form-item label="生效日期"><a-date-picker v-model:value="form.effectiveFrom" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="失效日期"><a-date-picker v-model:value="form.effectiveTo" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="生效日期"><a-date-picker v-model:value="form.effectiveFrom" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="失效日期"><a-date-picker v-model:value="form.effectiveTo" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>
         </a-row>
         <a-form-item label="备注"><a-textarea v-model:value="form.remark" :rows="2" /></a-form-item>
       </a-form>
@@ -66,8 +66,8 @@
       <a-space wrap>
         <a-select v-model:value="lineForm.productId" :options="productOptions" show-search placeholder="选择商品"
                   style="width:260px" />
-        <a-input-number v-model:value="lineForm.price" :min="0" placeholder="成交价" style="width:140px" />
-        <a-input-number v-model:value="lineForm.minPrice" :min="0" placeholder="最低限价" style="width:140px" />
+        <MoneyInput v-model:value="lineForm.price" :min="0" :precision="2" placeholder="成交价" style="width:160px" />
+        <MoneyInput v-model:value="lineForm.minPrice" :min="0" :precision="2" placeholder="最低限价" style="width:160px" />
         <a-button v-if="canWrite" type="primary" @click="saveLine">添加 / 更新</a-button>
       </a-space>
     </a-modal>

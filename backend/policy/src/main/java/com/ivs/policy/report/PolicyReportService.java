@@ -130,6 +130,8 @@ public class PolicyReportService {
             PolicyEntitlement entitlement = entitlementRepository.findById(cost.getEntitlementId()).orElse(null);
             PromotionPolicy policy = policies.get(cost.getPolicyId());
             PolicyReferencePort.RetailInfo retail = references.retail(cost.getRetailId());
+            PolicyReferencePort.PurchaseOrderInfo purchaseOrder = retail == null ? null
+                    : references.purchaseOrderBySerialNo(retail.serialNo());
             BigDecimal sale = retail == null ? null : retail.salePrice();
             BigDecimal net = sale == null ? null : sale.subtract(cost.getAmount()).setScale(2, RoundingMode.HALF_UP);
             rows.add(new PolicyReportApi.UnitCostRow(cost.getEntitlementId(),
@@ -138,7 +140,13 @@ public class PolicyReportService {
                     retail == null ? null : retail.retailNo(), cost.getSerialId(),
                     retail == null ? null : retail.serialNo(), retail == null ? null : retail.productNo(),
                     retail == null ? null : retail.productName(), cost.getPolicyId(),
-                    policy == null ? null : policy.getName(), sale, cost.getAmount(), net));
+                    policy == null ? null : policy.getName(),
+                    purchaseOrder == null ? null : purchaseOrder.orderId(),
+                    purchaseOrder == null ? null
+                            : purchaseOrder.externalOrderNo() != null ? purchaseOrder.externalOrderNo()
+                            : purchaseOrder.orderNo(),
+                    retail == null ? null : retail.invoiceIssuedAt(), sale,
+                    purchaseOrder == null ? null : purchaseOrder.purchasePrice(), cost.getAmount(), net));
         }
         return rows;
     }

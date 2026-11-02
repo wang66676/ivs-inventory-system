@@ -8,4 +8,8 @@ import java.util.UUID;
 
 public interface PurchaseOrderLinePolicyRepository extends JpaRepository<PurchaseOrderLinePolicy, UUID> {
     List<PurchaseOrderLinePolicy> findByOrderLineIdInOrderByOrderLineIdAscSortNoAsc(Collection<UUID> orderLineIds);
+
+    List<PurchaseOrderLinePolicy> findByOrderLineIdOrderBySortNoAsc(UUID orderLineId);
+
+    void deleteByOrderLineIdIn(Collection<UUID> orderLineIds);
 }

@@ -11,8 +11,12 @@ foreach ($log in $logs) {
 }
 if ($publicUrl) {
   Set-Content -Path $currentFile -Value $publicUrl -Encoding ascii
-  $health = & curl.exe -fsS --max-time 20 "$publicUrl/actuator/health" 2>$null
-  if ($LASTEXITCODE -eq 0 -and $health -match 'UP') { exit 0 }
+  # 临时隧道首次或跨区域请求偶尔会超过 20 秒；连续重试后再判定故障，避免无谓更换网址。
+  for ($attempt = 0; $attempt -lt 3; $attempt++) {
+    $health = & curl.exe -fsS --max-time 45 "$publicUrl/actuator/health" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $health -match 'UP') { exit 0 }
+    Start-Sleep -Seconds 3
+  }
 }
 schtasks /End /TN '\IVS-Tunnel' 2>$null | Out-Null
 Start-Sleep -Seconds 2

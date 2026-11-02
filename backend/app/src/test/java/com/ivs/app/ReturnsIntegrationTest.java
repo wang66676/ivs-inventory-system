@@ -123,6 +123,8 @@ class ReturnsIntegrationTest {
                         "unitPrice", 100))), SalesApi.SalesOrderView.class);
         order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(),
                 SalesApi.SalesOrderView.class);
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(),
+                SalesApi.SalesOrderView.class);
         SalesApi.SalesDeliveryView delivery = post("/api/ivs/sales-orders/" + order.id() + "/deliver", Map.of(
                 "warehouseId", fixture.warehouseId().toString(),
                 "lines", List.of(Map.of("orderLineId", order.lines().get(0).id().toString(), "quantity", 4))),
@@ -159,6 +161,8 @@ class ReturnsIntegrationTest {
                 "lines", List.of(Map.of("productId", fixture.productId().toString(), "quantity", 4,
                         "unitPrice", 100))), SalesApi.SalesOrderView.class);
         order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(),
+                SalesApi.SalesOrderView.class);
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(),
                 SalesApi.SalesOrderView.class);
         var delivery = post("/api/ivs/sales-orders/" + order.id() + "/deliver", Map.of(
                 "warehouseId", fixture.warehouseId().toString(),

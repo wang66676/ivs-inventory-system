@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Continue'
+﻿$ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
 $pidFile = Join-Path $root '.run\backend.pid'
 if (-not (Test-Path $pidFile)) { Write-Host '系统未运行'; exit 0 }

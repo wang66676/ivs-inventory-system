@@ -95,8 +95,8 @@ public class ProductSerialService {
         validateAttrs(category, command.attrsJson());
         ProductSerial serial = ProductSerial.create(serialNo, product.getId(), command.warehouseId(),
                 command.locationCode(), command.batchNo(), command.purchasePrice(), command.inboundAt(),
-                command.warrantyStart(), command.warrantyEnd(), command.ownershipType(),
-                command.attrsJson(), command.remark());
+                command.certificateApplicationDate(), command.warrantyStart(), command.warrantyEnd(),
+                command.ownershipType(), command.attrsJson(), command.remark());
         ProductSerial saved = serialRepository.save(serial);
         publish(saved, "SerialRegistered", Map.of("serialNo", saved.getSerialNo(), "productNo", product.getProductNo()));
         return toView(saved);
@@ -133,8 +133,8 @@ public class ProductSerialService {
                     validateAttrs(category, command.attrsJson());
                     pending.add(ProductSerial.create(serialNo, product.getId(), command.warehouseId(),
                             command.locationCode(), command.batchNo(), command.purchasePrice(),
-                            command.inboundAt(), command.warrantyStart(), command.warrantyEnd(),
-                            command.ownershipType(), command.attrsJson(), command.remark()));
+                            command.inboundAt(), command.certificateApplicationDate(), command.warrantyStart(),
+                            command.warrantyEnd(), command.ownershipType(), command.attrsJson(), command.remark()));
                 } catch (RuntimeException exception) {
                     errors.add((command.serialNo() == null ? "(空序列号)" : command.serialNo()) + "：" + exception.getMessage());
                 }
@@ -155,17 +155,39 @@ public class ProductSerialService {
             requireWarehouse(command.warehouseId());
         }
         serial.update(command.warehouseId(), command.locationCode(), command.batchNo(), command.purchasePrice(),
-                command.inboundAt(), command.warrantyStart(), command.warrantyEnd(), command.ownershipType(),
-                command.attrsJson(), command.remark());
+                command.inboundAt(), command.certificateApplicationDate(), command.warrantyStart(),
+                command.warrantyEnd(), command.ownershipType(), command.attrsJson(), command.remark());
         return toView(serialRepository.save(serial));
     }
 
     /** 收货入库时回写仓库、采购价与入库时间（不改状态，状态由 moveStatus 按模板流转）。 */
     @Transactional
     public void applyInbound(UUID id, UUID warehouseId, java.math.BigDecimal purchasePrice, Instant inboundAt) {
+        applyInbound(id, warehouseId, purchasePrice, inboundAt, null);
+    }
+
+    public void applyInbound(UUID id, UUID warehouseId, java.math.BigDecimal purchasePrice, Instant inboundAt,
+                             java.time.LocalDate certificateApplicationDate) {
         ProductSerial serial = find(id);
-        serial.applyInbound(warehouseId, purchasePrice, inboundAt);
+        serial.applyInbound(warehouseId, purchasePrice, inboundAt, certificateApplicationDate);
         serialRepository.save(serial);
+    }
+
+    /** 收货后补录或调整申请合格证日期，按 VIN/SN 批量同步一物一档。 */
+    @Transactional
+    public void updateCertificateApplicationDate(List<String> serialNos, java.time.LocalDate certificateApplicationDate) {
+        if (serialNos == null || serialNos.isEmpty()) {
+            return;
+        }
+        for (String serialNo : serialNos) {
+            if (serialNo == null || serialNo.isBlank()) {
+                continue;
+            }
+            ProductSerial serial = serialRepository.findBySerialNo(serialNo.trim().toUpperCase())
+                    .orElseThrow(() -> new NotFoundException("序列号档案", serialNo));
+            serial.updateCertificateApplicationDate(certificateApplicationDate);
+            serialRepository.save(serial);
+        }
     }
 
     /** 按状态机模板求合法流转路径，供收货等场景逐步推进状态。 */

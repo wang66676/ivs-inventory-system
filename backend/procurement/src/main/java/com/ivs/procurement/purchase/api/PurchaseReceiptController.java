@@ -4,6 +4,8 @@ import com.ivs.procurement.purchase.PurchaseOrderApplicationService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,5 +33,23 @@ public class PurchaseReceiptController {
     @PreAuthorize("hasAuthority('IVS_READ')")
     public ProcurementApi.PurchaseReceiptView get(@PathVariable("id") UUID id) {
         return service.getReceipt(id);
+    }
+
+    @PutMapping("/{receiptId}/lines/{lineId}/certificate-application-date")
+    @PreAuthorize("hasAuthority('IVS_WRITE')")
+    public ProcurementApi.PurchaseReceiptView updateCertificateApplicationDate(
+            @PathVariable("receiptId") UUID receiptId,
+            @PathVariable("lineId") UUID lineId,
+            @RequestBody ProcurementApi.UpdateCertificateDateCommand command) {
+        return service.updateCertificateApplicationDate(receiptId, lineId, command.certificateApplicationDate());
+    }
+
+    @PutMapping("/{receiptId}/lines/{lineId}/warehouse")
+    @PreAuthorize("hasAuthority('IVS_WRITE')")
+    public ProcurementApi.PurchaseReceiptView updateReceiptWarehouse(
+            @PathVariable("receiptId") UUID receiptId,
+            @PathVariable("lineId") UUID lineId,
+            @RequestBody ProcurementApi.UpdateReceiptWarehouseCommand command) {
+        return service.updateReceiptWarehouse(receiptId, lineId, command.warehouseId());
     }
 }

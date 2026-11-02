@@ -71,6 +71,11 @@ public class PolicyPreEntitlement {
         if (status == PreEntitlementStatus.APPLIED) status = PreEntitlementStatus.SETTLED;
     }
 
+    /** 把历史行级预享受项认领到具体 VIN/SN。 */
+    public void assignSerial(UUID serialId) {
+        this.serialId = serialId;
+    }
+
     public void cancel() {
         if (status == PreEntitlementStatus.CANCELLED) return;
         if (status == PreEntitlementStatus.SETTLED) {

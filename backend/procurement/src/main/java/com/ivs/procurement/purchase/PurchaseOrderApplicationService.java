@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -36,6 +37,7 @@ public class PurchaseOrderApplicationService {
     private final PurchaseReceiptRepository receiptRepository;
     private final PurchaseReceiptLineRepository receiptLineRepository;
     private final PurchaseOrderLinePolicyRepository linePolicyRepository;
+    private final PurchasePreEntitlementPort preEntitlementPort;
     private final MasterDataQueryPort masterData;
     private final PurchasePolicyPort policyPort;
     private final InventoryReceiptPort inventoryReceiptPort;
@@ -50,6 +52,7 @@ public class PurchaseOrderApplicationService {
                                            PurchaseReceiptRepository receiptRepository,
                                            PurchaseReceiptLineRepository receiptLineRepository,
                                            PurchaseOrderLinePolicyRepository linePolicyRepository,
+                                           PurchasePreEntitlementPort preEntitlementPort,
                                            MasterDataQueryPort masterData,
                                            PurchasePolicyPort policyPort,
                                            InventoryReceiptPort inventoryReceiptPort,
@@ -63,6 +66,7 @@ public class PurchaseOrderApplicationService {
         this.receiptRepository = receiptRepository;
         this.receiptLineRepository = receiptLineRepository;
         this.linePolicyRepository = linePolicyRepository;
+        this.preEntitlementPort = preEntitlementPort;
         this.masterData = masterData;
         this.policyPort = policyPort;
         this.inventoryReceiptPort = inventoryReceiptPort;
@@ -104,24 +108,81 @@ public class PurchaseOrderApplicationService {
         PurchaseOrder order = orderRepository.save(PurchaseOrder.create(orderNo, command.externalOrderNo(),
                 command.supplierId(), command.warehouseId(), BigDecimal.ZERO, command.expectedDate(),
                 command.remark(), currentUserId()));
+        BigDecimal total = saveLines(order, command.supplierId(), command.lines());
+        order.updateTotal(total);
+        orderRepository.save(order);
+        return toView(order);
+    }
+
+    /** 草稿采购单可补录返利政策、收货仓库等明细信息。 */
+    @Transactional
+    public ProcurementApi.PurchaseOrderView update(UUID id, ProcurementApi.SavePurchaseOrderCommand command) {
+        PurchaseOrder order = orderRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("采购单", id));
+        if (order.getStatus() != PurchaseOrderStatus.DRAFT) {
+            throw new ConflictException("PURCHASE_STATUS_INVALID", "只有草稿采购单可以编辑: " + order.getStatus());
+        }
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new ConflictException("PURCHASE_LINE_REQUIRED", "采购单至少需要一行明细");
+        }
+        masterData.requireSupplier(command.supplierId());
+        if (command.warehouseId() != null) {
+            masterData.requireWarehouse(command.warehouseId());
+        }
+        try {
+            order.updateDraft(command.externalOrderNo(), command.supplierId(), command.warehouseId(),
+                    command.expectedDate(), command.remark());
+        } catch (IllegalStateException exception) {
+            throw new ConflictException("PURCHASE_STATUS_INVALID", exception.getMessage());
+        }
+        List<UUID> existingLineIds = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()).stream()
+                .map(PurchaseOrderLine::getId).toList();
+        if (!existingLineIds.isEmpty()) {
+            linePolicyRepository.deleteByOrderLineIdIn(existingLineIds);
+        }
+        lineRepository.deleteByOrderId(order.getId());
+        lineRepository.flush();
+        BigDecimal total = saveLines(order, command.supplierId(), command.lines());
+        order.updateTotal(total);
+        ProcurementApi.PurchaseOrderView view = toView(orderRepository.saveAndFlush(order));
+        preEntitlementPort.clear(view.id());
+        return view;
+    }
+
+    private BigDecimal saveLines(PurchaseOrder order, UUID supplierId,
+                                 List<ProcurementApi.SavePurchaseOrderLineCommand> lines) {
         int lineNo = 1;
         BigDecimal total = BigDecimal.ZERO;
-        for (ProcurementApi.SavePurchaseOrderLineCommand line : command.lines()) {
+        Set<String> seenSerialNos = new LinkedHashSet<>();
+        for (ProcurementApi.SavePurchaseOrderLineCommand line : lines) {
             masterData.requireProduct(line.productId());
+            if (line.warehouseId() != null) {
+                masterData.requireWarehouse(line.warehouseId());
+            }
+            String serialNo = line.serialNo() == null || line.serialNo().isBlank()
+                    ? null : line.serialNo().trim().toUpperCase();
+            if (serialNo != null) {
+                if (!seenSerialNos.add(serialNo)) {
+                    throw new ConflictException("PURCHASE_VIN_DUPLICATE", "采购明细 VIN/SN 重复：" + serialNo);
+                }
+                if (lineRepository.existsBySerialNoIgnoreCase(serialNo)) {
+                    throw new ConflictException("PURCHASE_VIN_DUPLICATE", "VIN/SN 已存在于其他采购明细：" + serialNo);
+                }
+            }
+            BigDecimal quantity = serialNo == null ? line.quantity() : BigDecimal.ONE;
             PurchaseOrderLine entity;
             try {
-                entity = PurchaseOrderLine.create(order.getId(), lineNo++, line.productId(), line.quantity(),
-                        line.unitPrice(), line.taxRate(), line.remark());
+                entity = PurchaseOrderLine.create(order.getId(), lineNo++, line.productId(), quantity,
+                        line.unitPrice(), line.taxRate(), line.configText(), line.warehouseId(), serialNo,
+                        line.certificateApplicationDate(), line.remark());
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("PURCHASE_LINE_INVALID", exception.getMessage());
             }
             lineRepository.save(entity);
-            saveLinePolicies(entity.getId(), line.policyIds(), command.supplierId());
+            saveLinePolicies(entity.getId(), line.policyIds(), supplierId);
             total = total.add(entity.getAmount());
         }
-        order.updateTotal(total);
-        orderRepository.save(order);
-        return toView(order);
+        return total;
     }
 
     @Transactional
@@ -151,6 +212,9 @@ public class PurchaseOrderApplicationService {
     public ProcurementApi.PurchaseReceiptView receive(UUID orderId, ProcurementApi.ReceivePurchaseOrderCommand command) {
         PurchaseOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new NotFoundException("采购单", orderId));
+        if (order.getStatus() == PurchaseOrderStatus.RECEIVED) {
+            throw new ConflictException("PURCHASE_ALREADY_RECEIVED", "采购单已全部收货，无需重复收货");
+        }
         if (!order.receivable()) {
             throw new ConflictException("PURCHASE_STATUS_INVALID", "当前采购单状态不允许收货: " + order.getStatus());
         }
@@ -158,10 +222,9 @@ public class PurchaseOrderApplicationService {
             throw new ConflictException("RECEIVE_LINE_REQUIRED", "请至少填写一行收货明细");
         }
         UUID warehouseId = command.warehouseId() != null ? command.warehouseId() : order.getWarehouseId();
-        if (warehouseId == null) {
-            throw new ConflictException("RECEIVE_WAREHOUSE_REQUIRED", "请指定收货仓库");
+        if (warehouseId != null) {
+            masterData.requireWarehouse(warehouseId);
         }
-        masterData.requireWarehouse(warehouseId);
 
         List<PurchaseOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(orderId);
         Map<UUID, PurchaseOrderLine> byId = new LinkedHashMap<>();
@@ -169,6 +232,7 @@ public class PurchaseOrderApplicationService {
 
         // 第一遍：校验并计算本次收货明细与金额
         List<Prepared> prepared = new ArrayList<>();
+        Set<String> requestSerialNos = new LinkedHashSet<>();
         BigDecimal total = BigDecimal.ZERO;
         for (ProcurementApi.ReceiveLineCommand receiveLine : command.lines()) {
             PurchaseOrderLine orderLine = byId.get(receiveLine.orderLineId());
@@ -176,7 +240,19 @@ public class PurchaseOrderApplicationService {
                 throw new NotFoundException("采购明细", receiveLine.orderLineId());
             }
             MasterDataQueryPort.ProductInfo product = masterData.requireProduct(orderLine.getProductId());
+            UUID lineWarehouseId = receiveLine.warehouseId() != null ? receiveLine.warehouseId()
+                    : (orderLine.getWarehouseId() != null ? orderLine.getWarehouseId() : warehouseId);
+            if (lineWarehouseId == null) {
+                throw new ConflictException("RECEIVE_WAREHOUSE_REQUIRED",
+                        "商品「" + product.name() + "」请按本次到货明细指定收货仓库");
+            }
+            masterData.requireWarehouse(lineWarehouseId);
             List<String> serialNos = normalizeSerialNos(receiveLine.serialNos());
+            for (String serialNo : serialNos) {
+                if (!requestSerialNos.add(serialNo)) {
+                    throw new ConflictException("RECEIVE_SERIAL_DUPLICATE", "有重复项，请核查后再提交");
+                }
+            }
             BigDecimal quantity;
             if ("SERIAL".equals(product.trackingMode())) {
                 if (serialNos.isEmpty()) {
@@ -200,28 +276,42 @@ public class PurchaseOrderApplicationService {
             }
             BigDecimal unitPrice = receiveLine.unitPrice() == null ? orderLine.getUnitPrice()
                     : receiveLine.unitPrice().setScale(2, RoundingMode.HALF_UP);
-            prepared.add(new Prepared(orderLine, product, quantity, unitPrice, receiveLine.batchNo(), serialNos));
+            prepared.add(new Prepared(orderLine, product, lineWarehouseId, quantity, unitPrice,
+                    receiveLine.batchNo(), serialNos, receiveLine.certificateApplicationDate()));
             total = total.add(quantity.multiply(unitPrice));
         }
 
         // 第二遍：落收货单、推进采购单进度
+        UUID receiptWarehouseId = warehouseId != null ? warehouseId : prepared.get(0).warehouseId();
         String receiptNo = "RC-%06d".formatted(receiptRepository.nextReceiptSequence());
         PurchaseReceipt receipt = receiptRepository.save(PurchaseReceipt.create(receiptNo, order.getId(),
-                order.getSupplierId(), warehouseId, total, command.remark()));
+                order.getSupplierId(), receiptWarehouseId, total, command.remark()));
         List<InventoryReceiptPort.ReceiptPostingLine> postingLines = new ArrayList<>();
         for (Prepared item : prepared) {
             item.orderLine().receive(item.quantity());
             lineRepository.save(item.orderLine());
             receiptLineRepository.save(PurchaseReceiptLine.create(receipt.getId(), item.orderLine().getId(),
-                    item.product().id(), item.quantity(), item.unitPrice(), item.batchNo(),
-                    serialNosJson(item.serialNos()), null));
-            postingLines.add(new InventoryReceiptPort.ReceiptPostingLine(item.product().id(), item.quantity(),
-                    item.unitPrice(), item.batchNo(), item.serialNos()));
+                    item.product().id(), item.warehouseId(), item.quantity(), item.unitPrice(), item.batchNo(),
+                    serialNosJson(item.serialNos()), item.certificateApplicationDate(), null));
+            postingLines.add(new InventoryReceiptPort.ReceiptPostingLine(item.product().id(), item.warehouseId(),
+                    item.quantity(), item.unitPrice(), item.batchNo(), item.serialNos(),
+                    item.certificateApplicationDate()));
         }
 
         // 落库存：由 app 层适配器调用库存引擎（含序列号状态流转）
         inventoryReceiptPort.postReceipt(new InventoryReceiptPort.ReceiptPosting(receipt.getId(), receiptNo,
-                warehouseId, postingLines));
+                receiptWarehouseId, postingLines));
+
+        for (Prepared item : prepared) {
+            if (item.serialNos().isEmpty()) continue;
+            List<UUID> policyIds = linePolicyRepository
+                    .findByOrderLineIdOrderBySortNoAsc(item.orderLine().getId()).stream()
+                    .map(PurchaseOrderLinePolicy::getPolicyId).toList();
+            if (!policyIds.isEmpty()) {
+                preEntitlementPort.syncSerials(order.getId(), item.orderLine().getId(), item.product().id(),
+                        item.unitPrice(), policyIds, item.serialNos());
+            }
+        }
 
         boolean fullyReceived = orderLines.stream().allMatch(PurchaseOrderLine::fullyReceived);
         order.refreshReceiveStatus(fullyReceived);
@@ -253,8 +343,76 @@ public class PurchaseOrderApplicationService {
                 .orElseThrow(() -> new NotFoundException("收货单", id));
     }
 
+    /** 通过 VIN/SN 反查其采购收货所关联的采购单，用于申报单订单联动。 */
+    @Transactional(readOnly = true)
+    public ProcurementApi.PurchaseOrderLinkView findOrderBySerialNo(String serialNo) {
+        if (serialNo == null || serialNo.isBlank()) {
+            return null;
+        }
+        String normalized = serialNo.trim().toUpperCase();
+        for (PurchaseReceiptLine receiptLine : receiptLineRepository.searchBySerialNo(normalized)) {
+            if (!parseSerialNos(receiptLine.getSerialNos()).contains(normalized)) {
+                continue;
+            }
+            if (receiptLine.getOrderLineId() == null) {
+                continue;
+            }
+            PurchaseOrderLine orderLine = lineRepository.findById(receiptLine.getOrderLineId()).orElse(null);
+            if (orderLine == null) {
+                continue;
+            }
+            PurchaseOrder order = orderRepository.findById(orderLine.getOrderId()).orElse(null);
+            if (order != null) {
+                return new ProcurementApi.PurchaseOrderLinkView(order.getId(), order.getOrderNo(),
+                        order.getExternalOrderNo(), receiptLine.getUnitPrice());
+            }
+        }
+        return null;
+    }
+
+    /** 收货完成后可补录或修正申请合格证日期，并同步对应 VIN 档案。 */
+    @Transactional
+    public ProcurementApi.PurchaseReceiptView updateCertificateApplicationDate(
+            UUID receiptId, UUID lineId, LocalDate certificateApplicationDate) {
+        PurchaseReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new NotFoundException("收货单", receiptId));
+        PurchaseReceiptLine line = receiptLineRepository.findByIdAndReceiptId(lineId, receiptId)
+                .orElseThrow(() -> new NotFoundException("收货明细", lineId));
+        line.updateCertificateApplicationDate(certificateApplicationDate);
+        receiptLineRepository.save(line);
+        inventoryReceiptPort.updateCertificateApplicationDate(parseSerialNos(line.getSerialNos()),
+                certificateApplicationDate);
+        return toReceiptView(receipt);
+    }
+
+    /** 单个 VIN 收货后临时调整仓库，并同步库存台账与序列号档案。 */
+    @Transactional
+    public ProcurementApi.PurchaseReceiptView updateReceiptWarehouse(UUID receiptId, UUID lineId, UUID warehouseId) {
+        PurchaseReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new NotFoundException("收货单", receiptId));
+        PurchaseReceiptLine line = receiptLineRepository.findByIdAndReceiptId(lineId, receiptId)
+                .orElseThrow(() -> new NotFoundException("收货明细", lineId));
+        if (warehouseId == null) {
+            throw new ConflictException("RECEIVE_WAREHOUSE_REQUIRED", "请选择收货仓库");
+        }
+        masterData.requireWarehouse(warehouseId);
+        List<String> serialNos = parseSerialNos(line.getSerialNos());
+        if (serialNos.size() != 1) {
+            throw new ConflictException("VIN_WAREHOUSE_CHANGE_INVALID", "只能按单个 VIN/SN 调整收货仓库");
+        }
+        UUID fromWarehouseId = line.getWarehouseId() != null ? line.getWarehouseId() : receipt.getWarehouseId();
+        if (!warehouseId.equals(fromWarehouseId)) {
+            inventoryReceiptPort.relocateSerial(serialNos.get(0), line.getProductId(), fromWarehouseId, warehouseId,
+                    receipt.getId(), receipt.getReceiptNo());
+            line.updateWarehouse(warehouseId);
+            receiptLineRepository.save(line);
+        }
+        return toReceiptView(receipt);
+    }
+
     private record Prepared(PurchaseOrderLine orderLine, MasterDataQueryPort.ProductInfo product,
-                            BigDecimal quantity, BigDecimal unitPrice, String batchNo, List<String> serialNos) {
+                            UUID warehouseId, BigDecimal quantity, BigDecimal unitPrice, String batchNo,
+                            List<String> serialNos, LocalDate certificateApplicationDate) {
     }
 
     private List<String> normalizeSerialNos(List<String> serialNos) {
@@ -267,9 +425,7 @@ public class PurchaseOrderApplicationService {
                 continue;
             }
             String value = serialNo.trim().toUpperCase();
-            if (!normalized.contains(value)) {
-                normalized.add(value);
-            }
+            normalized.add(value);
         }
         return normalized;
     }
@@ -376,6 +532,9 @@ public class PurchaseOrderApplicationService {
         List<ProcurementApi.PurchaseOrderLineView> lines = new ArrayList<>();
         for (PurchaseOrderLine line : lineEntities) {
             MasterDataQueryPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+            UUID lineWarehouseId = line.getWarehouseId() != null ? line.getWarehouseId() : order.getWarehouseId();
+            MasterDataQueryPort.WarehouseInfo lineWarehouse = lineWarehouseId == null ? null
+                    : masterData.requireWarehouse(lineWarehouseId);
             List<ProcurementApi.PolicyRefView> policies = new ArrayList<>();
             for (UUID policyId : policyIdsByLine.getOrDefault(line.getId(), List.of())) {
                 PurchasePolicyPort.PolicyInfo info = policyById.get(policyId);
@@ -385,9 +544,13 @@ public class PurchaseOrderApplicationService {
             }
             lines.add(new ProcurementApi.PurchaseOrderLineView(line.getId(), line.getLineNo(),
                     line.getProductId(), product.productNo(), product.name(), product.series(), product.configCode(),
+                    line.getConfigText() != null ? line.getConfigText() : product.configCode(),
+                    line.getSerialNo(), cabType(line.getConfigText(), product.name()),
+                    line.getCertificateApplicationDate(),
+                    lineWarehouseId, lineWarehouse == null ? null : lineWarehouse.name(),
                     product.categoryCode(), product.trackingMode(), line.getQuantity(), line.getReceivedQuantity(),
                     line.remaining(), line.getUnitPrice(), line.getTaxRate(), line.getAmount(),
-                    line.getRemark(), policies));
+                    line.getRemark(), purchaseLineStatus(line), policies));
         }
         return ProcurementApi.PurchaseOrderView.from(order,
                 new ProcurementApi.SupplierInfoView(supplier.id(), supplier.name(), supplier.supplierType()),
@@ -396,25 +559,54 @@ public class PurchaseOrderApplicationService {
     }
 
     private ProcurementApi.PurchaseReceiptView toReceiptView(PurchaseReceipt receipt) {
-        String orderNo = orderRepository.findById(receipt.getOrderId()).map(PurchaseOrder::getOrderNo).orElse(null);
+        String orderNo = orderRepository.findById(receipt.getOrderId())
+                .map(order -> order.getExternalOrderNo() != null ? order.getExternalOrderNo() : order.getOrderNo())
+                .orElse(null);
         String supplierName = masterData.requireSupplier(receipt.getSupplierId()).name();
         String warehouseName = receipt.getWarehouseId() == null ? null
                 : masterData.requireWarehouse(receipt.getWarehouseId()).name();
         List<ProcurementApi.PurchaseReceiptLineView> lines = receiptLineRepository.findByReceiptId(receipt.getId())
                 .stream().map(line -> {
                     MasterDataQueryPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+                    PurchaseOrderLine orderLine = line.getOrderLineId() == null ? null
+                            : lineRepository.findById(line.getOrderLineId()).orElse(null);
+                    String configText = orderLine == null ? null : orderLine.getConfigText();
+                    UUID lineWarehouseId = line.getWarehouseId() != null ? line.getWarehouseId()
+                            : receipt.getWarehouseId();
+                    String lineWarehouseName = lineWarehouseId == null ? null
+                            : masterData.requireWarehouse(lineWarehouseId).name();
                     return new ProcurementApi.PurchaseReceiptLineView(line.getId(), line.getProductId(),
-                            product.productNo(), product.name(), line.getQuantity(), line.getUnitPrice(),
-                            line.getBatchNo(), parseSerialNos(line.getSerialNos()));
+                            product.productNo(), product.name(), product.series(), configText,
+                            lineWarehouseId, lineWarehouseName, cabType(configText, product.name()),
+                            line.getQuantity(), line.getUnitPrice(), line.getBatchNo(),
+                            parseSerialNos(line.getSerialNos()), line.getCertificateApplicationDate());
                 }).toList();
         return ProcurementApi.PurchaseReceiptView.from(receipt, orderNo, supplierName, warehouseName, lines);
     }
+
+    private String cabType(String configText, String productName) {
+        String source = configText == null || configText.isBlank() ? productName : configText;
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        int marker = Math.max(source.indexOf("标载"), Math.max(source.indexOf("复合"), source.indexOf("重载")));
+        String suffix = marker >= 0 ? source.substring(marker + 2) : source;
+        if (suffix.contains("财富版")) {
+            return "平顶";
+        }
+        if (suffix.contains("舒享版")) {
+            return "高顶";
+        }
+        return null;
+    }
+
+    private String purchaseLineStatus(PurchaseOrderLine line) {
+        if (line.getReceivedQuantity().signum() == 0) {
+            return "待收货";
+        }
+        if (line.fullyReceived()) {
+            return "已收货";
+        }
+        return "部分收货";
+    }
 }
-
-
-
-
-
-
-
-

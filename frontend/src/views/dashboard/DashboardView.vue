@@ -50,7 +50,7 @@
         <a-button @click="go('/inventory/dashboard')">库存看板</a-button>
       </a-space>
       <a-alert style="margin-top:16px" type="info" show-icon
-               message="M0–M4 已完成并通过 42 个集成测试；业务主链路已可端到端运行。下一步进入 M5：盘点、调拨、退换、报表、历史数据迁移与正式部署。" />
+               message="M0–M4 已完成并通过 67 个集成测试；业务主链路已可端到端运行。下一步进入 M5：盘点、调拨、退换、报表、历史数据迁移与正式部署。" />
     </a-card>
   </div>
 </template>

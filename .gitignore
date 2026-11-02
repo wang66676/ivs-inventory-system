@@ -21,6 +21,11 @@ backups/
 tools/cloudflared*.exe
 tools/cloudflared-url.txt
 release/
+dist-setup/
+windows-app/
+android-app/.gradle/
+android-app/app/build/
+build/
 
 
 # 一次性问题截图

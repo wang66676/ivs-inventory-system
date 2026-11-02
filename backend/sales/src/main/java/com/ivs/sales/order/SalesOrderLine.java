@@ -99,6 +99,16 @@ public class SalesOrderLine {
         return minPrice != null && unitPrice.compareTo(minPrice) < 0;
     }
 
+    /** 订单确认后、出库前补录或修正成交价，并同步行金额。 */
+    public void updateUnitPrice(BigDecimal unitPrice) {
+        BigDecimal next = money(unitPrice);
+        if (next.signum() <= 0) {
+            throw new IllegalArgumentException("成交价必须大于 0");
+        }
+        this.unitPrice = next;
+        this.amount = money(quantity.multiply(next));
+    }
+
     public void deliver(BigDecimal deliveredQuantity) {
         BigDecimal incoming = qty(deliveredQuantity);
         if (incoming.signum() <= 0) {
