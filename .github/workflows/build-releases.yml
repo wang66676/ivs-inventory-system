@@ -142,3 +142,5 @@ jobs:
           files: release-flat/*
           generate_release_notes: true
           name: IVS 进销存系统 ${{ github.ref_name }}
+          overwrite_files: true
+          make_latest: true
