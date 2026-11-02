@@ -131,10 +131,14 @@ jobs:
           path: release-assets
           merge-multiple: true
       - name: 生成 SHA256 校验文件
-        working-directory: release-assets
-        run: sha256sum * > SHA256SUMS.txt
+        shell: bash
+        run: |
+          mkdir -p release-flat
+          find release-assets -type f -exec cp {} release-flat/ \;
+          cd release-flat
+          sha256sum * > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/*
+          files: release-flat/*
           generate_release_notes: true
           name: IVS 进销存系统 ${{ github.ref_name }}
