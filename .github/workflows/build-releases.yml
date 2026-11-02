@@ -55,7 +55,7 @@ jobs:
             --input build\jpackage-input --main-jar ivs-app.jar `
             --main-class org.springframework.boot.loader.launch.JarLauncher `
             --dest windows-app --java-options "-Dfile.encoding=UTF-8" `
-            --java-options "-Divs.desktop.open-browser=true" --add-modules java.desktop
+            --java-options "-Divs.desktop.open-browser=true" --add-modules ALL-MODULE-PATH
 
       - name: Inno Setup 生成 Windows 安装包
         shell: pwsh
