@@ -284,6 +284,13 @@ class ProcurementInventoryIntegrationTest {
         order = approve(order.id());
         receive(order, warehouse, order.lines().get(0).id(), null, List.of("LZZ1CLWB0NA300001"));
 
+        MasterdataApi.SerialView lockedVehicle = createSerial("LZZ1CLWB0NA300002", product.id());
+        jdbcTemplate.update("update ivs.product_serial set status = 'LOCKED' where id = ?", lockedVehicle.id());
+        MasterdataApi.CategoryView battery = createCategory("BATTERY", "动力电池", TrackingMode.SERIAL, "BATTERY", "块");
+        MasterdataApi.ProductView batteryProduct = createProduct("重卡动力电池", battery.id(), "块", "某厂", "Q3电池", "BAT-1");
+        MasterdataApi.SerialView batterySerial = createSerial("BAT300001", batteryProduct.id());
+        jdbcTemplate.update("update ivs.product_serial set status = 'IN_STOCK' where id = ?", batterySerial.id());
+
         InventoryApi.ReconciliationView reconciliation = restTemplate.getForEntity(
                 "/api/ivs/stocks/reconciliation", InventoryApi.ReconciliationView.class).getBody();
         assertThat(reconciliation).isNotNull();
@@ -294,7 +301,13 @@ class ProcurementInventoryIntegrationTest {
         InventoryApi.SummaryView summary = restTemplate.getForEntity(
                 "/api/ivs/inventory/summary", InventoryApi.SummaryView.class).getBody();
         assertThat(summary).isNotNull();
-        assertThat(summary.serialInStock()).isEqualTo(1);
+        assertThat(summary.serialInStock()).isEqualTo(2);
+        assertThat(summary.vehicleInStockNotLocked()).isEqualTo(1);
+        assertThat(summary.batteryInStock()).isEqualTo(1);
+        assertThat(summary.vehicleSeriesInventory()).hasSize(1);
+        assertThat(summary.vehicleSeriesInventory().get(0).series()).isEqualTo("Q3");
+        assertThat(summary.vehicleSeriesInventory().get(0).unsoldVinCount()).isEqualTo(1);
+        assertThat(summary.vehicleSeriesInventory().get(0).lockedVinCount()).isEqualTo(1);
         assertThat(summary.totalAmount()).isEqualByComparingTo("430000.00");
         assertThat(summary.ageBuckets()).hasSize(4);
         assertThat(summary.consistent()).isTrue();

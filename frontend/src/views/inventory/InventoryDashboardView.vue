@@ -1,37 +1,33 @@
 <template>
   <div>
     <a-row :gutter="16">
-      <a-col :span="6">
-        <a-card :bordered="false"><a-statistic title="在库序列号（整车/电池）" :value="summary?.serialInStock ?? 0" suffix="台" /></a-card>
+      <a-col :xs="24" :md="12" :xl="6">
+        <a-card :bordered="false"><a-statistic title="在库整车（未锁定）" :value="summary?.vehicleInStockNotLocked ?? 0" suffix="台" /></a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :xs="24" :md="12" :xl="6">
+        <a-card :bordered="false"><a-statistic title="在库电池" :value="summary?.batteryInStock ?? 0" suffix="块" /></a-card>
+      </a-col>
+      <a-col :xs="24" :md="12" :xl="6">
         <a-card :bordered="false"><a-statistic title="数量商品条目" :value="summary?.quantityItems ?? 0" /></a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :xs="24" :md="12" :xl="6">
         <a-card :bordered="false">
           <a-statistic title="库存资金占用" :value="summary?.totalAmount ?? 0" :precision="2" prefix="¥" />
         </a-card>
       </a-col>
-      <a-col :span="6">
-        <a-card :bordered="false">
-          <a-statistic title="台账与余额" :value="summary?.consistent ? '一致' : '不一致'" />
-          <div class="hint">台账 {{ summary?.ledgerCount ?? 0 }} 条</div>
-        </a-card>
-      </a-col>
     </a-row>
 
-    <a-alert v-if="summary && !summary.consistent" type="error" show-icon style="margin-top:16px"
-             message="台账与余额不一致，请立即排查（存在绕过库存引擎的直接写入）" />
+    <a-alert v-if="summary" :type="summary.consistent ? 'success' : 'error'" show-icon style="margin-top:16px"
+             :message="summary.consistent ? `台账与余额一致，共 ${summary.ledgerCount} 条台账` : '台账与余额不一致，请立即排查'" />
 
     <a-row :gutter="16" style="margin-top:16px">
       <a-col :span="12">
-        <a-card title="库龄分档（按每个商品+仓库最早入库时间）" :bordered="false">
-          <a-table :data-source="summary?.ageBuckets ?? []" row-key="label" size="small" :pagination="false">
-            <a-table-column title="库龄" data-index="label" :width="140" />
-            <a-table-column title="条目数" data-index="serialCount" :width="100" />
-            <a-table-column title="金额" :width="140">
-              <template #default="{ record }">{{ record.amount }}</template>
-            </a-table-column>
+        <a-card title="车系 VIN 库存" :bordered="false">
+          <div class="hint" style="margin-bottom:8px">未销售数量只统计在库未锁定车辆；已锁定 VIN 视为已销售，仅单独备注。</div>
+          <a-table :data-source="summary?.vehicleSeriesInventory ?? []" row-key="series" size="small" :pagination="false">
+            <a-table-column title="车系" data-index="series" :width="180" />
+            <a-table-column title="未销售 VIN 数" data-index="unsoldVinCount" :width="130" align="right" />
+            <a-table-column title="已锁定 VIN 数（视为已销售）" data-index="lockedVinCount" :width="200" align="right" />
           </a-table>
         </a-card>
       </a-col>

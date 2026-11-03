@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -139,5 +140,20 @@ class PlatformAuthIntegrationTest {
         var writeAudit = restTemplate.getForEntity("/api/platform/audit-logs?keyword=ApiWrite", Map[].class);
         assertThat(writeAudit.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(writeAudit.getBody()).isNotEmpty();
+    }
+
+    @Test
+    void 允许GitHubPages固定网页地址跨域登录() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setOrigin("https://wang66676.github.io");
+        headers.setAccessControlRequestMethod(HttpMethod.POST);
+        headers.setAccessControlRequestHeaders(List.of("authorization", "content-type"));
+
+        var response = restTemplate.exchange("/api/platform/auth/login", HttpMethod.OPTIONS,
+                new HttpEntity<>(headers), Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getAccessControlAllowOrigin())
+                .isEqualTo("https://wang66676.github.io");
     }
 }

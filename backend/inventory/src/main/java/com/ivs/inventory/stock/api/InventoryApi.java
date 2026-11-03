@@ -52,10 +52,16 @@ public final class InventoryApi {
     public record WarehouseSummaryView(String warehouseName, int itemCount, BigDecimal amount) {
     }
 
+    /** 车系 VIN 库存：未销售只统计在库未锁定；已锁定 VIN 视为已销售，仅单独备注。 */
+    public record VehicleSeriesInventoryView(String series, int unsoldVinCount, int lockedVinCount) {
+    }
+
     public record SummaryView(
-            int serialInStock, int quantityItems, BigDecimal totalAmount, BigDecimal totalLockedQty,
+            int serialInStock, int vehicleInStockNotLocked, int batteryInStock,
+            int quantityItems, BigDecimal totalAmount, BigDecimal totalLockedQty,
             List<CategorySummaryView> byCategory, List<WarehouseSummaryView> byWarehouse,
-            List<AgeBucketView> ageBuckets, long ledgerCount, boolean consistent
+            List<AgeBucketView> ageBuckets, List<VehicleSeriesInventoryView> vehicleSeriesInventory,
+            long ledgerCount, boolean consistent
     ) {
     }
 

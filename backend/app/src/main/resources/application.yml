@@ -33,7 +33,9 @@ management:
         include: health,info,metrics
 
 ivs:
-  version: ${IVS_VERSION:1.0.0}
+  version: ${IVS_VERSION:1.0.1}
+  cors:
+    allowed-origins: ${IVS_CORS_ALLOWED_ORIGINS:http://localhost:8090,http://localhost:5174,https://wang66676.github.io}
   desktop:
     open-browser: ${IVS_OPEN_BROWSER:false}
   security:

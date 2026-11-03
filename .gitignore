@@ -1,6 +1,7 @@
 # 构建产物
 backend/*/target/
 frontend/dist/
+frontend/dist-pages/
 frontend/node_modules/
 .pnpm-store/
 

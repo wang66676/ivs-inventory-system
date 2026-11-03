@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:8090'
+const basePath = process.env.VITE_BASE_PATH || '/'
 const apiProxy = {
   '/api': {
     target: apiProxyTarget,
@@ -10,6 +11,7 @@ const apiProxy = {
 }
 
 export default defineConfig({
+  base: basePath,
   plugins: [vue()],
   build: {
     chunkSizeWarningLimit: 1500,

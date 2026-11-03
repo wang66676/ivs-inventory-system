@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'web-login/**'
+      - 'frontend/**'
       - '.github/workflows/pages.yml'
 
 permissions:
@@ -25,9 +25,29 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: 构建网页登录版
+        working-directory: frontend
+        env:
+          VITE_BASE_PATH: /ivs-inventory-system/
+          VITE_API_BASE_URL: ${{ vars.IVS_API_BASE_URL || 'https://invoice-second-talented-homework.trycloudflare.com/api' }}
+          VITE_APP_VERSION: 1.0.1
+          VITE_GITHUB_OWNER: wang66676
+          VITE_GITHUB_REPO: ivs-inventory-system
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+          cp dist/index.html dist/404.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web-login
+          path: frontend/dist
       - id: deployment
         uses: actions/deploy-pages@v4

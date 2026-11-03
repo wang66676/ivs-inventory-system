@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 export const http = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -21,8 +21,9 @@ http.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('ivs_token')
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+      const loginPath = `${import.meta.env.BASE_URL}login`
+      if (!window.location.pathname.endsWith('/login')) {
+        window.location.href = loginPath
       }
     }
     const message = error.response?.data?.message ?? error.message ?? '请求失败'

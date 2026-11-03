@@ -67,12 +67,15 @@ export interface AgeBucket {
 
 export interface InventorySummary {
   serialInStock: number
+  vehicleInStockNotLocked: number
+  batteryInStock: number
   quantityItems: number
   totalAmount: number
   totalLockedQty: number
   byCategory: { categoryName: string; itemCount: number; amount: number }[]
   byWarehouse: { warehouseName: string; itemCount: number; amount: number }[]
   ageBuckets: AgeBucket[]
+  vehicleSeriesInventory: { series: string; unsoldVinCount: number; lockedVinCount: number }[]
   ledgerCount: number
   consistent: boolean
 }

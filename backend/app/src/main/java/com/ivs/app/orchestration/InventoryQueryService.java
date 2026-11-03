@@ -146,9 +146,44 @@ public class InventoryQueryService {
                         warehouseAmount.get(entry.getKey())))
                 .toList();
         int serialInStock = (int) serialRepository.findByStatusOrderByCreatedAtDesc(SerialStatus.IN_STOCK).size();
-        return new InventoryApi.SummaryView(serialInStock, quantityItems, totalAmount, totalLocked,
-                byCategory, byWarehouse, ageBuckets(), reconciliationService.ledgerCount(),
+        int[] serialCounts = inStockSerialCounts();
+        return new InventoryApi.SummaryView(serialInStock, serialCounts[0], serialCounts[1], quantityItems,
+                totalAmount, totalLocked, byCategory, byWarehouse, ageBuckets(), vehicleSeriesInventory(),
+                reconciliationService.ledgerCount(),
                 reconciliationService.reconcile().isEmpty());
+    }
+
+    private int[] inStockSerialCounts() {
+        Map<String, Object> row = jdbc.queryForMap("""
+                select coalesce(sum(case when c.status_template = 'VEHICLE' then 1 else 0 end), 0) as vehicle_count,
+                       coalesce(sum(case when c.status_template = 'BATTERY' then 1 else 0 end), 0) as battery_count
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                 where ps.status = 'IN_STOCK'
+                """);
+        return new int[]{((Number) row.get("vehicle_count")).intValue(),
+                ((Number) row.get("battery_count")).intValue()};
+    }
+
+    private List<InventoryApi.VehicleSeriesInventoryView> vehicleSeriesInventory() {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select coalesce(nullif(trim(p.series), ''), p.name) as series,
+                       sum(case when ps.status = 'IN_STOCK' then 1 else 0 end) as unsold_count,
+                       sum(case when ps.status = 'LOCKED' then 1 else 0 end) as locked_count
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                 where c.status_template = 'VEHICLE' and ps.status in ('IN_STOCK', 'LOCKED')
+                 group by coalesce(nullif(trim(p.series), ''), p.name)
+                 order by series
+                """);
+        return rows.stream()
+                .map(row -> new InventoryApi.VehicleSeriesInventoryView(
+                        String.valueOf(row.get("series")),
+                        ((Number) row.get("unsold_count")).intValue(),
+                        ((Number) row.get("locked_count")).intValue()))
+                .toList();
     }
 
     /** 库龄分档：以每个「商品 + 仓库」最早一次入库时间为起点（序列号商品即车辆/电池的库龄）。 */

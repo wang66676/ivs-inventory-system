@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { pinia } from '../stores'
 import { useAuthStore } from '../stores/auth'
 
@@ -96,8 +96,12 @@ export const pageTitles: Record<string, string> = Object.fromEntries(
   modulePages.map((page) => [page.path, page.title]),
 )
 
+const routerHistory = import.meta.env.VITE_ROUTER_MODE === 'hash'
+  ? createWebHashHistory(import.meta.env.BASE_URL)
+  : createWebHistory(import.meta.env.BASE_URL)
+
 export const router = createRouter({
-  history: createWebHistory(),
+  history: routerHistory,
   routes: [
     { path: '/login', name: 'login', component: () => import('../views/auth/LoginView.vue'), meta: { public: true } },
     { path: '/', redirect: '/dashboard' },
