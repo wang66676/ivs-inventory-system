@@ -23,7 +23,9 @@ http.interceptors.response.use(
       localStorage.removeItem('ivs_token')
       const loginPath = `${import.meta.env.BASE_URL}login`
       if (!window.location.pathname.endsWith('/login')) {
-        window.location.href = loginPath
+        window.location.href = import.meta.env.VITE_ROUTER_MODE === 'hash'
+          ? `${import.meta.env.BASE_URL}#/login`
+          : loginPath
       }
     }
     const message = error.response?.data?.message ?? error.message ?? '请求失败'
