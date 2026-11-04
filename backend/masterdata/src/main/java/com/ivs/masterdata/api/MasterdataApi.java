@@ -109,7 +109,7 @@ public final class MasterdataApi {
 
     public record SerialView(
             UUID id, String serialNo, UUID productId, String productNo, String productName, String categoryCode,
-            SerialStatus status, UUID warehouseId, String warehouseName, String locationCode, String batchNo,
+            String categoryName, SerialStatus status, UUID warehouseId, String warehouseName, String locationCode, String batchNo,
             BigDecimal purchasePrice, Instant inboundAt, LocalDate certificateApplicationDate,
             Instant warrantyStart, Instant warrantyEnd,
             OwnershipType ownershipType, String attrsJson, String remark,
@@ -123,7 +123,8 @@ public final class MasterdataApi {
             return new SerialView(
                     serial.getId(), serial.getSerialNo(), serial.getProductId(),
                     product == null ? null : product.getProductNo(), product == null ? null : product.getName(),
-                    category == null ? null : category.getCode(), serial.getStatus(), serial.getWarehouseId(),
+                    category == null ? null : category.getCode(), category == null ? null : category.getName(),
+                    serial.getStatus(), serial.getWarehouseId(),
                     warehouseName, serial.getLocationCode(), serial.getBatchNo(), serial.getPurchasePrice(),
                     serial.getInboundAt(), serial.getCertificateApplicationDate(), serial.getWarrantyStart(), serial.getWarrantyEnd(),
                     serial.getOwnershipType(), serial.getAttrsJson(), serial.getRemark(),

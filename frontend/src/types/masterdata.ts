@@ -66,6 +66,7 @@ export interface ProductSerial {
   productNo?: string
   productName?: string
   categoryCode?: string
+  categoryName?: string
   status: SerialStatus
   warehouseId?: string
   warehouseName?: string

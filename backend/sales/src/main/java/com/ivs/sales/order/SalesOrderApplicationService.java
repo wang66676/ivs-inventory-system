@@ -149,12 +149,36 @@ public class SalesOrderApplicationService {
             SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.productId());
             SalesMasterDataPort.PriceInfo reference = masterData.lookupPrice(product.id(),
                     customer.customerType(), LocalDate.now());
-            SalesMasterDataPort.PriceInfo price = line.unitPrice() == null
-                    ? reference
-                    : new SalesMasterDataPort.PriceInfo(line.unitPrice(), reference.minPrice(), "MANUAL");
-            if (price.price() == null || price.price().signum() <= 0) {
+            boolean battery = isBattery(product);
+            BigDecimal batteryBoxPrice = null;
+            BigDecimal batteryPackPrice = null;
+            BigDecimal effectiveUnitPrice;
+            if (battery) {
+                batteryBoxPrice = requiredBatteryMoney(line.batteryBoxUnitPrice(), "电池箱");
+                batteryPackPrice = requiredBatteryMoney(line.batteryPackUnitPrice(), "电池包");
+                effectiveUnitPrice = batteryBoxPrice.add(batteryPackPrice);
+                if (effectiveUnitPrice.signum() <= 0) {
+                    throw new ConflictException("SALES_PRICE_REQUIRED", "电池箱与电池包成交价合计必须大于 0");
+                }
+            } else {
+                effectiveUnitPrice = line.unitPrice() == null ? reference.price() : line.unitPrice();
+            }
+            if (effectiveUnitPrice == null || effectiveUnitPrice.signum() <= 0) {
                 throw new ConflictException("SALES_PRICE_REQUIRED",
                         "商品「" + product.name() + "」成交价必须大于 0，请填写成交价后再保存订单");
+            }
+            String boxManufacturer = null;
+            String boxModel = null;
+            String packManufacturer = null;
+            BigDecimal energyKwh = null;
+            if (battery) {
+                boxManufacturer = requiredBatteryText(line.batteryBoxManufacturer(), "电池箱制造商");
+                boxModel = requiredBatteryText(line.batteryBoxModel(), "电池箱型号");
+                packManufacturer = requiredBatteryText(line.batteryPackManufacturer(), "电池包制造商");
+                if (line.batteryEnergyKwh() == null || line.batteryEnergyKwh().signum() <= 0) {
+                    throw new ConflictException("BATTERY_ENERGY_REQUIRED", "动力电池能量（kWh）必须大于 0");
+                }
+                energyKwh = line.batteryEnergyKwh().setScale(3, RoundingMode.HALF_UP);
             }
             List<UUID> serialIds = normalizeIds(line.serialIds());
             BigDecimal quantity = "SERIAL".equals(product.trackingMode())
@@ -162,8 +186,9 @@ public class SalesOrderApplicationService {
                     : line.quantity();
             SalesOrderLine entity;
             try {
-                entity = SalesOrderLine.create(order.getId(), lineNo++, product.id(), quantity, price.price(),
-                        price.minPrice(), null, serialIdsJson(serialIds), line.remark());
+                entity = SalesOrderLine.create(order.getId(), lineNo++, product.id(), quantity, effectiveUnitPrice,
+                        reference.minPrice(), null, serialIdsJson(serialIds), line.remark(), boxManufacturer,
+                        boxModel, batteryBoxPrice, packManufacturer, energyKwh, batteryPackPrice);
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("SALES_LINE_INVALID", exception.getMessage());
             }
@@ -191,22 +216,30 @@ public class SalesOrderApplicationService {
         if (orderLines.stream().anyMatch(line -> line.getDeliveredQuantity().signum() > 0)) {
             throw new ConflictException("SALES_STATUS_INVALID", "已有出库的订单不能修改成交价");
         }
-        Map<UUID, BigDecimal> prices = new LinkedHashMap<>();
+        Map<UUID, SalesApi.UpdatePriceLineCommand> prices = new LinkedHashMap<>();
         for (SalesApi.UpdatePriceLineCommand priceLine : command.lines()) {
             if (priceLine.orderLineId() != null && priceLine.unitPrice() != null) {
-                prices.put(priceLine.orderLineId(), priceLine.unitPrice());
+                prices.put(priceLine.orderLineId(), priceLine);
             }
         }
         BigDecimal total = BigDecimal.ZERO;
         for (SalesOrderLine line : orderLines) {
-            BigDecimal price = prices.get(line.getId());
+            SalesApi.UpdatePriceLineCommand priceLine = prices.get(line.getId());
+            BigDecimal price = priceLine == null ? null : priceLine.unitPrice();
             if (price == null || price.signum() <= 0) {
                 SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
                 throw new ConflictException("SALES_PRICE_REQUIRED",
                         "商品「" + product.name() + "」成交价必须大于 0");
             }
             try {
-                line.updateUnitPrice(price);
+                SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
+                if (isBattery(product)) {
+                    BigDecimal boxPrice = requiredBatteryMoney(priceLine.batteryBoxUnitPrice(), "电池箱");
+                    BigDecimal packPrice = requiredBatteryMoney(priceLine.batteryPackUnitPrice(), "电池包");
+                    line.updateUnitPrice(boxPrice.add(packPrice), boxPrice, packPrice);
+                } else {
+                    line.updateUnitPrice(price);
+                }
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("SALES_PRICE_REQUIRED", exception.getMessage());
             }
@@ -527,9 +560,12 @@ public class SalesOrderApplicationService {
                     List<UUID> remainingSerialIds = new ArrayList<>(serialIds);
                     remainingSerialIds.removeAll(deliveredSerialIds);
                     return new SalesApi.SalesOrderLineView(line.getId(), line.getLineNo(), line.getProductId(),
-                            product.productNo(), product.name(), product.categoryCode(), product.trackingMode(),
-                            line.getQuantity(), line.getDeliveredQuantity(), line.remaining(), line.getUnitPrice(),
-                            line.getMinPrice(), line.getTaxRate(), line.getAmount(), line.belowMinPrice(),
+                            product.productNo(), product.name(), product.categoryCode(), product.categoryName(),
+                            product.trackingMode(), line.getQuantity(), line.getDeliveredQuantity(), line.remaining(),
+                            line.getUnitPrice(), line.getMinPrice(), line.getTaxRate(), line.getAmount(),
+                            line.getBatteryBoxManufacturer(), line.getBatteryBoxModel(),
+                            line.getBatteryBoxUnitPrice(), line.getBatteryPackManufacturer(),
+                            line.getBatteryEnergyKwh(), line.getBatteryPackUnitPrice(), line.belowMinPrice(),
                             serialIds, remainingSerialIds, line.getRemark());
                 })
                 .toList();
@@ -548,5 +584,25 @@ public class SalesOrderApplicationService {
                             parseIds(line.getSerialIds()));
                 }).toList();
         return SalesApi.SalesDeliveryView.from(delivery, orderNo, customerName, warehouseName, lines);
+    }
+
+    private boolean isBattery(SalesMasterDataPort.ProductInfo product) {
+        String code = product.categoryCode() == null ? "" : product.categoryCode().toUpperCase();
+        String name = product.categoryName() == null ? "" : product.categoryName();
+        return code.equals("BATTERY") || code.startsWith("BATTERY-") || name.contains("电池");
+    }
+
+    private String requiredBatteryText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new ConflictException("BATTERY_DETAIL_REQUIRED", "动力电池请填写" + field);
+        }
+        return value.trim();
+    }
+
+    private BigDecimal requiredBatteryMoney(BigDecimal value, String field) {
+        if (value == null || value.signum() < 0) {
+            throw new ConflictException("BATTERY_PRICE_REQUIRED", "动力电池请填写有效的" + field + "成交价");
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 }

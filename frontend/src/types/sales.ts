@@ -11,6 +11,7 @@ export interface SalesOrderLine {
   productNo: string
   productName: string
   categoryCode: string
+  categoryName?: string
   trackingMode: 'QUANTITY' | 'SERIAL'
   quantity: number
   deliveredQuantity: number
@@ -19,6 +20,12 @@ export interface SalesOrderLine {
   minPrice?: number
   taxRate?: number
   amount: number
+  batteryBoxManufacturer?: string
+  batteryBoxModel?: string
+  batteryBoxUnitPrice?: number
+  batteryPackManufacturer?: string
+  batteryEnergyKwh?: number
+  batteryPackUnitPrice?: number
   belowMinPrice: boolean
   serialIds: string[]
   remainingSerialIds: string[]

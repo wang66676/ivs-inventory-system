@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="销售订单先建单、后补 VIN。草稿可编辑补全信息；所有 VIN 选定后才能锁货，锁货后才能出库。VIN 下拉仅显示在库且未锁定的车辆。" />
+               message="销售订单先建单、后补 VIN/SN。草稿可编辑补全信息；车辆按 VIN、动力电池按电池 SN 独立匹配，全部选定后才能锁货，锁货后才能出库。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">新建销售订单</a-button>
         <a-button @click="reload">刷新</a-button>
@@ -11,7 +11,7 @@
         <a-input v-model:value="keyword" placeholder="订单号" allow-clear style="width:190px" @press-enter="reload" />
       </a-space>
       <a-table v-resizable-columns :data-source="salesRows" :columns="columns" row-key="rowKey" size="middle"
-               :pagination="false" :scroll="{ x: 1460 }">
+               :pagination="false" :scroll="{ x: 1760 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'lineNo'">{{ record.line.lineNo }}</template>
           <template v-else-if="column.key === 'product'">
@@ -19,6 +19,7 @@
             <a-tag v-if="record.line.belowMinPrice" color="red" style="margin-top:3px">低于限价 {{ record.line.minPrice }}</a-tag>
             <a-tag v-if="record.order.priceApprovalRequired && !record.order.priceApproved" color="red" style="margin-top:3px">需价格审批</a-tag>
           </template>
+          <template v-else-if="column.key === 'batteryInfo'">{{ batteryText(record.line) }}</template>
           <template v-else-if="column.key === 'tracking'">
             <a-tag :color="record.line.trackingMode === 'SERIAL' ? 'blue' : 'default'">
               {{ record.line.trackingMode === 'SERIAL' ? 'VIN/SN' : '数量' }}
@@ -87,8 +88,8 @@
           <a-col :span="8"><a-form-item label="联系人"><a-input v-model:value="manualCustomer.contactName" /></a-form-item></a-col>
           <a-col :span="8"><a-form-item label="手机号" required><a-input v-model:value="manualCustomer.contactPhone" /></a-form-item></a-col>
         </a-row>
-        <a-divider orientation="left" style="font-size:13px">订单明细（VIN 可先不选，保存后点“编辑”补全）</a-divider>
-        <a-table :data-source="form.lines" row-key="_key" size="small" :pagination="false" :scroll="{ x: 1000 }">
+        <a-divider orientation="left" style="font-size:13px">订单明细（VIN/SN 可先不选，保存后点“编辑”补全）</a-divider>
+        <a-table :data-source="form.lines" row-key="_key" size="small" :pagination="false" :scroll="{ x: 1900 }">
           <a-table-column title="商品" :width="280">
             <template #default="{ record: line }">
               <a-select v-model:value="line.productId" :options="productOptionsForWarehouse" show-search
@@ -97,20 +98,39 @@
                         @change="() => onProductChange(line)" />
             </template>
           </a-table-column>
+          <a-table-column title="电池箱制造商" :width="160">
+            <template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryBoxManufacturer" placeholder="电池箱制造商" /></template>
+          </a-table-column>
+          <a-table-column title="电池箱型号" :width="130">
+            <template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryBoxModel" placeholder="电池箱型号" /></template>
+          </a-table-column>
+          <a-table-column title="电池箱单价" :width="130">
+            <template #default="{ record: line }"><MoneyInput v-if="isBatteryLine(line)" v-model:value="line.batteryBoxUnitPrice" :min="0" :precision="2" style="width:100%" /></template>
+          </a-table-column>
+          <a-table-column title="电池包制造商" :width="160">
+            <template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryPackManufacturer" placeholder="电池包制造商" /></template>
+          </a-table-column>
+          <a-table-column title="能量（kWh）" :width="120">
+            <template #default="{ record: line }"><a-input-number v-if="isBatteryLine(line)" v-model:value="line.batteryEnergyKwh" :min="0.001" :precision="3" style="width:100%" /></template>
+          </a-table-column>
+          <a-table-column title="电池包单价" :width="130">
+            <template #default="{ record: line }"><MoneyInput v-if="isBatteryLine(line)" v-model:value="line.batteryPackUnitPrice" :min="0" :precision="2" style="width:100%" /></template>
+          </a-table-column>
           <a-table-column title="数量" :width="110">
             <template #default="{ record: line }">
               <a-input-number v-model:value="line.quantity" :min="0.001" style="width:100%" />
             </template>
           </a-table-column>
-          <a-table-column title="单价" :width="130">
+          <a-table-column title="合计单价 / 成交价" :width="160">
             <template #default="{ record: line }">
-              <MoneyInput v-model:value="line.unitPrice" :min="0" :precision="2" placeholder="留空取指导价" style="width:100%" />
+              <span v-if="isBatteryLine(line)">{{ money(batteryUnitPrice(line)) }}</span>
+              <MoneyInput v-else v-model:value="line.unitPrice" :min="0" :precision="2" placeholder="留空取指导价" style="width:100%" />
             </template>
           </a-table-column>
-          <a-table-column title="VIN" :width="360">
+          <a-table-column title="VIN / SN" :width="320">
             <template #default="{ record: line }">
               <a-select v-if="line.trackingMode === 'SERIAL'" v-model:value="line.serialIds" mode="multiple"
-                        :options="serialOptionsFor(line.productId)" placeholder="可后选，仅显示在库未锁 VIN"
+                        :options="serialOptionsFor(line.productId)" placeholder="可后选，仅显示在库未锁 VIN/SN"
                         option-filter-prop="label" style="width:100%" @change="() => onSerialChange(line)" />
               <span v-else class="hint">数量商品无需 VIN</span>
             </template>
@@ -126,7 +146,7 @@
     </a-modal>
 
     <a-modal v-model:open="priceOpen" :title="`补录成交价 - ${priceOrder?.orderNo ?? ''}`"
-             :confirm-loading="saving" ok-text="保存成交价" cancel-text="取消" width="760px" @ok="savePrices">
+             :confirm-loading="saving" ok-text="保存成交价" cancel-text="取消" width="1100px" @ok="savePrices">
       <a-alert type="warning" show-icon style="margin-bottom:12px"
                message="该订单存在 0 元成交明细，补齐所有商品成交价后才能继续出库。" />
       <a-table :data-source="priceLines" row-key="orderLineId" size="small" :pagination="false">
@@ -134,9 +154,22 @@
           <template #default="{ record }">{{ record.productName }}</template>
         </a-table-column>
         <a-table-column title="数量" data-index="quantity" :width="100" />
+        <a-table-column title="电池箱成交价" :width="180">
+          <template #default="{ record }">
+            <MoneyInput v-if="record.isBattery" v-model:value="record.batteryBoxUnitPrice" :min="0" :precision="2" style="width:100%" />
+            <span v-else>-</span>
+          </template>
+        </a-table-column>
+        <a-table-column title="电池包成交价" :width="180">
+          <template #default="{ record }">
+            <MoneyInput v-if="record.isBattery" v-model:value="record.batteryPackUnitPrice" :min="0" :precision="2" style="width:100%" />
+            <span v-else>-</span>
+          </template>
+        </a-table-column>
         <a-table-column title="成交价" :width="180">
           <template #default="{ record }">
-            <MoneyInput v-model:value="record.unitPrice" :min="0.01" :precision="2" style="width:100%" />
+            <span v-if="record.isBattery">{{ money(Number(record.batteryBoxUnitPrice || 0) + Number(record.batteryPackUnitPrice || 0)) }}</span>
+            <MoneyInput v-else v-model:value="record.unitPrice" :min="0.01" :precision="2" style="width:100%" />
           </template>
         </a-table-column>
       </a-table>
@@ -145,7 +178,7 @@
     <a-modal v-model:open="deliverOpen" :title="`出库 - ${current?.orderNo ?? ''}`" :confirm-loading="saving"
              ok-text="确认出库" cancel-text="取消" width="900px" @ok="submitDeliver">
       <a-alert type="warning" show-icon style="margin-bottom:12px"
-               message="订单已锁货后方可出库。序列号商品选择本次交付的 VIN（可不全交）；数量商品填写本次出库数量。" />
+               message="订单已锁货后方可出库。序列号商品选择本次交付的 VIN/SN（可不全交）；数量商品填写本次出库数量。" />
       <a-form layout="vertical">
         <a-form-item label="出库仓库" required><a-select v-model:value="deliverForm.warehouseId" :options="warehouseOptions" /></a-form-item>
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false">
@@ -157,7 +190,7 @@
             <template #default="{ record }">
               <a-select v-if="record.trackingMode === 'SERIAL'" v-model:value="deliverInput[record.id].serialIds"
                         mode="multiple" :options="serialOptionsOfLine(record)"
-                        :disabled="Number(record.remainingQuantity) === 0" placeholder="选择本次交付的 VIN" style="width:100%" />
+                        :disabled="Number(record.remainingQuantity) === 0" placeholder="选择本次交付的 VIN/SN" style="width:100%" />
               <a-input-number v-else v-model:value="deliverInput[record.id].quantity" :min="0"
                               :max="Number(record.remainingQuantity)" :disabled="Number(record.remainingQuantity) === 0"
                               style="width:160px" />
@@ -196,11 +229,11 @@ const saving = ref(false)
 const editingId = ref<string>()
 const current = ref<SalesOrder | null>(null)
 const priceOrder = ref<SalesOrder>()
-const priceLines = ref<{ orderLineId: string; productName: string; quantity: number; unitPrice?: number }[]>([])
+const priceLines = ref<{ orderLineId: string; productName: string; quantity: number; unitPrice?: number; isBattery: boolean; batteryBoxUnitPrice?: number; batteryPackUnitPrice?: number }[]>([])
 const customerOptions = ref<{ label: string; value: string }[]>([])
 const manualCustomer = reactive({ name: '', contactName: '', contactPhone: '' })
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
-const productOptions = ref<{ label: string; value: string; name: string; trackingMode: 'QUANTITY' | 'SERIAL' }[]>([])
+const productOptions = ref<{ label: string; value: string; name: string; trackingMode: 'QUANTITY' | 'SERIAL'; categoryCode?: string; categoryName?: string; isBattery: boolean }[]>([])
 const availableSerials = ref<ProductSerial[]>([])
 const stockBalances = ref<StockBalance[]>([])
 interface SalesListRow {
@@ -223,6 +256,7 @@ const salesRows = computed<SalesListRow[]>(() => rows.value.flatMap((order) => o
 const columns = [
   { title: '行号', key: 'lineNo', width: 70, align: 'center' },
   { title: '商品', key: 'product', width: 240 },
+  { title: '电池信息', key: 'batteryInfo', width: 300, ellipsis: true },
   { title: '追踪', key: 'tracking', width: 100, align: 'center' },
   { title: '数量', key: 'quantity', width: 90, align: 'right' },
   { title: '已出', key: 'deliveredQuantity', width: 90, align: 'right' },
@@ -268,6 +302,12 @@ function newLine() {
     unitPrice: undefined,
     serialIds: [] as string[],
     trackingMode: 'QUANTITY' as 'QUANTITY' | 'SERIAL',
+    batteryBoxManufacturer: '',
+    batteryBoxModel: '',
+    batteryBoxUnitPrice: undefined as number | undefined,
+    batteryPackManufacturer: '',
+    batteryEnergyKwh: undefined as number | undefined,
+    batteryPackUnitPrice: undefined as number | undefined,
   }
 }
 
@@ -285,10 +325,30 @@ function serialOptionsOfLine(line: { serialIds: string[] }) {
   const remaining = (line as unknown as SalesOrderLine).remainingSerialIds ?? line.serialIds
   return remaining.map((id) => ({ label: serialNoOf(id), value: id }))
 }
+function isBatteryCategory(categoryCode?: string, categoryName?: string) {
+  const code = (categoryCode || '').toUpperCase()
+  return code === 'BATTERY' || code.startsWith('BATTERY-') || (categoryName || '').includes('电池')
+}
+function isBatteryLine(line: Record<string, any>) {
+  return productOptions.value.find((item) => item.value === line.productId)?.isBattery === true
+}
+function batteryUnitPrice(line: Record<string, any>) {
+  return Number(line.batteryBoxUnitPrice || 0) + Number(line.batteryPackUnitPrice || 0)
+}
+function batteryText(line: Record<string, any>) {
+  if (!line.batteryBoxManufacturer && !line.batteryPackManufacturer) return '-'
+  return `箱：${line.batteryBoxManufacturer || '-'} / ${line.batteryBoxModel || '-'}；包：${line.batteryPackManufacturer || '-'} / ${line.batteryEnergyKwh ?? '-'}kWh`
+}
 function onProductChange(line: Record<string, any>) {
   const product = productOptions.value.find((item) => item.value === line.productId)
   line.trackingMode = product?.trackingMode ?? 'QUANTITY'
   line.serialIds = []
+  line.batteryBoxManufacturer = ''
+  line.batteryBoxModel = ''
+  line.batteryBoxUnitPrice = undefined
+  line.batteryPackManufacturer = ''
+  line.batteryEnergyKwh = undefined
+  line.batteryPackUnitPrice = undefined
 }
 function onWarehouseChange() {
   const allowed = new Set(productOptionsForWarehouse.value.map((item) => item.value))
@@ -357,6 +417,12 @@ function openEdit(record: SalesOrder) {
     unitPrice: line.unitPrice,
     serialIds: [...line.serialIds],
     trackingMode: line.trackingMode,
+    batteryBoxManufacturer: line.batteryBoxManufacturer || '',
+    batteryBoxModel: line.batteryBoxModel || '',
+    batteryBoxUnitPrice: line.batteryBoxUnitPrice,
+    batteryPackManufacturer: line.batteryPackManufacturer || '',
+    batteryEnergyKwh: line.batteryEnergyKwh,
+    batteryPackUnitPrice: line.batteryPackUnitPrice,
   }))
   formOpen.value = true
 }
@@ -368,21 +434,36 @@ function openPriceEditor(record: SalesOrder) {
     productName: line.productName,
     quantity: Number(line.quantity),
     unitPrice: Number(line.unitPrice) > 0 ? Number(line.unitPrice) : undefined,
+    isBattery: isBatteryLine(line as unknown as Record<string, any>),
+    batteryBoxUnitPrice: line.batteryBoxUnitPrice,
+    batteryPackUnitPrice: line.batteryPackUnitPrice,
   }))
   priceOpen.value = true
 }
 
 async function savePrices() {
   if (!priceOrder.value) return
-  if (priceLines.value.some((line) => !line.unitPrice || Number(line.unitPrice) <= 0)) {
-    message.warning('请为所有商品填写大于 0 的成交价')
-    return
+  for (const line of priceLines.value) {
+    if (line.isBattery) {
+      if (Number(line.batteryBoxUnitPrice || 0) < 0 || Number(line.batteryPackUnitPrice || 0) < 0
+          || Number(line.batteryBoxUnitPrice || 0) + Number(line.batteryPackUnitPrice || 0) <= 0) {
+        message.warning('请填写有效的电池箱和电池包成交价')
+        return
+      }
+    } else if (!line.unitPrice || Number(line.unitPrice) <= 0) {
+      message.warning('请为所有商品填写大于 0 的成交价')
+      return
+    }
   }
   saving.value = true
   try {
     await salesApi.updatePrices(priceOrder.value.id, priceLines.value.map((line) => ({
       orderLineId: line.orderLineId,
-      unitPrice: Number(line.unitPrice),
+      unitPrice: line.isBattery
+        ? Number(line.batteryBoxUnitPrice || 0) + Number(line.batteryPackUnitPrice || 0)
+        : Number(line.unitPrice),
+      batteryBoxUnitPrice: line.isBattery ? Number(line.batteryBoxUnitPrice || 0) : null,
+      batteryPackUnitPrice: line.isBattery ? Number(line.batteryPackUnitPrice || 0) : null,
     })))
     message.success('成交价已补录，可以继续出库')
     priceOpen.value = false
@@ -406,6 +487,20 @@ async function submit() {
   }
   const lines = (form.lines as Record<string, any>[]).filter((line) => line.productId && Number(line.quantity) > 0)
   if (!lines.length) { message.warning('请至少填写一行有效明细'); return }
+  for (const line of lines) {
+    if (!isBatteryLine(line)) continue
+    if (!String(line.batteryBoxManufacturer || '').trim() || !String(line.batteryBoxModel || '').trim()
+        || !String(line.batteryPackManufacturer || '').trim()) {
+      message.warning('请填写电池箱制造商、电池箱型号和电池包制造商')
+      return
+    }
+    if (!(Number(line.batteryEnergyKwh) > 0)) { message.warning('电池能量（kWh）必须大于 0'); return }
+    if (Number(line.batteryBoxUnitPrice || 0) < 0 || Number(line.batteryPackUnitPrice || 0) < 0
+        || batteryUnitPrice(line) <= 0) {
+      message.warning('请填写有效的电池箱和电池包成交价')
+      return
+    }
+  }
   const payload = {
     externalOrderNo: form.externalOrderNo || null,
     customerId: form.customerId,
@@ -414,8 +509,14 @@ async function submit() {
     lines: lines.map((line) => ({
       productId: line.productId,
       quantity: line.quantity,
-      unitPrice: line.unitPrice ?? null,
+      unitPrice: isBatteryLine(line) ? batteryUnitPrice(line) : (line.unitPrice ?? null),
       serialIds: line.serialIds?.length ? line.serialIds : null,
+      batteryBoxManufacturer: isBatteryLine(line) ? line.batteryBoxManufacturer : null,
+      batteryBoxModel: isBatteryLine(line) ? line.batteryBoxModel : null,
+      batteryBoxUnitPrice: isBatteryLine(line) ? line.batteryBoxUnitPrice : null,
+      batteryPackManufacturer: isBatteryLine(line) ? line.batteryPackManufacturer : null,
+      batteryEnergyKwh: isBatteryLine(line) ? line.batteryEnergyKwh : null,
+      batteryPackUnitPrice: isBatteryLine(line) ? line.batteryPackUnitPrice : null,
     })),
   }
   saving.value = true
@@ -525,6 +626,9 @@ onMounted(async () => {
       value: item.id,
       name: item.name,
       trackingMode: item.trackingMode,
+      categoryCode: item.categoryCode,
+      categoryName: item.categoryName,
+      isBattery: isBatteryCategory(item.categoryCode, item.categoryName),
     }))
     availableSerials.value = serials
     stockBalances.value = balances

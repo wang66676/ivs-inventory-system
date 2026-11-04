@@ -33,7 +33,7 @@ public class RetailMasterDataAdapter implements RetailMasterDataPort {
                 .orElseThrow(() -> new NotFoundException("序列号档案", serialId));
         MasterdataApi.ProductView product = productService.get(serial.getProductId());
         return new SerialInfo(serial.getId(), serial.getSerialNo(), serial.getProductId(),
-                product.productNo(), product.name(), product.categoryCode(),
+                product.productNo(), product.name(), product.categoryCode(), product.categoryName(),
                 product.trackingMode().name(), serial.getStatus().name());
     }
 

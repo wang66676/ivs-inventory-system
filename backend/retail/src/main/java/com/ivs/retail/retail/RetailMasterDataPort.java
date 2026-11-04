@@ -6,7 +6,7 @@ import java.util.UUID;
 public interface RetailMasterDataPort {
 
     record SerialInfo(UUID id, String serialNo, UUID productId, String productNo, String productName,
-                      String categoryCode, String trackingMode, String serialStatus) {
+                      String categoryCode, String categoryName, String trackingMode, String serialStatus) {
     }
 
     SerialInfo requireSerial(UUID serialId);

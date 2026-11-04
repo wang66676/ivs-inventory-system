@@ -39,8 +39,11 @@ public final class SalesApi {
 
     public record SalesOrderLineView(
             UUID id, int lineNo, UUID productId, String productNo, String productName, String categoryCode,
-            String trackingMode, BigDecimal quantity, BigDecimal deliveredQuantity, BigDecimal remainingQuantity,
-            BigDecimal unitPrice, BigDecimal minPrice, BigDecimal taxRate, BigDecimal amount, boolean belowMinPrice,
+            String categoryName, String trackingMode, BigDecimal quantity, BigDecimal deliveredQuantity,
+            BigDecimal remainingQuantity, BigDecimal unitPrice, BigDecimal minPrice, BigDecimal taxRate,
+            BigDecimal amount, String batteryBoxManufacturer, String batteryBoxModel,
+            BigDecimal batteryBoxUnitPrice, String batteryPackManufacturer, BigDecimal batteryEnergyKwh,
+            BigDecimal batteryPackUnitPrice, boolean belowMinPrice,
             List<UUID> serialIds, List<UUID> remainingSerialIds, String remark
     ) {
     }
@@ -52,14 +55,26 @@ public final class SalesApi {
     }
 
     public record SaveSalesOrderLineCommand(
-            UUID productId, BigDecimal quantity, BigDecimal unitPrice, List<UUID> serialIds, String remark
+            UUID productId, BigDecimal quantity, BigDecimal unitPrice, List<UUID> serialIds, String remark,
+            String batteryBoxManufacturer, String batteryBoxModel, BigDecimal batteryBoxUnitPrice,
+            String batteryPackManufacturer, BigDecimal batteryEnergyKwh, BigDecimal batteryPackUnitPrice
     ) {
+        /** 兼容旧调用：整车与普通商品不填写电池分项信息。 */
+        public SaveSalesOrderLineCommand(UUID productId, BigDecimal quantity, BigDecimal unitPrice,
+                                         List<UUID> serialIds, String remark) {
+            this(productId, quantity, unitPrice, serialIds, remark,
+                    null, null, null, null, null, null);
+        }
     }
 
     public record DeliverLineCommand(UUID orderLineId, BigDecimal quantity, List<UUID> serialIds) {
     }
 
-    public record UpdatePriceLineCommand(UUID orderLineId, BigDecimal unitPrice) {
+    public record UpdatePriceLineCommand(UUID orderLineId, BigDecimal unitPrice,
+                                         BigDecimal batteryBoxUnitPrice, BigDecimal batteryPackUnitPrice) {
+        public UpdatePriceLineCommand(UUID orderLineId, BigDecimal unitPrice) {
+            this(orderLineId, unitPrice, null, null);
+        }
     }
 
     public record UpdatePricesCommand(List<UpdatePriceLineCommand> lines) {

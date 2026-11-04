@@ -55,6 +55,26 @@ public class PurchaseOrderLine {
     @Column(name = "unit_price", nullable = false, precision = 18, scale = 2)
     private BigDecimal unitPrice;
 
+    /** 动力电池箱信息；车辆与其它商品为空。 */
+    @Column(name = "battery_box_manufacturer", length = 200)
+    private String batteryBoxManufacturer;
+
+    @Column(name = "battery_box_model", length = 160)
+    private String batteryBoxModel;
+
+    @Column(name = "battery_box_unit_price", precision = 18, scale = 2)
+    private BigDecimal batteryBoxUnitPrice;
+
+    /** 动力电池包信息；一整块电池由一个电池箱与一个电池包组成。 */
+    @Column(name = "battery_pack_manufacturer", length = 200)
+    private String batteryPackManufacturer;
+
+    @Column(name = "battery_energy_kwh", precision = 18, scale = 3)
+    private BigDecimal batteryEnergyKwh;
+
+    @Column(name = "battery_pack_unit_price", precision = 18, scale = 2)
+    private BigDecimal batteryPackUnitPrice;
+
     @Column(name = "tax_rate", precision = 8, scale = 4)
     private BigDecimal taxRate;
 
@@ -88,6 +108,16 @@ public class PurchaseOrderLine {
                                            BigDecimal unitPrice, BigDecimal taxRate, String configText,
                                            UUID warehouseId, String serialNo, LocalDate certificateApplicationDate,
                                            String remark) {
+        return create(orderId, lineNo, productId, quantity, unitPrice, taxRate, configText, warehouseId,
+                serialNo, certificateApplicationDate, remark, null, null, null, null, null, null);
+    }
+
+    public static PurchaseOrderLine create(UUID orderId, int lineNo, UUID productId, BigDecimal quantity,
+                                           BigDecimal unitPrice, BigDecimal taxRate, String configText,
+                                           UUID warehouseId, String serialNo, LocalDate certificateApplicationDate,
+                                           String remark, String batteryBoxManufacturer, String batteryBoxModel,
+                                           BigDecimal batteryBoxUnitPrice, String batteryPackManufacturer,
+                                           BigDecimal batteryEnergyKwh, BigDecimal batteryPackUnitPrice) {
         PurchaseOrderLine line = new PurchaseOrderLine();
         line.id = UUID.randomUUID();
         line.orderId = orderId;
@@ -106,6 +136,12 @@ public class PurchaseOrderLine {
         if (line.unitPrice.signum() < 0) {
             throw new IllegalArgumentException("采购单价不能为负数");
         }
+        line.batteryBoxManufacturer = normalize(batteryBoxManufacturer);
+        line.batteryBoxModel = normalize(batteryBoxModel);
+        line.batteryBoxUnitPrice = batteryBoxUnitPrice == null ? null : money(batteryBoxUnitPrice);
+        line.batteryPackManufacturer = normalize(batteryPackManufacturer);
+        line.batteryEnergyKwh = batteryEnergyKwh == null ? null : qty(batteryEnergyKwh);
+        line.batteryPackUnitPrice = batteryPackUnitPrice == null ? null : money(batteryPackUnitPrice);
         line.taxRate = taxRate;
         line.amount = money(line.quantity.multiply(line.unitPrice));
         line.remark = remark;
@@ -183,6 +219,12 @@ public class PurchaseOrderLine {
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getReceivedQuantity() { return receivedQuantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }
+    public String getBatteryBoxManufacturer() { return batteryBoxManufacturer; }
+    public String getBatteryBoxModel() { return batteryBoxModel; }
+    public BigDecimal getBatteryBoxUnitPrice() { return batteryBoxUnitPrice; }
+    public String getBatteryPackManufacturer() { return batteryPackManufacturer; }
+    public BigDecimal getBatteryEnergyKwh() { return batteryEnergyKwh; }
+    public BigDecimal getBatteryPackUnitPrice() { return batteryPackUnitPrice; }
     public BigDecimal getTaxRate() { return taxRate; }
     public BigDecimal getAmount() { return amount; }
     public String getRemark() { return remark; }

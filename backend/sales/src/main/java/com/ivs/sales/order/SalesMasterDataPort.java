@@ -7,7 +7,8 @@ import java.util.UUID;
 /** 主数据与取价只读端口（实现放在 app 层，保持模块之间零直接依赖）。 */
 public interface SalesMasterDataPort {
 
-    record ProductInfo(UUID id, String productNo, String name, String categoryCode, String trackingMode) {
+    record ProductInfo(UUID id, String productNo, String name, String categoryCode, String categoryName,
+                       String trackingMode) {
     }
 
     record CustomerInfo(UUID id, String code, String name, String customerType, BigDecimal creditLimit,

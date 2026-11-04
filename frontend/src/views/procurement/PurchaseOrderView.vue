@@ -2,7 +2,7 @@
   <div class="purchase-order-page">
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="采购明细按商品行下单：车系、型号、配置、数量、单价、返利政策和收货仓库可维护。VIN/SN 在收货时录入，收货入库独立展示并与采购明细联动。" />
+               message="采购明细按商品行下单：车辆沿用车型、配置、返利政策；动力电池按电池箱 + 电池包分项填写，电池无返利政策。VIN/SN 在收货时录入并与采购明细联动。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">新建采购单</a-button>
         <a-button @click="reload">刷新</a-button>
@@ -13,14 +13,20 @@
         <a-input v-model:value="keyword" placeholder="订单编号" allow-clear style="width:220px" @press-enter="reload" />
       </a-space>
       <a-table v-resizable-columns :data-source="purchaseRows" :columns="columns" row-key="rowKey" size="middle"
-               :pagination="false" :scroll="{ x: 1550 }">
+               :pagination="false" :scroll="{ x: 2260 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'orderNo'">{{ record.order.externalOrderNo || record.order.orderNo }}</template>
-          <template v-else-if="column.key === 'series'">{{ record.line.series || '-' }}</template>
+          <template v-else-if="column.key === 'series'">{{ record.line.series || record.line.productName || '-' }}</template>
           <template v-else-if="column.key === 'model'">{{ modelOf(record.line.productId) }}</template>
           <template v-else-if="column.key === 'config'">{{ record.line.configText || record.line.configCode || '-' }}</template>
           <template v-else-if="column.key === 'quantity'">{{ record.line.quantity }}</template>
           <template v-else-if="column.key === 'unitPrice'">{{ money(record.line.unitPrice) }}</template>
+          <template v-else-if="column.key === 'batteryBoxManufacturer'">{{ record.line.batteryBoxManufacturer || '-' }}</template>
+          <template v-else-if="column.key === 'batteryBoxModel'">{{ record.line.batteryBoxModel || '-' }}</template>
+          <template v-else-if="column.key === 'batteryBoxUnitPrice'">{{ money(record.line.batteryBoxUnitPrice) }}</template>
+          <template v-else-if="column.key === 'batteryPackManufacturer'">{{ record.line.batteryPackManufacturer || '-' }}</template>
+          <template v-else-if="column.key === 'batteryEnergyKwh'">{{ record.line.batteryEnergyKwh ?? '-' }}</template>
+          <template v-else-if="column.key === 'batteryPackUnitPrice'">{{ money(record.line.batteryPackUnitPrice) }}</template>
           <template v-else-if="column.key === 'amount'"><b>{{ money(record.line.amount) }}</b></template>
           <template v-else-if="column.key === 'policies'">
             <a-space v-if="record.line.policies?.length" wrap size="small">
@@ -62,26 +68,33 @@
           <a-button @click="downloadTemplate">下载导入模板</a-button>
           <a-button :disabled="!form.supplierId" @click="triggerUpload">批量上传</a-button>
           <a-button @click="exportCurrent">导出当前明细</a-button>
-          <span class="hint">CSV 字段：订单编号、车系、型号、配置、数量、单价、总计车款、返利政策、收货仓库</span>
+          <span class="hint">CSV 同时兼容车辆与电池字段；电池按电池箱、电池包分项计价，返利政策留空</span>
           <input ref="fileInput" type="file" accept=".csv,text/csv" style="display:none" @change="onFileChange" />
         </a-space>
         <a-divider orientation="left" style="font-size:13px">采购明细</a-divider>
-        <a-table :data-source="form.lines" row-key="_key" size="small" :pagination="false" :scroll="{ x: 1310 }">
+        <a-table :data-source="form.lines" row-key="_key" size="small" :pagination="false" :scroll="{ x: 2240 }">
           <a-table-column title="订单编号" :width="140"><template #default="{ record: line }"><a-input v-model:value="line.orderNo" placeholder="订单编号" /></template></a-table-column>
-          <a-table-column title="车系" :width="110">
+          <a-table-column title="商品 / 车系" :width="180">
             <template #default="{ record: line }">
               <a-select v-model:value="line.productId" :options="seriesOptions" show-search placeholder="车系"
-                        option-filter-prop="label" style="width:100%" />
+                        option-filter-prop="label" style="width:100%" @change="() => onProductChange(line)" />
             </template>
           </a-table-column>
           <a-table-column title="型号" :width="120"><template #default="{ record: line }">{{ modelOf(line.productId) }}</template></a-table-column>
-          <a-table-column title="配置" :width="140"><template #default="{ record: line }"><a-input v-model:value="line.configText" placeholder="人工输入配置" /></template></a-table-column>
-          <a-table-column title="数量" :width="70"><template #default="{ record: line }"><a-input-number v-model:value="line.quantity" :min="0.001" style="width:100%" /></template></a-table-column>
-          <a-table-column title="单价" :width="150"><template #default="{ record: line }"><MoneyInput v-model:value="line.unitPrice" :min="0" :precision="2" style="width:100%" /></template></a-table-column>
-          <a-table-column title="总计车款" :width="110" align="right"><template #default="{ record: line }"><b>{{ money(lineTotal(line)) }}</b></template></a-table-column>
+          <a-table-column title="电池箱制造商" :width="170"><template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryBoxManufacturer" placeholder="电池箱制造商" /></template></a-table-column>
+          <a-table-column title="电池箱型号" :width="140"><template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryBoxModel" placeholder="电池箱型号" /></template></a-table-column>
+          <a-table-column title="电池箱单价" :width="140"><template #default="{ record: line }"><MoneyInput v-if="isBatteryLine(line)" v-model:value="line.batteryBoxUnitPrice" :min="0" :precision="2" style="width:100%" /></template></a-table-column>
+          <a-table-column title="电池包制造商" :width="170"><template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryPackManufacturer" placeholder="电池包制造商" /></template></a-table-column>
+          <a-table-column title="能量（kWh）" :width="130"><template #default="{ record: line }"><a-input-number v-if="isBatteryLine(line)" v-model:value="line.batteryEnergyKwh" :min="0.001" :precision="3" style="width:100%" /></template></a-table-column>
+          <a-table-column title="电池包单价" :width="140"><template #default="{ record: line }"><MoneyInput v-if="isBatteryLine(line)" v-model:value="line.batteryPackUnitPrice" :min="0" :precision="2" style="width:100%" /></template></a-table-column>
+          <a-table-column title="配置" :width="140"><template #default="{ record: line }"><a-input v-if="!isBatteryLine(line)" v-model:value="line.configText" placeholder="人工输入配置" /><span v-else>-</span></template></a-table-column>
+          <a-table-column title="数量" :width="90"><template #default="{ record: line }"><a-input-number v-model:value="line.quantity" :min="0.001" style="width:100%" /></template></a-table-column>
+          <a-table-column title="合计单价" :width="150"><template #default="{ record: line }"><span v-if="isBatteryLine(line)">{{ money(unitPriceOf(line)) }}</span><MoneyInput v-else v-model:value="line.unitPrice" :min="0" :precision="2" style="width:100%" /></template></a-table-column>
+          <a-table-column title="合计总价" :width="130" align="right"><template #default="{ record: line }"><b>{{ money(lineTotal(line)) }}</b></template></a-table-column>
           <a-table-column title="返利政策（可多选）" :width="230">
             <template #default="{ record: line }">
-              <a-select v-model:value="line.policyIds" mode="multiple" :options="policyOptionsForSupplier"
+              <span v-if="isBatteryLine(line)" class="hint">电池无返利政策</span>
+              <a-select v-else v-model:value="line.policyIds" mode="multiple" :options="policyOptionsForSupplier"
                         :disabled="!form.supplierId" allow-clear show-search option-filter-prop="label"
                         :not-found-content="form.supplierId ? '该供应商暂无已发布返利政策' : '请先选择供应商'"
                         :placeholder="form.supplierId ? '可后补' : '请先选择供应商'" style="width:100%" />
@@ -92,7 +105,7 @@
               <a-select v-model:value="line.warehouseId" :options="warehouseOptions" allow-clear placeholder="可后补" style="width:100%" />
             </template>
           </a-table-column>
-          <a-table-column title="操作" :width="140" align="center">
+          <a-table-column title="操作" :width="90" align="center">
             <template #default="{ record: line }">
               <a-button danger size="small" :disabled="form.lines.length <= 1" @click="removeLine(line._key)">删除</a-button>
             </template>
@@ -111,8 +124,9 @@
           <a-select v-model:value="receiveForm.warehouseId" :options="warehouseOptions" allow-clear />
         </a-form-item>
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false"
-                 :scroll="{ x: 1000 }" :locale="{ emptyText: '无明细' }">
+                 :scroll="{ x: 1360 }" :locale="{ emptyText: '无明细' }">
           <a-table-column title="车系" :width="180"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
+          <a-table-column title="电池信息" :width="360"><template #default="{ record }">{{ batteryText(record) }}</template></a-table-column>
           <a-table-column title="待收" data-index="remainingQuantity" :width="80" />
           <a-table-column title="本次收货" :width="620">
             <template #default="{ record }">
@@ -161,7 +175,7 @@ const current = ref<PurchaseOrder | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const supplierOptions = ref<{ label: string; value: string }[]>([])
 const warehouseOptions = ref<{ label: string; value: string; name: string; code: string }[]>([])
-const productOptions = ref<{ label: string; value: string; productNo: string; name: string; series?: string; model?: string }[]>([])
+const productOptions = ref<{ label: string; value: string; productNo: string; name: string; series?: string; model?: string; categoryCode?: string; categoryName?: string; isBattery: boolean }[]>([])
 const policies = ref<Policy[]>([])
 interface PurchaseListRow {
   rowKey: string
@@ -180,12 +194,18 @@ const purchaseRows = computed<PurchaseListRow[]>(() => rows.value.flatMap((order
 }))))
 const columns = [
   { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true },
-  { title: '车系', key: 'series', width: 120, ellipsis: true },
+  { title: '商品 / 车系', key: 'series', width: 150, ellipsis: true },
   { title: '型号', key: 'model', width: 120, ellipsis: true },
+  { title: '电池箱制造商', key: 'batteryBoxManufacturer', width: 160, ellipsis: true },
+  { title: '电池箱型号', key: 'batteryBoxModel', width: 130, ellipsis: true },
+  { title: '电池箱单价', key: 'batteryBoxUnitPrice', width: 120, align: 'right' },
+  { title: '电池包制造商', key: 'batteryPackManufacturer', width: 160, ellipsis: true },
+  { title: '能量（kWh）', key: 'batteryEnergyKwh', width: 110, align: 'right' },
+  { title: '电池包单价', key: 'batteryPackUnitPrice', width: 120, align: 'right' },
   { title: '配置', key: 'config', width: 140, ellipsis: true },
   { title: '数量', key: 'quantity', width: 80, align: 'right' },
-  { title: '单价', key: 'unitPrice', width: 110, align: 'right' },
-  { title: '总计车款', key: 'amount', width: 140, align: 'right' },
+  { title: '合计单价', key: 'unitPrice', width: 120, align: 'right' },
+  { title: '合计总价', key: 'amount', width: 140, align: 'right' },
   { title: '返利政策', key: 'policies', width: 240 },
   { title: '收货仓库', key: 'warehouse', width: 150, ellipsis: true },
   { title: '操作', key: 'actions', width: 300, fixed: 'right' },
@@ -194,7 +214,7 @@ const statusOptions = Object.entries(PURCHASE_STATUS_LABELS).map(([value, label]
 const seriesOptions = computed(() => {
   const bySeries = new Map<string, string>()
   for (const item of productOptions.value) {
-    const series = item.series || item.name
+    const series = item.isBattery ? item.name : (item.series || item.name)
     if (series && !bySeries.has(series)) bySeries.set(series, item.value)
   }
   return [...bySeries.entries()].sort(([a], [b]) => a.localeCompare(b, 'zh-CN'))
@@ -205,19 +225,49 @@ const policyOptionsForSupplier = computed(() => policies.value
   .map((policy) => ({ label: `${policy.policyNo} ${policy.name}`, value: policy.id })))
 function newLine() {
   return { _key: `line-${Date.now()}-${Math.random()}`, orderNo: '', productId: undefined,
-    configText: '', quantity: 1, unitPrice: undefined, policyIds: [] as string[], warehouseId: undefined }
+    configText: '', quantity: 1, unitPrice: undefined, policyIds: [] as string[], warehouseId: undefined,
+    batteryBoxManufacturer: '', batteryBoxModel: '', batteryBoxUnitPrice: undefined,
+    batteryPackManufacturer: '', batteryEnergyKwh: undefined, batteryPackUnitPrice: undefined }
 }
 function modelOf(productId?: string) { return productOptions.value.find((item) => item.value === productId)?.model || '-' }
+function isBatteryCategory(categoryCode?: string, categoryName?: string) {
+  const code = (categoryCode || '').toUpperCase()
+  return code === 'BATTERY' || code.startsWith('BATTERY-') || (categoryName || '').includes('电池')
+}
+function isBatteryLine(line: Record<string, any>) {
+  return productOptions.value.find((item) => item.value === line.productId)?.isBattery === true
+}
+function unitPriceOf(line: Record<string, any>) {
+  if (!isBatteryLine(line)) return Number(line.unitPrice ?? 0)
+  return Number(line.batteryBoxUnitPrice ?? 0) + Number(line.batteryPackUnitPrice ?? 0)
+}
+function onProductChange(line: Record<string, any>) {
+  if (isBatteryLine(line)) {
+    line.policyIds = []
+    line.configText = ''
+  } else {
+    line.batteryBoxManufacturer = ''
+    line.batteryBoxModel = ''
+    line.batteryBoxUnitPrice = undefined
+    line.batteryPackManufacturer = ''
+    line.batteryEnergyKwh = undefined
+    line.batteryPackUnitPrice = undefined
+  }
+}
 function addLine() { form.lines.push(newLine()) }
 function removeLine(key: string) {
   if (form.lines.length <= 1) return
   const index = (form.lines as Record<string, any>[]).findIndex((line) => line._key === key)
   if (index >= 0) form.lines.splice(index, 1)
 }
-function lineTotal(line: Record<string, any>) { return Number(line.quantity ?? 0) * Number(line.unitPrice ?? 0) }
+function lineTotal(line: Record<string, any>) { return Number(line.quantity ?? 0) * unitPriceOf(line) }
 function money(value?: number | null) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
-function seriesOf(productId?: string) { return productOptions.value.find((item) => item.value === productId)?.series || '' }
+function seriesOf(productId?: string) { const item = productOptions.value.find((option) => option.value === productId); return item?.series || item?.name || '' }
 function warehouseLabel(id?: string) { return warehouseOptions.value.find((item) => item.value === id)?.name || '' }
+function batteryText(line: PurchaseOrderLine) {
+  if (!line.batteryBoxManufacturer && !line.batteryPackManufacturer) return '-'
+  return `箱：${line.batteryBoxManufacturer || '-'} / ${line.batteryBoxModel || '-'}；包：${line.batteryPackManufacturer || '-'} / ${line.batteryEnergyKwh ?? '-'}kWh`
+}
 function policyNames(ids: string[]) { return ids.map((id) => policies.value.find((policy) => policy.id === id)?.name).filter(Boolean).join('|') }
 function onSupplierChange() {
   const allowed = new Set(policyOptionsForSupplier.value.map((item) => item.value))
@@ -235,7 +285,10 @@ function openEdit(record: PurchaseOrder) {
   form.lines = record.lines.map((line) => ({ _key: line.id, orderNo: record.externalOrderNo || record.orderNo,
     productId: line.productId, configText: line.configText || line.configCode || '',
     quantity: line.quantity, unitPrice: line.unitPrice, policyIds: line.policies.map((policy) => policy.id),
-    warehouseId: line.warehouseId }))
+    warehouseId: line.warehouseId, batteryBoxManufacturer: line.batteryBoxManufacturer || '',
+    batteryBoxModel: line.batteryBoxModel || '', batteryBoxUnitPrice: line.batteryBoxUnitPrice,
+    batteryPackManufacturer: line.batteryPackManufacturer || '', batteryEnergyKwh: line.batteryEnergyKwh,
+    batteryPackUnitPrice: line.batteryPackUnitPrice }))
   createOpen.value = true
 }
 function resolveWarehouse(value: string) {
@@ -245,7 +298,9 @@ function resolveWarehouse(value: string) {
     || warehouseOptions.value.find((item) => item.code.toLowerCase() === key)
 }
 function resolveProduct(series: string) {
-  return productOptions.value.find((item) => (item.series || item.name).toLowerCase() === series.trim().toLowerCase())
+  const key = series.trim().toLowerCase()
+  return productOptions.value.find((item) => [item.series, item.name, item.productNo]
+    .filter(Boolean).some((value) => String(value).toLowerCase() === key))
 }
 function parseCsv(text: string): string[][] {
   const source = text.replace(/^\uFEFF/, ''); const result: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false
@@ -269,15 +324,30 @@ async function importCsv(file: File) {
     const headers = new Map(csvRows[0].map((header, index) => [header.trim(), index])); const imported: Record<string, any>[] = []
     for (let index = 1; index < csvRows.length; index += 1) {
       const row = csvRows[index]; const orderNo = field(row, headers, '订单编号', '订单号')
-      const series = field(row, headers, '车系'); const product = resolveProduct(series)
+      const series = field(row, headers, '商品 / 车系', '商品', '车系'); const product = resolveProduct(series)
       const quantity = Number(field(row, headers, '数量'))
-      const unitPrice = Number(field(row, headers, '单价')); if (!orderNo) throw new Error(`第 ${index + 1} 行缺少订单编号`)
-      if (!product) throw new Error(`第 ${index + 1} 行无法匹配车系：${series}`)
+      if (!orderNo) throw new Error(`第 ${index + 1} 行缺少订单编号`)
+      if (!product) throw new Error(`第 ${index + 1} 行无法匹配商品/车系：${series}`)
       if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`第 ${index + 1} 行数量无效`)
+      const battery = product.isBattery
+      const boxUnitPrice = Number(field(row, headers, '电池箱单价'))
+      const packUnitPrice = Number(field(row, headers, '电池包单价'))
+      const unitPrice = battery ? boxUnitPrice + packUnitPrice : Number(field(row, headers, '合计单价', '单价'))
       if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error(`第 ${index + 1} 行单价无效`)
+      if (battery) {
+        if (!field(row, headers, '电池箱制造商') || !field(row, headers, '电池箱型号') || !field(row, headers, '电池包制造商')) {
+          throw new Error(`第 ${index + 1} 行电池分项信息不完整`)
+        }
+        if (!(Number(field(row, headers, '能量（kWh）', '能量(kWh)', '能量')) > 0)) {
+          throw new Error(`第 ${index + 1} 行电池能量无效`)
+        }
+        if (!Number.isFinite(boxUnitPrice) || boxUnitPrice < 0 || !Number.isFinite(packUnitPrice) || packUnitPrice < 0) {
+          throw new Error(`第 ${index + 1} 行电池箱/电池包单价无效`)
+        }
+      }
       const warehouseText = field(row, headers, '收货仓库'); const warehouse = warehouseText ? resolveWarehouse(warehouseText) : undefined
       if (warehouseText && !warehouse) throw new Error(`第 ${index + 1} 行仓库无法匹配：${warehouseText}`)
-      const policyText = field(row, headers, '返利政策'); const policyIds: string[] = []
+      const policyText = battery ? '' : field(row, headers, '返利政策'); const policyIds: string[] = []
       if (policyText) for (const token of policyText.split(/[|；;]/).map((item) => item.trim()).filter(Boolean)) {
         const found = policyOptionsForSupplier.value.find((option) => { const policy = policies.value.find((item) => item.id === option.value)
           return policy && (policy.name === token || policy.policyNo === token || option.label === token) })
@@ -285,8 +355,12 @@ async function importCsv(file: File) {
         policyIds.push(found.value)
       }
       imported.push({ _key: `line-${Date.now()}-${index}-${Math.random()}`, orderNo,
-        productId: product.value, configText: field(row, headers, '配置'), quantity, unitPrice, policyIds,
-        warehouseId: warehouse?.value })
+        productId: product.value, configText: battery ? '' : field(row, headers, '配置'), quantity, unitPrice, policyIds,
+        warehouseId: warehouse?.value, batteryBoxManufacturer: battery ? field(row, headers, '电池箱制造商') : '',
+        batteryBoxModel: battery ? field(row, headers, '电池箱型号') : '', batteryBoxUnitPrice: battery ? boxUnitPrice : undefined,
+        batteryPackManufacturer: battery ? field(row, headers, '电池包制造商') : '',
+        batteryEnergyKwh: battery ? Number(field(row, headers, '能量（kWh）', '能量(kWh)', '能量')) : undefined,
+        batteryPackUnitPrice: battery ? packUnitPrice : undefined })
     }
     form.lines = imported; message.success(`已导入 ${imported.length} 条采购明细`)
   } catch (error) { message.error((error as Error).message) }
@@ -301,20 +375,32 @@ function downloadCsv(filename: string, dataRows: unknown[][]) {
   const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url)
 }
 function downloadTemplate() {
-  downloadCsv('采购单导入模板.csv', [['订单编号', '车系', '型号', '配置', '数量', '单价', '总计车款', '返利政策', '收货仓库'],
-    ['PO-2026-001', '示例车系', '6x4', '人工输入配置', 2, 420000, 840000, '政策A|政策B', '主仓']])
+  const headers = ['订单编号', '商品 / 车系', '型号', '电池箱制造商', '电池箱型号', '电池箱单价',
+    '电池包制造商', '能量（kWh）', '电池包单价', '配置', '数量', '合计单价', '合计总价', '返利政策', '收货仓库']
+  downloadCsv('采购单导入模板.csv', [headers,
+    ['PO-2026-001', '示例车系', '6x4', '', '', '', '', '', '', '人工输入配置', 2, 420000, 840000, '政策A|政策B', '主仓'],
+    ['PO-2026-002', '282kWh 动力电池', 'B282', '电池箱厂A', 'BOX-282', 60000, '电池包厂B', 282, 180000, '', 1, 240000, 240000, '', '电池仓']])
 }
 function exportCurrent() {
+  const headers = ['订单编号', '商品 / 车系', '型号', '电池箱制造商', '电池箱型号', '电池箱单价',
+    '电池包制造商', '能量（kWh）', '电池包单价', '配置', '数量', '合计单价', '合计总价', '返利政策', '收货仓库']
   const data = (form.lines as Record<string, any>[]).map((line) => [line.orderNo, seriesOf(line.productId),
-    modelOf(line.productId), line.configText, line.quantity, line.unitPrice, lineTotal(line), policyNames(line.policyIds ?? []), warehouseLabel(line.warehouseId)])
-  downloadCsv('采购明细.csv', [['订单编号', '车系', '型号', '配置', '数量', '单价', '总计车款', '返利政策', '收货仓库'], ...data])
+    modelOf(line.productId), line.batteryBoxManufacturer || '', line.batteryBoxModel || '', line.batteryBoxUnitPrice ?? '',
+    line.batteryPackManufacturer || '', line.batteryEnergyKwh ?? '', line.batteryPackUnitPrice ?? '',
+    line.configText || '', line.quantity, unitPriceOf(line), lineTotal(line),
+    isBatteryLine(line) ? '' : policyNames(line.policyIds ?? []), warehouseLabel(line.warehouseId)])
+  downloadCsv('采购明细.csv', [headers, ...data])
 }
 function exportOrders() {
   const data: unknown[][] = []
-  for (const order of rows.value) for (const line of order.lines) data.push([order.externalOrderNo || order.orderNo, line.series || '',
-    modelOf(line.productId), line.configText || line.configCode || '', line.quantity, line.unitPrice,
+  for (const order of rows.value) for (const line of order.lines) data.push([order.externalOrderNo || order.orderNo,
+    line.series || line.productName, modelOf(line.productId), line.batteryBoxManufacturer || '', line.batteryBoxModel || '',
+    line.batteryBoxUnitPrice ?? '', line.batteryPackManufacturer || '', line.batteryEnergyKwh ?? '',
+    line.batteryPackUnitPrice ?? '', line.configText || line.configCode || '', line.quantity, line.unitPrice,
     line.amount, line.policies.map((policy) => policy.name).join('|'), line.warehouseName || order.warehouseName || ''])
-  downloadCsv('采购单导出.csv', [['订单编号', '车系', '型号', '配置', '数量', '单价', '总计车款', '返利政策', '收货仓库'], ...data])
+  const headers = ['订单编号', '商品 / 车系', '型号', '电池箱制造商', '电池箱型号', '电池箱单价',
+    '电池包制造商', '能量（kWh）', '电池包单价', '配置', '数量', '合计单价', '合计总价', '返利政策', '收货仓库']
+  downloadCsv('采购单导出.csv', [headers, ...data])
 }
 async function submit() {
   if (!form.supplierId) { message.warning('请选择供应商'); return }
@@ -324,7 +410,19 @@ async function submit() {
     if (!String(line.orderNo ?? '').trim()) { message.warning('每条明细都必须填写订单编号'); return }
     if (!line.productId) { message.warning('请选择车系'); return }
     if (!(Number(line.quantity) > 0)) { message.warning('数量必须大于 0'); return }
-    if (line.unitPrice == null || !(Number(line.unitPrice) >= 0)) { message.warning('请填写有效单价'); return }
+    if (isBatteryLine(line)) {
+      if (!String(line.batteryBoxManufacturer ?? '').trim() || !String(line.batteryBoxModel ?? '').trim()
+          || !String(line.batteryPackManufacturer ?? '').trim()) {
+        message.warning('请填写电池箱制造商、电池箱型号和电池包制造商'); return
+      }
+      if (!(Number(line.batteryEnergyKwh) > 0)) { message.warning('电池能量（kWh）必须大于 0'); return }
+      if (!(Number(line.batteryBoxUnitPrice) >= 0) || !(Number(line.batteryPackUnitPrice) >= 0)) {
+        message.warning('请填写有效的电池箱单价和电池包单价'); return
+      }
+      if (!(unitPriceOf(line) > 0)) { message.warning('合计单价必须大于 0'); return }
+    } else if (line.unitPrice == null || !(Number(line.unitPrice) >= 0)) {
+      message.warning('请填写有效单价'); return
+    }
   }
   const grouped = new Map<string, Record<string, any>[]>()
   for (const line of lines) { const orderNo = String(line.orderNo).trim(); if (!grouped.has(orderNo)) grouped.set(orderNo, []); grouped.get(orderNo)!.push(line) }
@@ -332,8 +430,15 @@ async function submit() {
   try {
     const bodyFor = (orderLines: Record<string, any>[]) => ({ supplierId: form.supplierId, warehouseId: null,
       expectedDate: form.expectedDate, remark: form.remark,
-      lines: orderLines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitPrice: line.unitPrice,
-        configText: line.configText || null, warehouseId: line.warehouseId || null, policyIds: line.policyIds ?? [] })) })
+      lines: orderLines.map((line) => ({ productId: line.productId, quantity: line.quantity,
+        unitPrice: unitPriceOf(line), configText: line.configText || null, warehouseId: line.warehouseId || null,
+        policyIds: isBatteryLine(line) ? [] : (line.policyIds ?? []),
+        batteryBoxManufacturer: isBatteryLine(line) ? line.batteryBoxManufacturer : null,
+        batteryBoxModel: isBatteryLine(line) ? line.batteryBoxModel : null,
+        batteryBoxUnitPrice: isBatteryLine(line) ? line.batteryBoxUnitPrice : null,
+        batteryPackManufacturer: isBatteryLine(line) ? line.batteryPackManufacturer : null,
+        batteryEnergyKwh: isBatteryLine(line) ? line.batteryEnergyKwh : null,
+        batteryPackUnitPrice: isBatteryLine(line) ? line.batteryPackUnitPrice : null })) })
     if (editingId.value) { await purchaseApi.update(editingId.value, { externalOrderNo: [...grouped.keys()][0], ...bodyFor([...grouped.values()][0]) }); message.success('采购单已更新') }
     else { for (const [orderNo, orderLines] of grouped) await purchaseApi.create({ externalOrderNo: orderNo, ...bodyFor(orderLines) }); message.success(`已创建 ${grouped.size} 张采购单`) }
     createOpen.value = false; await reload()
@@ -401,7 +506,9 @@ onMounted(async () => {
     const [suppliers, warehouses, products, publishedPolicies] = await Promise.all([supplierApi.list(), warehouseApi.list(), productApi.list(), policyApi.list({ status: 'PUBLISHED' })])
     supplierOptions.value = suppliers.map((item) => ({ label: `${item.name}${item.supplierType === 'OEM' ? '（整车厂）' : ''}`, value: item.id }))
     warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id, name: item.name, code: item.code }))
-    productOptions.value = products.map((item) => ({ label: item.name, value: item.id, productNo: item.productNo, name: item.name, series: item.series, model: item.model }))
+    productOptions.value = products.map((item) => ({ label: item.name, value: item.id, productNo: item.productNo,
+      name: item.name, series: item.series, model: item.model, categoryCode: item.categoryCode,
+      categoryName: item.categoryName, isBattery: isBatteryCategory(item.categoryCode, item.categoryName) }))
     policies.value = publishedPolicies
   } catch { /* ignore */ }
   await reload()

@@ -29,7 +29,7 @@ public class MasterDataQueryAdapter implements MasterDataQueryPort {
     public ProductInfo requireProduct(UUID productId) {
         MasterdataApi.ProductView product = productService.get(productId);
         return new ProductInfo(product.id(), product.productNo(), product.name(), product.series(),
-                product.configCode(), product.categoryCode(), product.trackingMode().name());
+                product.configCode(), product.categoryCode(), product.categoryName(), product.trackingMode().name());
     }
 
     @Override

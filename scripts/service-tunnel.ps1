@@ -11,4 +11,3 @@ $process = Start-Process -FilePath $cloudflared `
   -NoNewWindow -PassThru -Wait `
   -RedirectStandardOutput $outLog -RedirectStandardError $errLog
 exit $process.ExitCode
-

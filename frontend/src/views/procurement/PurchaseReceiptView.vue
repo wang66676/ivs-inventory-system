@@ -8,9 +8,10 @@
         <a-button @click="exportReceipts">导出</a-button>
       </a-space>
       <a-table v-resizable-columns :data-source="lines" :columns="columns" row-key="id" size="middle"
-               :pagination="{ pageSize: 20 }" :scroll="{ x: 1310 }">
+               :pagination="{ pageSize: 20 }" :scroll="{ x: 1600 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'unitPrice'">{{ money(record.unitPrice) }}</template>
+          <template v-else-if="column.key === 'batteryInfo'">{{ batteryText(record) }}</template>
           <template v-else-if="column.key === 'certificateApplicationDate'">
             <a-button type="link" size="small" style="padding:0" @click="openCertificate(record)">
               {{ record.certificateApplicationDate || '登记' }}
@@ -88,6 +89,7 @@ const lines = computed<ReceiptLineRow[]>(() => receipts.value.flatMap((receipt) 
 const columns = [
   { title: '订单编号', key: 'orderNo', dataIndex: 'orderNo', width: 150, ellipsis: true },
   { title: '车系', key: 'series', dataIndex: 'series', width: 150, ellipsis: true },
+  { title: '电池信息', key: 'batteryInfo', width: 300, ellipsis: true },
   { title: '驾驶室', key: 'cabType', dataIndex: 'cabType', width: 90, align: 'center' },
   { title: 'VIN / SN', key: 'serialNos', width: 220 },
   { title: '配置', key: 'configText', dataIndex: 'configText', width: 170, ellipsis: true },
@@ -100,11 +102,16 @@ const columns = [
 function money(value?: number) {
   return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
+function batteryText(line: PurchaseReceiptLine) {
+  if (!line.batteryBoxManufacturer && !line.batteryPackManufacturer) return '-'
+  return `箱：${line.batteryBoxManufacturer || '-'} / ${line.batteryBoxModel || '-'}；包：${line.batteryPackManufacturer || '-'} / ${line.batteryEnergyKwh ?? '-'}kWh`
+}
 function exportReceipts() {
   if (!lines.value.length) { message.warning('当前没有可导出的收货入库数据'); return }
   exportCsv<ReceiptLineRow>(`收货入库-${exportTimestamp()}`, [
     { title: '订单编号', value: (row) => row.orderNo },
     { title: '车系', value: (row) => row.series },
+    { title: '电池信息', value: (row) => batteryText(row) },
     { title: '驾驶室', value: (row) => row.cabType },
     { title: 'VIN/SN', value: (row) => row.serialNos?.join('、') },
     { title: '配置', value: (row) => row.configText },

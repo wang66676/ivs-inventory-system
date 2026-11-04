@@ -67,6 +67,9 @@ public class RetailApplicationService {
         if (!"SERIAL".equals(serial.trackingMode())) {
             throw new ConflictException("RETAIL_NOT_SERIAL", "该商品按数量管理，不能登记整车实销");
         }
+        if (isBattery(serial)) {
+            throw new ConflictException("RETAIL_BATTERY_NOT_ALLOWED", "动力电池不需要登记实销");
+        }
         if (retailRepository.findByActiveSerialKey(serial.id()).isPresent()) {
             throw new ConflictException("RETAIL_DUPLICATE_SERIAL",
                     "序列号「" + serial.serialNo() + "」已有有效实销记录，如需重新登记请先冲正");
@@ -177,5 +180,11 @@ public class RetailApplicationService {
 
     private UUID currentUserId() {
         return actors.current().map(actor -> actor.userId()).orElse(null);
+    }
+
+    private boolean isBattery(RetailMasterDataPort.SerialInfo serial) {
+        String code = serial.categoryCode() == null ? "" : serial.categoryCode().toUpperCase();
+        String name = serial.categoryName() == null ? "" : serial.categoryName();
+        return code.equals("BATTERY") || code.startsWith("BATTERY-") || name.contains("电池");
     }
 }

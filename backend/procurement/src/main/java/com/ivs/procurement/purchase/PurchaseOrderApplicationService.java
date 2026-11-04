@@ -155,7 +155,12 @@ public class PurchaseOrderApplicationService {
         BigDecimal total = BigDecimal.ZERO;
         Set<String> seenSerialNos = new LinkedHashSet<>();
         for (ProcurementApi.SavePurchaseOrderLineCommand line : lines) {
-            masterData.requireProduct(line.productId());
+            MasterDataQueryPort.ProductInfo product = masterData.requireProduct(line.productId());
+            boolean battery = isBattery(product);
+            if (battery && line.policyIds() != null && !line.policyIds().isEmpty()) {
+                throw new ConflictException("BATTERY_POLICY_NOT_ALLOWED", "动力电池不支持返利政策");
+            }
+            BatteryPricing batteryPricing = batteryPricing(line, battery);
             if (line.warehouseId() != null) {
                 masterData.requireWarehouse(line.warehouseId());
             }
@@ -173,13 +178,17 @@ public class PurchaseOrderApplicationService {
             PurchaseOrderLine entity;
             try {
                 entity = PurchaseOrderLine.create(order.getId(), lineNo++, line.productId(), quantity,
-                        line.unitPrice(), line.taxRate(), line.configText(), line.warehouseId(), serialNo,
-                        line.certificateApplicationDate(), line.remark());
+                        batteryPricing.unitPrice(), line.taxRate(), line.configText(), line.warehouseId(), serialNo,
+                        line.certificateApplicationDate(), line.remark(), batteryPricing.boxManufacturer(),
+                        batteryPricing.boxModel(), batteryPricing.boxUnitPrice(), batteryPricing.packManufacturer(),
+                        batteryPricing.energyKwh(), batteryPricing.packUnitPrice());
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("PURCHASE_LINE_INVALID", exception.getMessage());
             }
             lineRepository.save(entity);
-            saveLinePolicies(entity.getId(), line.policyIds(), supplierId);
+            if (!battery) {
+                saveLinePolicies(entity.getId(), line.policyIds(), supplierId);
+            }
             total = total.add(entity.getAmount());
         }
         return total;
@@ -307,7 +316,7 @@ public class PurchaseOrderApplicationService {
             List<UUID> policyIds = linePolicyRepository
                     .findByOrderLineIdOrderBySortNoAsc(item.orderLine().getId()).stream()
                     .map(PurchaseOrderLinePolicy::getPolicyId).toList();
-            if (!policyIds.isEmpty()) {
+            if (!isBattery(item.product()) && !policyIds.isEmpty()) {
                 preEntitlementPort.syncSerials(order.getId(), item.orderLine().getId(), item.product().id(),
                         item.unitPrice(), policyIds, item.serialNos());
             }
@@ -413,6 +422,11 @@ public class PurchaseOrderApplicationService {
     private record Prepared(PurchaseOrderLine orderLine, MasterDataQueryPort.ProductInfo product,
                             UUID warehouseId, BigDecimal quantity, BigDecimal unitPrice, String batchNo,
                             List<String> serialNos, LocalDate certificateApplicationDate) {
+    }
+
+    private record BatteryPricing(BigDecimal unitPrice, String boxManufacturer, String boxModel,
+                                  BigDecimal boxUnitPrice, String packManufacturer, BigDecimal energyKwh,
+                                  BigDecimal packUnitPrice) {
     }
 
     private List<String> normalizeSerialNos(List<String> serialNos) {
@@ -548,8 +562,10 @@ public class PurchaseOrderApplicationService {
                     line.getSerialNo(), cabType(line.getConfigText(), product.name()),
                     line.getCertificateApplicationDate(),
                     lineWarehouseId, lineWarehouse == null ? null : lineWarehouse.name(),
-                    product.categoryCode(), product.trackingMode(), line.getQuantity(), line.getReceivedQuantity(),
-                    line.remaining(), line.getUnitPrice(), line.getTaxRate(), line.getAmount(),
+                    product.categoryCode(), product.categoryName(), product.trackingMode(), line.getQuantity(),
+                    line.getReceivedQuantity(), line.remaining(), line.getUnitPrice(), line.getBatteryBoxUnitPrice(),
+                    line.getBatteryBoxManufacturer(), line.getBatteryBoxModel(), line.getBatteryPackManufacturer(),
+                    line.getBatteryEnergyKwh(), line.getBatteryPackUnitPrice(), line.getTaxRate(), line.getAmount(),
                     line.getRemark(), purchaseLineStatus(line), policies));
         }
         return ProcurementApi.PurchaseOrderView.from(order,
@@ -579,7 +595,13 @@ public class PurchaseOrderApplicationService {
                             product.productNo(), product.name(), product.series(), configText,
                             lineWarehouseId, lineWarehouseName, cabType(configText, product.name()),
                             line.getQuantity(), line.getUnitPrice(), line.getBatchNo(),
-                            parseSerialNos(line.getSerialNos()), line.getCertificateApplicationDate());
+                            parseSerialNos(line.getSerialNos()), line.getCertificateApplicationDate(),
+                            orderLine == null ? null : orderLine.getBatteryBoxManufacturer(),
+                            orderLine == null ? null : orderLine.getBatteryBoxModel(),
+                            orderLine == null ? null : orderLine.getBatteryBoxUnitPrice(),
+                            orderLine == null ? null : orderLine.getBatteryPackManufacturer(),
+                            orderLine == null ? null : orderLine.getBatteryEnergyKwh(),
+                            orderLine == null ? null : orderLine.getBatteryPackUnitPrice());
                 }).toList();
         return ProcurementApi.PurchaseReceiptView.from(receipt, orderNo, supplierName, warehouseName, lines);
     }
@@ -598,6 +620,46 @@ public class PurchaseOrderApplicationService {
             return "高顶";
         }
         return null;
+    }
+
+    private BatteryPricing batteryPricing(ProcurementApi.SavePurchaseOrderLineCommand line, boolean battery) {
+        if (!battery) {
+            return new BatteryPricing(line.unitPrice(), null, null, null, null, null, null);
+        }
+        String boxManufacturer = requiredBatteryText(line.batteryBoxManufacturer(), "电池箱制造商");
+        String boxModel = requiredBatteryText(line.batteryBoxModel(), "电池箱型号");
+        String packManufacturer = requiredBatteryText(line.batteryPackManufacturer(), "电池包制造商");
+        BigDecimal boxPrice = requiredBatteryMoney(line.batteryBoxUnitPrice(), "电池箱单价");
+        BigDecimal packPrice = requiredBatteryMoney(line.batteryPackUnitPrice(), "电池包单价");
+        if (line.batteryEnergyKwh() == null || line.batteryEnergyKwh().signum() <= 0) {
+            throw new ConflictException("BATTERY_ENERGY_REQUIRED", "动力电池能量（kWh）必须大于 0");
+        }
+        BigDecimal combinedUnitPrice = boxPrice.add(packPrice);
+        if (combinedUnitPrice.signum() <= 0) {
+            throw new ConflictException("BATTERY_PRICE_REQUIRED", "电池箱单价与电池包单价合计必须大于 0");
+        }
+        return new BatteryPricing(combinedUnitPrice, boxManufacturer, boxModel, boxPrice, packManufacturer,
+                line.batteryEnergyKwh().setScale(3, RoundingMode.HALF_UP), packPrice);
+    }
+
+    private String requiredBatteryText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new ConflictException("BATTERY_DETAIL_REQUIRED", "动力电池请填写" + field);
+        }
+        return value.trim();
+    }
+
+    private BigDecimal requiredBatteryMoney(BigDecimal value, String field) {
+        if (value == null || value.signum() < 0) {
+            throw new ConflictException("BATTERY_PRICE_REQUIRED", "动力电池请填写有效的" + field);
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean isBattery(MasterDataQueryPort.ProductInfo product) {
+        String code = product.categoryCode() == null ? "" : product.categoryCode().toUpperCase();
+        String name = product.categoryName() == null ? "" : product.categoryName();
+        return code.equals("BATTERY") || code.startsWith("BATTERY-") || name.contains("电池");
     }
 
     private String purchaseLineStatus(PurchaseOrderLine line) {

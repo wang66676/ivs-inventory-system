@@ -53,6 +53,9 @@ public class RetailCandidateController {
     public List<RetailCandidateView> list() {
         List<RetailCandidateView> candidates = new java.util.ArrayList<>();
         for (MasterdataApi.SerialView serial : serialService.list(null, null, null)) {
+            if (isBattery(serial.categoryCode(), serial.categoryName())) {
+                continue;
+            }
             if (!Set.of(SerialStatus.LOCKED, SerialStatus.DELIVERED, SerialStatus.SOLD).contains(serial.status())) {
                 continue;
             }
@@ -88,6 +91,12 @@ public class RetailCandidateController {
             }
         }
         return null;
+    }
+
+    private boolean isBattery(String categoryCode, String categoryName) {
+        String code = categoryCode == null ? "" : categoryCode.toUpperCase();
+        String name = categoryName == null ? "" : categoryName;
+        return code.equals("BATTERY") || code.startsWith("BATTERY-") || name.contains("电池");
     }
 
     public record RetailCandidateView(MasterdataApi.SerialView serial, UUID orderId, String orderNo,

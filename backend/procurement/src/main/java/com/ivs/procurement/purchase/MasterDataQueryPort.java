@@ -8,7 +8,8 @@ import java.util.UUID;
  */
 public interface MasterDataQueryPort {
 
-    record ProductInfo(UUID id, String productNo, String name, String series, String configCode, String categoryCode, String trackingMode) {
+    record ProductInfo(UUID id, String productNo, String name, String series, String configCode,
+                       String categoryCode, String categoryName, String trackingMode) {
     }
 
     record SupplierInfo(UUID id, String name, String supplierType) {

@@ -22,11 +22,18 @@ export interface PurchaseOrderLine {
   warehouseId?: string
   warehouseName?: string
   categoryCode: string
+  categoryName?: string
   trackingMode: 'QUANTITY' | 'SERIAL'
   quantity: number
   receivedQuantity: number
   remainingQuantity: number
   unitPrice: number
+  batteryBoxManufacturer?: string
+  batteryBoxModel?: string
+  batteryBoxUnitPrice?: number
+  batteryPackManufacturer?: string
+  batteryEnergyKwh?: number
+  batteryPackUnitPrice?: number
   taxRate?: number
   amount: number
   lineStatus?: string
@@ -66,6 +73,12 @@ export interface PurchaseReceiptLine {
   batchNo?: string
   serialNos: string[]
   certificateApplicationDate?: string
+  batteryBoxManufacturer?: string
+  batteryBoxModel?: string
+  batteryBoxUnitPrice?: number
+  batteryPackManufacturer?: string
+  batteryEnergyKwh?: number
+  batteryPackUnitPrice?: number
 }
 
 export interface PurchaseReceipt {

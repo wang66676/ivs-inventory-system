@@ -39,6 +39,24 @@ public class SalesOrderLine {
     @Column(name = "unit_price", nullable = false, precision = 18, scale = 2)
     private BigDecimal unitPrice;
 
+    @Column(name = "battery_box_manufacturer", length = 200)
+    private String batteryBoxManufacturer;
+
+    @Column(name = "battery_box_model", length = 160)
+    private String batteryBoxModel;
+
+    @Column(name = "battery_box_unit_price", precision = 18, scale = 2)
+    private BigDecimal batteryBoxUnitPrice;
+
+    @Column(name = "battery_pack_manufacturer", length = 200)
+    private String batteryPackManufacturer;
+
+    @Column(name = "battery_energy_kwh", precision = 18, scale = 3)
+    private BigDecimal batteryEnergyKwh;
+
+    @Column(name = "battery_pack_unit_price", precision = 18, scale = 2)
+    private BigDecimal batteryPackUnitPrice;
+
     @Column(name = "min_price", precision = 18, scale = 2)
     private BigDecimal minPrice;
 
@@ -71,6 +89,16 @@ public class SalesOrderLine {
     public static SalesOrderLine create(UUID orderId, int lineNo, UUID productId, BigDecimal quantity,
                                         BigDecimal unitPrice, BigDecimal minPrice, BigDecimal taxRate,
                                         String serialIds, String remark) {
+        return create(orderId, lineNo, productId, quantity, unitPrice, minPrice, taxRate, serialIds, remark,
+                null, null, null, null, null, null);
+    }
+
+    public static SalesOrderLine create(UUID orderId, int lineNo, UUID productId, BigDecimal quantity,
+                                        BigDecimal unitPrice, BigDecimal minPrice, BigDecimal taxRate,
+                                        String serialIds, String remark, String batteryBoxManufacturer,
+                                        String batteryBoxModel, BigDecimal batteryBoxUnitPrice,
+                                        String batteryPackManufacturer, BigDecimal batteryEnergyKwh,
+                                        BigDecimal batteryPackUnitPrice) {
         SalesOrderLine line = new SalesOrderLine();
         line.id = UUID.randomUUID();
         line.orderId = orderId;
@@ -87,6 +115,12 @@ public class SalesOrderLine {
         }
         line.minPrice = minPrice == null ? null : money(minPrice);
         line.taxRate = taxRate;
+        line.batteryBoxManufacturer = normalize(batteryBoxManufacturer);
+        line.batteryBoxModel = normalize(batteryBoxModel);
+        line.batteryBoxUnitPrice = batteryBoxUnitPrice == null ? null : money(batteryBoxUnitPrice);
+        line.batteryPackManufacturer = normalize(batteryPackManufacturer);
+        line.batteryEnergyKwh = batteryEnergyKwh == null ? null : qty(batteryEnergyKwh);
+        line.batteryPackUnitPrice = batteryPackUnitPrice == null ? null : money(batteryPackUnitPrice);
         line.amount = money(line.quantity.multiply(line.unitPrice));
         line.serialIds = serialIds;
         line.remark = remark;
@@ -101,9 +135,22 @@ public class SalesOrderLine {
 
     /** 订单确认后、出库前补录或修正成交价，并同步行金额。 */
     public void updateUnitPrice(BigDecimal unitPrice) {
+        updateUnitPrice(unitPrice, null, null);
+    }
+
+    public void updateUnitPrice(BigDecimal unitPrice, BigDecimal batteryBoxUnitPrice,
+                                BigDecimal batteryPackUnitPrice) {
         BigDecimal next = money(unitPrice);
         if (next.signum() <= 0) {
             throw new IllegalArgumentException("成交价必须大于 0");
+        }
+        if (batteryBoxUnitPrice != null && batteryPackUnitPrice != null) {
+            this.batteryBoxUnitPrice = money(batteryBoxUnitPrice);
+            this.batteryPackUnitPrice = money(batteryPackUnitPrice);
+            next = this.batteryBoxUnitPrice.add(this.batteryPackUnitPrice);
+            if (next.signum() <= 0) {
+                throw new IllegalArgumentException("电池箱与电池包成交价合计必须大于 0");
+            }
         }
         this.unitPrice = next;
         this.amount = money(quantity.multiply(next));
@@ -161,6 +208,12 @@ public class SalesOrderLine {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private static String normalize(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     public UUID getId() { return id; }
     public UUID getOrderId() { return orderId; }
     public int getLineNo() { return lineNo; }
@@ -168,6 +221,12 @@ public class SalesOrderLine {
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getDeliveredQuantity() { return deliveredQuantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }
+    public String getBatteryBoxManufacturer() { return batteryBoxManufacturer; }
+    public String getBatteryBoxModel() { return batteryBoxModel; }
+    public BigDecimal getBatteryBoxUnitPrice() { return batteryBoxUnitPrice; }
+    public String getBatteryPackManufacturer() { return batteryPackManufacturer; }
+    public BigDecimal getBatteryEnergyKwh() { return batteryEnergyKwh; }
+    public BigDecimal getBatteryPackUnitPrice() { return batteryPackUnitPrice; }
     public BigDecimal getMinPrice() { return minPrice; }
     public BigDecimal getTaxRate() { return taxRate; }
     public BigDecimal getAmount() { return amount; }
