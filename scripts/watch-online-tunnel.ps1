@@ -3,6 +3,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $runDir = Join-Path $root '.run'
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 $currentFile = Join-Path $runDir 'online-url.txt'
+$missingCountFile = Join-Path $runDir 'tunnel-missing-count.txt'
 $metricsUrl = 'http://127.0.0.1:20241/metrics'
 $publicUrl = $null
 
@@ -77,6 +78,7 @@ function Sync-GitHubPagesApiUrl([string]$url) {
 
 $publicUrl = Get-TunnelPublicUrl
 if ($publicUrl) {
+  Remove-Item -LiteralPath $missingCountFile -Force -ErrorAction SilentlyContinue
   Set-Content -Path $currentFile -Value $publicUrl -Encoding ascii
   Sync-GitHubPagesApiUrl $publicUrl
   # 临时隧道首次或跨区域请求偶尔会超过 45 秒；连续重试后再判定故障，避免无谓更换网址。
@@ -89,6 +91,17 @@ if ($publicUrl) {
   # Cloudflare 边缘重连期间公网健康检查可能短暂失败，但只要隧道连接已恢复就不要更换网址。
   $metrics = & curl.exe --noproxy '*' -fsS --max-time 10 $metricsUrl 2>$null
   if ($LASTEXITCODE -eq 0 -and (($metrics -join "`n") -match 'cloudflared_tunnel_ha_connections 1')) { exit 0 }
+} else {
+  # 启动阶段先给 cloudflared 时间建立连接，连续 3 分钟仍无公网地址才重启，避免启动竞态导致网址频繁变化。
+  $tunnelProcess = Get-Process cloudflared -ErrorAction SilentlyContinue
+  if ($tunnelProcess) {
+    $missingCount = 1
+    if (Test-Path -LiteralPath $missingCountFile) {
+      $missingCount = [int](Get-Content -LiteralPath $missingCountFile -Raw) + 1
+    }
+    Set-Content -Path $missingCountFile -Value $missingCount -Encoding ascii
+    if ($missingCount -lt 3) { exit 0 }
+  }
 }
 
 schtasks /End /TN '\IVS-Tunnel' 2>$null | Out-Null
