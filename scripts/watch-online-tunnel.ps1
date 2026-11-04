@@ -79,12 +79,16 @@ $publicUrl = Get-TunnelPublicUrl
 if ($publicUrl) {
   Set-Content -Path $currentFile -Value $publicUrl -Encoding ascii
   Sync-GitHubPagesApiUrl $publicUrl
-  # 临时隧道首次或跨区域请求偶尔会超过 20 秒；连续重试后再判定故障，避免无谓更换网址。
-  for ($attempt = 0; $attempt -lt 3; $attempt++) {
+  # 临时隧道首次或跨区域请求偶尔会超过 45 秒；连续重试后再判定故障，避免无谓更换网址。
+  for ($attempt = 0; $attempt -lt 4; $attempt++) {
     $health = & curl.exe --noproxy '*' -fsS --max-time 45 "$publicUrl/actuator/health" 2>$null
     if ($LASTEXITCODE -eq 0 -and $health -match 'UP') { exit 0 }
-    Start-Sleep -Seconds 3
+    Start-Sleep -Seconds 8
   }
+
+  # Cloudflare 边缘重连期间公网健康检查可能短暂失败，但只要隧道连接已恢复就不要更换网址。
+  $metrics = & curl.exe --noproxy '*' -fsS --max-time 10 $metricsUrl 2>$null
+  if ($LASTEXITCODE -eq 0 -and (($metrics -join "`n") -match 'cloudflared_tunnel_ha_connections 1')) { exit 0 }
 }
 
 schtasks /End /TN '\IVS-Tunnel' 2>$null | Out-Null

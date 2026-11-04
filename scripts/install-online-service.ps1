@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $backendScript = Join-Path $root 'scripts\service-backend.ps1'
 $tunnelScript = Join-Path $root 'scripts\service-tunnel.ps1'
@@ -21,7 +21,7 @@ $backendAction = New-ScheduledTaskAction -Execute $pwsh -Argument "-NoProfile -E
 $tunnelAction = New-ScheduledTaskAction -Execute $pwsh -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$tunnelScript`""
 $watchAction = New-ScheduledTaskAction -Execute $pwsh -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$watchScript`""
 $watchTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-  -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
+  -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
 
 Register-ScheduledTask -TaskName 'IVS-Backend' -Action $backendAction -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 Register-ScheduledTask -TaskName 'IVS-Tunnel' -Action $tunnelAction -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
@@ -30,5 +30,5 @@ Register-ScheduledTask -TaskName 'IVS-Tunnel-Watchdog' -Action $watchAction -Tri
 Start-ScheduledTask -TaskName 'IVS-Backend'
 Start-ScheduledTask -TaskName 'IVS-Tunnel'
 Start-ScheduledTask -TaskName 'IVS-Tunnel-Watchdog'
-Write-Host '已安装并启动 IVS-Backend、IVS-Tunnel 与每 5 分钟隧道看护任务'
+Write-Host '已安装并启动 IVS-Backend、IVS-Tunnel 与每分钟隧道看护任务'
 
