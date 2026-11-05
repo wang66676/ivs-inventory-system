@@ -23,15 +23,15 @@ public final class SalesApi {
 
     public record SalesOrderView(
             UUID id, String orderNo, String externalOrderNo, UUID customerId, String customerName, String customerType,
-            UUID warehouseId, String warehouseName, SalesOrderStatus status, BigDecimal totalAmount,
+            UUID warehouseId, String warehouseName, SalesOrderStatus status, String businessScope, BigDecimal totalAmount,
             boolean priceApprovalRequired, boolean priceApproved, Instant lockedAt, String remark, Instant createdAt,
             List<SalesOrderLineView> lines
     ) {
         public static SalesOrderView from(SalesOrder order, String customerName, String customerType,
-                                          String warehouseName, List<SalesOrderLineView> lines) {
+                                          String warehouseName, String businessScope, List<SalesOrderLineView> lines) {
             return new SalesOrderView(order.getId(), order.getOrderNo(), order.getExternalOrderNo(),
                     order.getCustomerId(), customerName, customerType, order.getWarehouseId(), warehouseName,
-                    order.getStatus(), order.getTotalAmount(),
+                    order.getStatus(), businessScope, order.getTotalAmount(),
                     order.isPriceApprovalRequired(), order.getPriceApprovedBy() != null, order.getLockedAt(),
                     order.getRemark(), order.getCreatedAt(), lines);
         }
@@ -85,15 +85,16 @@ public final class SalesApi {
 
     public record SalesDeliveryView(
             UUID id, String deliveryNo, UUID orderId, String orderNo, UUID customerId, String customerName,
-            UUID warehouseId, String warehouseName, DeliveryStatus status, Instant deliveredAt,
+            UUID warehouseId, String warehouseName, DeliveryStatus status, String businessScope, Instant deliveredAt,
             BigDecimal amount, BigDecimal costAmount, BigDecimal grossProfit, String remark,
             List<SalesDeliveryLineView> lines
     ) {
         public static SalesDeliveryView from(SalesDelivery delivery, String orderNo, String customerName,
-                                             String warehouseName, List<SalesDeliveryLineView> lines) {
+                                             String warehouseName, String businessScope,
+                                             List<SalesDeliveryLineView> lines) {
             return new SalesDeliveryView(delivery.getId(), delivery.getDeliveryNo(), delivery.getOrderId(),
                     orderNo, delivery.getCustomerId(), customerName, delivery.getWarehouseId(), warehouseName,
-                    delivery.getStatus(), delivery.getDeliveredAt(), delivery.getAmount(), delivery.getCostAmount(),
+                    delivery.getStatus(), businessScope, delivery.getDeliveredAt(), delivery.getAmount(), delivery.getCostAmount(),
                     delivery.grossProfit(), delivery.getRemark(), lines);
         }
     }

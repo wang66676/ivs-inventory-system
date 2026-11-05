@@ -1,8 +1,7 @@
 <template>
   <div>
     <a-card :bordered="false">
-      <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="销售订单先建单、后补 VIN/SN。草稿可编辑补全信息；车辆按 VIN、动力电池按电池 SN 独立匹配，全部选定后才能锁货，锁货后才能出库。" />
+      <a-alert type="info" show-icon style="margin-bottom:12px" :message="scopeHint" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">新建销售订单</a-button>
         <a-button @click="reload">刷新</a-button>
@@ -213,6 +212,12 @@ import { SALES_STATUS_COLORS, SALES_STATUS_LABELS } from '../../types/sales'
 import type { ProductSerial } from '../../types/masterdata'
 import type { StockBalance } from '../../types/inventory'
 import type { SalesOrder, SalesOrderLine, SalesOrderStatus } from '../../types/sales'
+import type { BusinessScope } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
+const scopeHint = computed(() => props.scope === 'BATTERY'
+  ? '电池销售独立入口：按电池 SN 匹配库存，明细填写电池箱、电池包、能量及分项成交价。'
+  : '整车销售入口：车辆按 VIN 匹配库存，原有政策、锁货和出库流程保持不变。')
 
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_WRITE')
@@ -274,7 +279,7 @@ const productOptionsForWarehouse = computed(() => {
   const selectedIds = new Set((form.lines as Record<string, any>[] | undefined)
     ?.map((line) => line.productId)
     .filter(Boolean) ?? [])
-  return productOptions.value
+  return scopedProductOptions.value
     .filter((item) => sellableIds.has(item.value)
       || (!!editingId.value && selectedIds.has(item.value)))
     .map((item) => {
@@ -285,6 +290,8 @@ const productOptionsForWarehouse = computed(() => {
       return { ...item, label: `${item.name}（采购数量：${formatQuantity(purchaseQuantity)}）` }
     })
 })
+const scopedProductOptions = computed(() => productOptions.value.filter((item) =>
+  item.isBattery === (props.scope === 'BATTERY')))
 
 function formatQuantity(value: number) {
   return Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 })
@@ -382,7 +389,10 @@ function hasZeroPrice(order: SalesOrder) {
 }
 
 async function reload() {
-  try { rows.value = await salesApi.orders({ keyword: keyword.value || undefined, status: filterStatus.value }) }
+  try {
+    const result = await salesApi.orders({ keyword: keyword.value || undefined, status: filterStatus.value })
+    rows.value = result.filter((order) => (order.businessScope || 'VEHICLE') === props.scope)
+  }
   catch (error) { message.error((error as Error).message) }
 }
 async function refreshSerials() {

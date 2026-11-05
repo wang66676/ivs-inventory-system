@@ -38,9 +38,14 @@
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { inventoryApi } from '../../api/inventory'
+import { productApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
 import { LOCK_STATUS_LABELS } from '../../types/inventory'
 import type { StockLock, StockLockStatus } from '../../types/inventory'
+import type { BusinessScope } from '../../utils/businessScope'
+import { isBatteryCategory } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 const lockStatusLabel = (status: string) => LOCK_STATUS_LABELS[status as StockLockStatus]
 
 const auth = useAuthStore()
@@ -48,6 +53,7 @@ const canWrite = auth.can('IVS_WRITE')
 
 const rows = ref<StockLock[]>([])
 const status = ref<string | undefined>(undefined)
+const scopedProductIds = ref<Set<string>>(new Set())
 
 const columns = [
   { title: '商品', key: 'productName', dataIndex: 'productName', width: 200 },
@@ -65,7 +71,8 @@ const statusOptions = Object.entries(LOCK_STATUS_LABELS).map(([value, label]) =>
 
 async function reload() {
   try {
-    rows.value = await inventoryApi.locks({ status: status.value })
+    const result = await inventoryApi.locks({ status: status.value })
+    rows.value = result.filter((row) => scopedProductIds.value.has(row.productId))
   } catch (error) {
     message.error((error as Error).message)
   }
@@ -91,7 +98,15 @@ async function releaseExpired() {
   }
 }
 
-onMounted(reload)
+onMounted(async () => {
+  try {
+    const products = await productApi.list()
+    scopedProductIds.value = new Set(products
+      .filter((item) => isBatteryCategory(item.categoryCode, item.categoryName) === (props.scope === 'BATTERY'))
+      .map((item) => item.id))
+  } catch { /* ignore */ }
+  await reload()
+})
 </script>
 
 <style scoped>

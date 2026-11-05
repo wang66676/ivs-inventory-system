@@ -19,14 +19,15 @@ public final class ProcurementApi {
 
     public record PurchaseOrderView(
             UUID id, String orderNo, String externalOrderNo, UUID supplierId, String supplierName, String supplierType,
-            UUID warehouseId, String warehouseName, PurchaseOrderStatus status, BigDecimal totalAmount,
+            UUID warehouseId, String warehouseName, PurchaseOrderStatus status, String businessScope,
+            BigDecimal totalAmount,
             LocalDate expectedDate, String remark, Instant createdAt, List<PurchaseOrderLineView> lines
     ) {
         public static PurchaseOrderView from(PurchaseOrder order, SupplierInfoView supplier, WarehouseInfoView warehouse,
-                                             List<PurchaseOrderLineView> lines) {
+                                             String businessScope, List<PurchaseOrderLineView> lines) {
             return new PurchaseOrderView(order.getId(), order.getOrderNo(), order.getExternalOrderNo(), order.getSupplierId(),
                     supplier == null ? null : supplier.name(), supplier == null ? null : supplier.type(),
-                    order.getWarehouseId(), warehouse == null ? null : warehouse.name(), order.getStatus(),
+                    order.getWarehouseId(), warehouse == null ? null : warehouse.name(), order.getStatus(), businessScope,
                     order.getTotalAmount(), order.getExpectedDate(), order.getRemark(), order.getCreatedAt(), lines);
         }
     }
@@ -103,14 +104,16 @@ public final class ProcurementApi {
 
     public record PurchaseReceiptView(
             UUID id, String receiptNo, UUID orderId, String orderNo, UUID supplierId, String supplierName,
-            UUID warehouseId, String warehouseName, ReceiptStatus status, Instant receivedAt, BigDecimal amount,
+            UUID warehouseId, String warehouseName, ReceiptStatus status, String businessScope,
+            Instant receivedAt, BigDecimal amount,
             BigDecimal offsetAmount, BigDecimal netAmount, String remark, List<PurchaseReceiptLineView> lines
     ) {
         public static PurchaseReceiptView from(PurchaseReceipt receipt, String orderNo, String supplierName,
-                                              String warehouseName, List<PurchaseReceiptLineView> lines) {
+                                              String warehouseName, String businessScope,
+                                              List<PurchaseReceiptLineView> lines) {
             return new PurchaseReceiptView(receipt.getId(), receipt.getReceiptNo(), receipt.getOrderId(), orderNo,
                     receipt.getSupplierId(), supplierName, receipt.getWarehouseId(), warehouseName,
-                    receipt.getStatus(), receipt.getReceivedAt(), receipt.getAmount(),
+                    receipt.getStatus(), businessScope, receipt.getReceivedAt(), receipt.getAmount(),
                     receipt.getOffsetAmount(), receipt.netAmount(), receipt.getRemark(), lines);
         }
     }

@@ -54,7 +54,7 @@
           </a-dropdown>
         </a-space>
       </a-layout-header>
-      <a-layout-content class="app-content"><router-view /></a-layout-content>
+      <a-layout-content class="app-content"><router-view :key="$route.fullPath" /></a-layout-content>
     </a-layout>
   </a-layout>
 

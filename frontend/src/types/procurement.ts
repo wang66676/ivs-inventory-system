@@ -51,6 +51,7 @@ export interface PurchaseOrder {
   warehouseId?: string
   warehouseName?: string
   status: PurchaseOrderStatus
+  businessScope?: 'VEHICLE' | 'BATTERY'
   totalAmount: number
   expectedDate?: string
   remark?: string
@@ -91,6 +92,7 @@ export interface PurchaseReceipt {
   warehouseId?: string
   warehouseName?: string
   status: ReceiptStatus
+  businessScope?: 'VEHICLE' | 'BATTERY'
   receivedAt: string
   amount: number
   offsetAmount?: number

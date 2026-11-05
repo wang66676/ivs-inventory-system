@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { pinia } from '../stores'
 import { useAuthStore } from '../stores/auth'
+import type { BusinessScope } from '../utils/businessScope'
 
 const Placeholder = () => import('../views/dashboard/ModulePlaceholderView.vue')
 
@@ -12,6 +13,7 @@ type MenuPage = {
   permission?: string
   component?: () => Promise<unknown>
   hideable?: boolean
+  scope?: BusinessScope
 }
 
 /** 业务页面（M0 为占位，M1–M4 逐个替换为真实页面）。 */
@@ -24,27 +26,37 @@ const modulePages: MenuPage[] = [
   { path: '/masterdata/customers', name: 'customer', component: () => import('../views/masterdata/CustomerView.vue'), title: '客户', description: '客户档案、信用额度。', permission: 'IVS_READ' },
 
   // 采购
-  { path: '/procurement/orders', name: 'purchase-order', component: () => import('../views/procurement/PurchaseOrderView.vue'), title: '采购单', description: '多行、跨产品大项的采购单与审核；整车按商品与数量下单，收货时逐台录入 VIN 与单车采购价。', permission: 'IVS_READ' },
-  { path: '/procurement/receipts', name: 'purchase-receipt', component: () => import('../views/procurement/PurchaseReceiptView.vue'), title: '收货入库', description: '按采购单逐台录入 VIN / 电池 SN 与单车采购价并自动建档入库；数量商品按数量收货，确认时可使用返利抵扣车款。', permission: 'IVS_READ' },
-  { path: '/procurement/returns', name: 'purchase-return', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '采购退货', description: '采购退货与应付冲减。', permission: 'IVS_READ' },
+  { path: '/procurement/orders', name: 'purchase-order', component: () => import('../views/procurement/PurchaseOrderView.vue'), title: '整车采购', scope: 'VEHICLE', description: '整车采购单与审核；按商品与数量下单，收货时逐台录入 VIN 与单车采购价。', permission: 'IVS_READ' },
+  { path: '/procurement/battery-orders', name: 'purchase-order-battery', component: () => import('../views/procurement/PurchaseOrderView.vue'), title: '电池采购', scope: 'BATTERY', description: '动力电池采购单：按电池箱 + 电池包分项计价，独立于整车采购。', permission: 'IVS_READ' },
+  { path: '/procurement/receipts', name: 'purchase-receipt', component: () => import('../views/procurement/PurchaseReceiptView.vue'), title: '整车收货入库', scope: 'VEHICLE', description: '整车按 VIN 逐台收货并自动建档入库。', permission: 'IVS_READ' },
+  { path: '/procurement/battery-receipts', name: 'purchase-receipt-battery', component: () => import('../views/procurement/PurchaseReceiptView.vue'), title: '电池收货入库', scope: 'BATTERY', description: '动力电池按电池 SN 逐块收货并自动建档入库。', permission: 'IVS_READ' },
+  { path: '/procurement/returns', name: 'purchase-return', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '整车采购退货', scope: 'VEHICLE', description: '整车采购退货与应付冲减。', permission: 'IVS_READ' },
+  { path: '/procurement/battery-returns', name: 'purchase-return-battery', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '电池采购退货', scope: 'BATTERY', description: '动力电池采购退货与应付冲减。', permission: 'IVS_READ' },
   { path: '/procurement/invoices', name: 'purchase-invoice', title: '进项发票', description: '厂家进项发票（含红字，关联申报单与权益）。', permission: 'IVS_FINANCE_READ' },
   { path: '/procurement/payables', name: 'supplier-payable', component: () => import('../views/procurement/PayableView.vue'), title: '供应商应付', description: '按收货单生成应付，支持发票匹配与付款核销。', permission: 'IVS_FINANCE_READ' },
   { path: '/procurement/offsets', name: 'rebate-offset', title: '返利抵扣', description: '入库单确认时的返利抵扣单：按厂家分账、余额分批使用、无需审批。', permission: 'IVS_FUND_OFFSET' },
 
   // 库存
   { path: '/inventory/dashboard', name: 'inventory-dashboard', component: () => import('../views/inventory/InventoryDashboardView.vue'), title: '库存看板', description: '按产品大项/仓库/品牌/状态与库龄分档汇总，含超期未实销预警。', permission: 'IVS_READ' },
-  { path: '/inventory/stock', name: 'stock-balance', component: () => import('../views/inventory/StockQueryView.vue'), title: '库存查询', description: '按商品与仓库查询在库、锁定、可用数量与成本。', permission: 'IVS_READ' },
-  { path: '/inventory/vin', name: 'vin-inventory', component: () => import('../views/inventory/VinInventoryView.vue'), title: 'VIN/SN 库存', description: '按 VIN/SN 展示一物一档库存明细：商品、仓库、单车采购价与状态。', permission: 'IVS_READ' },
-  { path: '/inventory/ledger', name: 'stock-ledger', component: () => import('../views/inventory/StockLedgerView.vue'), title: '库存台账', description: '只追加的库存事实表：入库、出库、调拨、盘点、抵扣兑换。', permission: 'IVS_READ' },
-  { path: '/inventory/locks', name: 'stock-lock', component: () => import('../views/inventory/StockLockView.vue'), title: '库存锁定', description: '销售订单锁货与超时自动释放。', permission: 'IVS_READ' },
+  { path: '/inventory/stock', name: 'stock-balance', component: () => import('../views/inventory/StockQueryView.vue'), title: '整车库存查询', scope: 'VEHICLE', description: '按商品与仓库查询整车在库、锁定、可用数量与成本。', permission: 'IVS_READ' },
+  { path: '/inventory/battery-stock', name: 'stock-balance-battery', component: () => import('../views/inventory/StockQueryView.vue'), title: '电池库存查询', scope: 'BATTERY', description: '按商品与仓库查询动力电池在库、锁定、可用数量与成本。', permission: 'IVS_READ' },
+  { path: '/inventory/vin', name: 'vin-inventory', component: () => import('../views/inventory/VinInventoryView.vue'), title: '整车 VIN 库存', scope: 'VEHICLE', description: '按 VIN 展示整车一物一档库存明细。', permission: 'IVS_READ' },
+  { path: '/inventory/battery-vin', name: 'vin-inventory-battery', component: () => import('../views/inventory/VinInventoryView.vue'), title: '电池 SN 库存', scope: 'BATTERY', description: '按电池 SN 展示动力电池一物一档库存明细。', permission: 'IVS_READ' },
+  { path: '/inventory/ledger', name: 'stock-ledger', component: () => import('../views/inventory/StockLedgerView.vue'), title: '整车库存台账', scope: 'VEHICLE', description: '整车库存入出库事实台账。', permission: 'IVS_READ' },
+  { path: '/inventory/battery-ledger', name: 'stock-ledger-battery', component: () => import('../views/inventory/StockLedgerView.vue'), title: '电池库存台账', scope: 'BATTERY', description: '动力电池库存入出库事实台账。', permission: 'IVS_READ' },
+  { path: '/inventory/locks', name: 'stock-lock', component: () => import('../views/inventory/StockLockView.vue'), title: '整车库存锁定', scope: 'VEHICLE', description: '整车销售订单锁货与超时自动释放。', permission: 'IVS_READ' },
+  { path: '/inventory/battery-locks', name: 'stock-lock-battery', component: () => import('../views/inventory/StockLockView.vue'), title: '电池库存锁定', scope: 'BATTERY', description: '动力电池销售订单锁货与超时自动释放。', permission: 'IVS_READ' },
   { path: '/inventory/stocktakes', name: 'stocktake', component: () => import('../views/inventory/StocktakeView.vue'), title: '库存盘点', description: '盘点单：草稿 → 过账，差异写台账。', permission: 'IVS_STOCK_ADJUST' },
   { path: '/inventory/transfers', name: 'stock-transfer', component: () => import('../views/inventory/StockTransferView.vue'), title: '库存调拨', description: '调拨单：审核、在途、签收与差异处理。', permission: 'IVS_STOCK_TRANSFER' },
   { path: '/inventory/age', name: 'stock-age', title: '库龄分析', description: '0-30 / 31-60 / 61-90 / 90+ 天库龄与呆滞预警。', permission: 'IVS_READ' },
 
   // 销售
-  { path: '/sales/orders', name: 'sales-order', component: () => import('../views/sales/SalesOrderView.vue'), title: '销售订单', description: '销售订单；订单生成时勾选享受的政策（预享受项）。', permission: 'IVS_READ' },
-  { path: '/sales/deliveries', name: 'sales-delivery', component: () => import('../views/sales/SalesDeliveryView.vue'), title: '出库发货', description: '出库单：指定序列号、结转成本、生成应收。', permission: 'IVS_READ' },
-  { path: '/sales/returns', name: 'sales-return', component: () => import('../views/sales/SalesReturnView.vue'), title: '销售退货', description: '退货回库、恢复可售或转维修。', permission: 'IVS_READ' },
+  { path: '/sales/orders', name: 'sales-order', component: () => import('../views/sales/SalesOrderView.vue'), title: '整车销售订单', scope: 'VEHICLE', description: '整车销售订单、VIN 锁货与出库。', permission: 'IVS_READ' },
+  { path: '/sales/battery-orders', name: 'sales-order-battery', component: () => import('../views/sales/SalesOrderView.vue'), title: '电池销售订单', scope: 'BATTERY', description: '动力电池独立销售订单，按电池 SN 匹配。', permission: 'IVS_READ' },
+  { path: '/sales/deliveries', name: 'sales-delivery', component: () => import('../views/sales/SalesDeliveryView.vue'), title: '整车出库发货', scope: 'VEHICLE', description: '整车出库单：指定 VIN、结转成本、生成应收。', permission: 'IVS_READ' },
+  { path: '/sales/battery-deliveries', name: 'sales-delivery-battery', component: () => import('../views/sales/SalesDeliveryView.vue'), title: '电池出库发货', scope: 'BATTERY', description: '动力电池出库单：指定电池 SN、结转成本、生成应收。', permission: 'IVS_READ' },
+  { path: '/sales/returns', name: 'sales-return', component: () => import('../views/sales/SalesReturnView.vue'), title: '整车销售退货', scope: 'VEHICLE', description: '整车退货回库、恢复可售或转维修。', permission: 'IVS_READ' },
+  { path: '/sales/battery-returns', name: 'sales-return-battery', component: () => import('../views/sales/SalesReturnView.vue'), title: '电池销售退货', scope: 'BATTERY', description: '动力电池退货回库与应收冲减。', permission: 'IVS_READ' },
   { path: '/sales/installments', name: 'installment-plan', title: '分期收款', description: '以租代售的分期计划与逾期管理。', permission: 'IVS_READ' },
   { path: '/sales/receivables', name: 'receivable', component: () => import('../views/sales/ReceivableView.vue'), title: '应收管理', description: '应收台账、账龄与到期管理。', permission: 'IVS_FINANCE_READ' },
   { path: '/sales/receipts', name: 'receipt', component: () => import('../views/sales/ReceiptView.vue'), title: '收款管理', description: '收款登记与核销（一收多单、一单多收）。', permission: 'IVS_FINANCE_READ' },
@@ -110,7 +122,8 @@ export const router = createRouter({
       path: page.path,
       name: page.name,
       component: page.component ?? Placeholder,
-      props: page.component ? undefined : { title: page.title, description: page.description },
+      props: page.component ? (page.scope ? { scope: page.scope } : undefined)
+        : { title: page.title, description: page.description },
       meta: { permission: page.permission },
     })),
     { path: '/system/organizations', name: 'organization-management', component: () => import('../views/system/OrganizationManagementView.vue'), meta: { permission: 'USER_MANAGE' } },

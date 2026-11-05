@@ -95,6 +95,10 @@ import { purchaseReturnApi } from '../../api/purchasereturn'
 import { productApi, supplierApi, warehouseApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
 import type { PurchaseReturn, PurchaseReturnStatus } from '../../types/purchasereturn'
+import type { BusinessScope } from '../../utils/businessScope'
+import { isBatteryCategory } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_WRITE')
@@ -104,6 +108,7 @@ const supplierOptions = ref<{ label: string; value: string }[]>([])
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const productOptions = ref<{ label: string; value: string }[]>([])
 const products = ref<Record<string, string>>({})
+const scopedProductIds = ref<Set<string>>(new Set())
 const filterSupplier = ref<string | undefined>()
 const filterStatus = ref<PurchaseReturnStatus | undefined>()
 const formOpen = ref(false)
@@ -175,7 +180,10 @@ function cancelReturn(record: PurchaseReturn) {
 }
 
 async function reload() {
-  try { rows.value = await purchaseReturnApi.list({ supplierId: filterSupplier.value, status: filterStatus.value }) }
+  try {
+    const result = await purchaseReturnApi.list({ supplierId: filterSupplier.value, status: filterStatus.value })
+    rows.value = result.filter((row) => row.lines.every((line) => scopedProductIds.value.has(line.productId)))
+  }
   catch (error) { message.error((error as Error).message) }
 }
 
@@ -184,7 +192,9 @@ onMounted(async () => {
     const [suppliers, warehouses, productRows] = await Promise.all([supplierApi.list(), warehouseApi.list(), productApi.list()])
     supplierOptions.value = suppliers.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
     warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
-    productOptions.value = productRows.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
+    const scopedProducts = productRows.filter((item) => isBatteryCategory(item.categoryCode, item.categoryName) === (props.scope === 'BATTERY'))
+    scopedProductIds.value = new Set(scopedProducts.map((item) => item.id))
+    productOptions.value = scopedProducts.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
     products.value = Object.fromEntries(productRows.map((item) => [item.id, `${item.name}（${item.productNo}）`]))
   } catch { /* ignore */ }
   await reload()

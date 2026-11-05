@@ -67,6 +67,9 @@ import { purchaseApi } from '../../api/procurement'
 import { warehouseApi } from '../../api/masterdata'
 import type { PurchaseReceipt, PurchaseReceiptLine } from '../../types/procurement'
 import { exportCsv, exportTimestamp } from '../../utils/csvExport'
+import type { BusinessScope } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 interface ReceiptLineRow extends PurchaseReceiptLine {
   receiptId: string
@@ -85,7 +88,9 @@ const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const saving = ref(false)
 
 const lines = computed<ReceiptLineRow[]>(() => receipts.value.flatMap((receipt) =>
-  receipt.lines.map((line) => ({ ...line, receiptId: receipt.id, orderNo: receipt.orderNo, status: receipt.status }))))
+  (receipt.businessScope || 'VEHICLE') !== props.scope ? [] : receipt.lines.map((line) => ({
+    ...line, receiptId: receipt.id, orderNo: receipt.orderNo, status: receipt.status,
+  }))))
 const columns = [
   { title: '订单编号', key: 'orderNo', dataIndex: 'orderNo', width: 150, ellipsis: true },
   { title: '车系', key: 'series', dataIndex: 'series', width: 150, ellipsis: true },

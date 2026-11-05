@@ -64,6 +64,10 @@ import type { StockBalance } from '../../types/inventory'
 import type { PurchaseOrder } from '../../types/procurement'
 import { PURCHASE_STATUS_LABELS } from '../../types/procurement'
 import { exportCsv, exportTimestamp } from '../../utils/csvExport'
+import { isBatteryCategory } from '../../utils/businessScope'
+import type { BusinessScope } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 const rows = ref<StockBalance[]>([])
 const warehouseId = ref<string | undefined>(undefined)
@@ -117,7 +121,8 @@ async function openOrderDetail(record: StockBalance) {
 
 async function reload() {
   try {
-    rows.value = await inventoryApi.balances({ warehouseId: warehouseId.value, keyword: keyword.value || undefined })
+    const result = await inventoryApi.balances({ warehouseId: warehouseId.value, keyword: keyword.value || undefined })
+    rows.value = result.filter((row) => isBatteryCategory(row.categoryCode) === (props.scope === 'BATTERY'))
   } catch (error) {
     message.error((error as Error).message)
   }

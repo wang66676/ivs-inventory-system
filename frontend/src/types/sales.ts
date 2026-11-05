@@ -42,6 +42,7 @@ export interface SalesOrder {
   warehouseId?: string
   warehouseName?: string
   status: SalesOrderStatus
+  businessScope?: 'VEHICLE' | 'BATTERY'
   totalAmount: number
   priceApprovalRequired: boolean
   priceApproved: boolean
@@ -72,6 +73,7 @@ export interface SalesDelivery {
   warehouseId: string
   warehouseName: string
   status: string
+  businessScope?: 'VEHICLE' | 'BATTERY'
   deliveredAt: string
   amount: number
   costAmount: number

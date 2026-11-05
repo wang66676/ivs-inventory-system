@@ -1,8 +1,7 @@
 <template>
   <div class="purchase-order-page">
     <a-card :bordered="false">
-      <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="采购明细按商品行下单：车辆沿用车型、配置、返利政策；动力电池按电池箱 + 电池包分项填写，电池无返利政策。VIN/SN 在收货时录入并与采购明细联动。" />
+      <a-alert type="info" show-icon style="margin-bottom:12px" :message="scopeHint" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">新建采购单</a-button>
         <a-button @click="reload">刷新</a-button>
@@ -159,6 +158,12 @@ import { useAuthStore } from '../../stores/auth'
 import { PURCHASE_STATUS_COLORS, PURCHASE_STATUS_LABELS } from '../../types/procurement'
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus } from '../../types/procurement'
 import type { Policy } from '../../types/policy'
+import type { BusinessScope } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
+const scopeHint = computed(() => props.scope === 'BATTERY'
+  ? '电池采购独立入口：按电池箱 + 电池包分项计价，电池无返利政策，不允许与整车混单。'
+  : '整车采购入口：车型、配置、数量、单价、返利政策和收货仓库保持原流程，不允许与动力电池混单。')
 
 const statusLabel = (status: string) => PURCHASE_STATUS_LABELS[status as PurchaseOrderStatus]
 const statusColor = (status: string) => PURCHASE_STATUS_COLORS[status as PurchaseOrderStatus]
@@ -211,9 +216,11 @@ const columns = [
   { title: '操作', key: 'actions', width: 300, fixed: 'right' },
 ]
 const statusOptions = Object.entries(PURCHASE_STATUS_LABELS).map(([value, label]) => ({ value, label }))
+const scopedProductOptions = computed(() => productOptions.value.filter((item) =>
+  item.isBattery === (props.scope === 'BATTERY')))
 const seriesOptions = computed(() => {
   const bySeries = new Map<string, string>()
-  for (const item of productOptions.value) {
+  for (const item of scopedProductOptions.value) {
     const series = item.isBattery ? item.name : (item.series || item.name)
     if (series && !bySeries.has(series)) bySeries.set(series, item.value)
   }
@@ -274,7 +281,10 @@ function onSupplierChange() {
   for (const line of form.lines as Record<string, any>[]) line.policyIds = (line.policyIds ?? []).filter((id: string) => allowed.has(id))
 }
 async function reload() {
-  try { rows.value = await purchaseApi.list({ keyword: keyword.value || undefined, status: filterStatus.value }) }
+  try {
+    const result = await purchaseApi.list({ keyword: keyword.value || undefined, status: filterStatus.value })
+    rows.value = result.filter((order) => (order.businessScope || 'VEHICLE') === props.scope)
+  }
   catch (error) { message.error((error as Error).message) }
 }
 function resetForm() { Object.keys(form).forEach((key) => delete form[key]); form.lines = [newLine()] }
@@ -299,7 +309,7 @@ function resolveWarehouse(value: string) {
 }
 function resolveProduct(series: string) {
   const key = series.trim().toLowerCase()
-  return productOptions.value.find((item) => [item.series, item.name, item.productNo]
+  return scopedProductOptions.value.find((item) => [item.series, item.name, item.productNo]
     .filter(Boolean).some((value) => String(value).toLowerCase() === key))
 }
 function parseCsv(text: string): string[][] {

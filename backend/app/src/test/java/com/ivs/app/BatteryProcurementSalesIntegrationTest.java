@@ -53,6 +53,9 @@ class BatteryProcurementSalesIntegrationTest {
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-BAT", "电池仓");
         MasterdataApi.SupplierView supplier = createSupplier("动力电池厂", SupplierType.OEM);
         MasterdataApi.CustomerView customer = createCustomer("电池客户", CustomerType.COMPANY);
+        MasterdataApi.CategoryView vehicleCategory = createCategory(
+                "VEHICLE-SCOPE", "整车", TrackingMode.SERIAL, "VEHICLE", "台");
+        MasterdataApi.ProductView vehicle = createVehicleProduct(vehicleCategory.id());
 
         Map<String, Object> batteryLine = new HashMap<>();
         batteryLine.put("productId", battery.id().toString());
@@ -74,6 +77,16 @@ class BatteryProcurementSalesIntegrationTest {
         assertThat(policyRejected.getBody()).isNotNull();
         assertThat(policyRejected.getBody().get("code")).isEqualTo("BATTERY_POLICY_NOT_ALLOWED");
 
+        ResponseEntity<Map> mixedPurchase = restTemplate.postForEntity("/api/ivs/purchase-orders", Map.of(
+                "supplierId", supplier.id().toString(),
+                "warehouseId", warehouse.id().toString(),
+                "lines", List.of(batteryLine, Map.of(
+                        "productId", vehicle.id().toString(), "quantity", 1, "unitPrice", 400000))
+        ), Map.class);
+        assertThat(mixedPurchase.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(mixedPurchase.getBody()).isNotNull();
+        assertThat(mixedPurchase.getBody().get("code")).isEqualTo("PURCHASE_SCOPE_MIXED");
+
         ProcurementApi.PurchaseOrderView purchase = post("/api/ivs/purchase-orders", Map.of(
                 "supplierId", supplier.id().toString(),
                 "warehouseId", warehouse.id().toString(),
@@ -81,6 +94,7 @@ class BatteryProcurementSalesIntegrationTest {
                 "lines", List.of(batteryLine)
         ), ProcurementApi.PurchaseOrderView.class);
         assertThat(purchase.lines()).hasSize(1);
+        assertThat(purchase.businessScope()).isEqualTo("BATTERY");
         ProcurementApi.PurchaseOrderLineView purchaseLine = purchase.lines().get(0);
         assertThat(purchaseLine.categoryName()).isEqualTo("动力电池");
         assertThat(purchaseLine.unitPrice()).isEqualByComparingTo("300000.00");
@@ -102,6 +116,7 @@ class BatteryProcurementSalesIntegrationTest {
                                 "unitPrice", 300000))
                 ), ProcurementApi.PurchaseReceiptView.class);
         assertThat(receipt.lines()).hasSize(1);
+        assertThat(receipt.businessScope()).isEqualTo("BATTERY");
         assertThat(receipt.lines().get(0).batteryBoxManufacturer()).isEqualTo("电池箱厂 A");
         assertThat(receipt.lines().get(0).batteryPackManufacturer()).isEqualTo("电池包厂 B");
 
@@ -126,10 +141,26 @@ class BatteryProcurementSalesIntegrationTest {
                         "batteryPackUnitPrice", 210000))
         ), SalesApi.SalesOrderView.class);
         SalesApi.SalesOrderLineView salesLine = sales.lines().get(0);
+        assertThat(sales.businessScope()).isEqualTo("BATTERY");
         assertThat(salesLine.categoryName()).isEqualTo("动力电池");
         assertThat(salesLine.unitPrice()).isEqualByComparingTo("320000.00");
         assertThat(salesLine.batteryBoxUnitPrice()).isEqualByComparingTo("110000.00");
         assertThat(salesLine.batteryPackUnitPrice()).isEqualByComparingTo("210000.00");
+
+        ResponseEntity<Map> mixedSales = restTemplate.postForEntity("/api/ivs/sales-orders", Map.of(
+                "customerId", customer.id().toString(),
+                "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of(
+                        "productId", battery.id().toString(), "quantity", 1, "unitPrice", 320000,
+                        "serialIds", List.of(serial.id().toString()),
+                        "batteryBoxManufacturer", "电池箱厂 A", "batteryBoxModel", "BOX-282",
+                        "batteryBoxUnitPrice", 110000, "batteryPackManufacturer", "电池包厂 B",
+                        "batteryEnergyKwh", 282, "batteryPackUnitPrice", 210000),
+                        Map.of("productId", vehicle.id().toString(), "quantity", 1, "unitPrice", 400000))
+        ), Map.class);
+        assertThat(mixedSales.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(mixedSales.getBody()).isNotNull();
+        assertThat(mixedSales.getBody().get("code")).isEqualTo("SALES_SCOPE_MIXED");
 
         sales = post("/api/ivs/sales-orders/" + sales.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
         sales = post("/api/ivs/sales-orders/" + sales.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
@@ -156,6 +187,7 @@ class BatteryProcurementSalesIntegrationTest {
                         "serialIds", List.of(serial.id().toString())))
         ), SalesApi.SalesDeliveryView.class);
         assertThat(delivery.amount()).isEqualByComparingTo("320000.00");
+        assertThat(delivery.businessScope()).isEqualTo("BATTERY");
         assertThat(delivery.costAmount()).isEqualByComparingTo("300000.00");
         assertThat(delivery.grossProfit()).isEqualByComparingTo("20000.00");
         assertThat(serialByKeyword("BAT-SN-TEST-001").status()).isEqualTo(SerialStatus.DELIVERED);
@@ -199,6 +231,13 @@ class BatteryProcurementSalesIntegrationTest {
         body.put("minPrice", 100000);
         body.put("salePriceGuide", 320000);
         return post("/api/ivs/products", body, MasterdataApi.ProductView.class);
+    }
+
+    private MasterdataApi.ProductView createVehicleProduct(UUID categoryId) {
+        return post("/api/ivs/products", Map.of(
+                "name", "Q3 牵引车", "categoryId", categoryId.toString(), "unit", "台",
+                "series", "Q3", "model", "T31", "minPrice", 300000, "salePriceGuide", 400000
+        ), MasterdataApi.ProductView.class);
     }
 
     private MasterdataApi.WarehouseView createWarehouse(String code, String name) {

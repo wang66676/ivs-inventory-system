@@ -46,6 +46,10 @@ import { productApi, warehouseApi } from '../../api/masterdata'
 import { MOVE_TYPE_LABELS } from '../../types/inventory'
 import type { LedgerEntry } from '../../types/inventory'
 import { exportCsv, exportTimestamp } from '../../utils/csvExport'
+import type { BusinessScope } from '../../utils/businessScope'
+import { isBatteryCategory } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 const rows = ref<LedgerEntry[]>([])
 const productId = ref<string | undefined>(undefined)
@@ -54,6 +58,7 @@ const moveType = ref<string | undefined>(undefined)
 const limit = ref(200)
 const productOptions = ref<{ label: string; value: string }[]>([])
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
+const scopedProductIds = ref<Set<string>>(new Set())
 const moveTypeOptions = Object.entries(MOVE_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 
 const columns = [
@@ -72,9 +77,10 @@ const columns = [
 
 async function reload() {
   try {
-    rows.value = await inventoryApi.ledger({
+    const result = await inventoryApi.ledger({
       productId: productId.value, warehouseId: warehouseId.value, moveType: moveType.value, limit: limit.value,
     })
+    rows.value = result.filter((row) => scopedProductIds.value.has(row.productId))
   } catch (error) {
     message.error((error as Error).message)
   }
@@ -103,7 +109,9 @@ function exportLedger() {
 onMounted(async () => {
   try {
     const [products, warehouses] = await Promise.all([productApi.list(), warehouseApi.list()])
-    productOptions.value = products.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
+    const scopedProducts = products.filter((item) => isBatteryCategory(item.categoryCode, item.categoryName) === (props.scope === 'BATTERY'))
+    scopedProductIds.value = new Set(scopedProducts.map((item) => item.id))
+    productOptions.value = scopedProducts.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
     warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
   } catch { /* ignore */ }
   await reload()

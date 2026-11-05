@@ -145,8 +145,14 @@ public class SalesOrderApplicationService {
         int lineNo = 1;
         BigDecimal total = BigDecimal.ZERO;
         boolean approvalRequired = false;
+        String orderScope = null;
         for (SalesApi.SaveSalesOrderLineCommand line : commands) {
             SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.productId());
+            String lineScope = isBattery(product) ? "BATTERY" : "VEHICLE";
+            if (orderScope != null && !orderScope.equals(lineScope)) {
+                throw new ConflictException("SALES_SCOPE_MIXED", "整车与动力电池不能混在同一张销售订单中");
+            }
+            orderScope = lineScope;
             SalesMasterDataPort.PriceInfo reference = masterData.lookupPrice(product.id(),
                     customer.customerType(), LocalDate.now());
             boolean battery = isBattery(product);
@@ -551,7 +557,8 @@ public class SalesOrderApplicationService {
         SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(order.getCustomerId());
         String warehouseName = order.getWarehouseId() == null ? null
                 : masterData.requireWarehouse(order.getWarehouseId()).name();
-        List<SalesApi.SalesOrderLineView> lines = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()).stream()
+        List<SalesOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId());
+        List<SalesApi.SalesOrderLineView> lines = orderLines.stream()
                 .map(line -> {
                     SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.getProductId());
                     List<UUID> serialIds = parseIds(line.getSerialIds());
@@ -569,7 +576,8 @@ public class SalesOrderApplicationService {
                             serialIds, remainingSerialIds, line.getRemark());
                 })
                 .toList();
-        return SalesApi.SalesOrderView.from(order, customer.name(), customer.customerType(), warehouseName, lines);
+        return SalesApi.SalesOrderView.from(order, customer.name(), customer.customerType(), warehouseName,
+                salesScope(orderLines), lines);
     }
 
     private SalesApi.SalesDeliveryView toDeliveryView(SalesDelivery delivery) {
@@ -583,7 +591,11 @@ public class SalesOrderApplicationService {
                             product.name(), line.getQuantity(), line.getUnitPrice(), line.getCostAmount(),
                             parseIds(line.getSerialIds()));
                 }).toList();
-        return SalesApi.SalesDeliveryView.from(delivery, orderNo, customerName, warehouseName, lines);
+        List<SalesOrderLine> orderLines = orderRepository.findById(delivery.getOrderId())
+                .map(order -> lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()))
+                .orElse(List.of());
+        return SalesApi.SalesDeliveryView.from(delivery, orderNo, customerName, warehouseName,
+                salesScope(orderLines), lines);
     }
 
     private boolean isBattery(SalesMasterDataPort.ProductInfo product) {
@@ -604,5 +616,14 @@ public class SalesOrderApplicationService {
             throw new ConflictException("BATTERY_PRICE_REQUIRED", "动力电池请填写有效的" + field + "成交价");
         }
         return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String salesScope(List<SalesOrderLine> lines) {
+        for (SalesOrderLine line : lines) {
+            if (isBattery(masterData.requireProduct(line.getProductId()))) {
+                return "BATTERY";
+            }
+        }
+        return "VEHICLE";
     }
 }

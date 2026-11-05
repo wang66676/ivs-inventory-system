@@ -10,7 +10,7 @@
       <template #extra>
         <a-space>
           <a-button @click="reload">刷新</a-button>
-          <a-button type="primary" @click="router.push('/procurement/orders')">去采购入库</a-button>
+          <a-button type="primary" @click="goProcurement">{{ props.scope === 'BATTERY' ? '去电池采购' : '去整车采购' }}</a-button>
         </a-space>
       </template>
       <a-alert type="info" show-icon style="margin-bottom:12px"
@@ -53,6 +53,10 @@ import { message } from 'ant-design-vue'
 import { serialApi, warehouseApi } from '../../api/masterdata'
 import type { ProductSerial, SerialStatus } from '../../types/masterdata'
 import { SERIAL_STATUS_LABELS } from '../../types/masterdata'
+import type { BusinessScope } from '../../utils/businessScope'
+import { isBatteryCategory } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 const router = useRouter()
 const rows = ref<ProductSerial[]>([])
@@ -113,6 +117,10 @@ function dateTime(value?: string | null) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
+function goProcurement() {
+  router.push(props.scope === 'BATTERY' ? '/procurement/battery-orders' : '/procurement/orders')
+}
+
 async function reload() {
   try {
     const result = await serialApi.list({
@@ -120,9 +128,10 @@ async function reload() {
       status: status.value === 'OTHER' ? undefined : status.value,
       warehouseId: warehouseId.value,
     })
+    const scoped = result.filter((row) => isBatteryCategory(row.categoryCode, row.categoryName) === (props.scope === 'BATTERY'))
     rows.value = status.value === 'OTHER'
-      ? result.filter((row) => !primaryStatuses.includes(row.status))
-      : result
+      ? scoped.filter((row) => !primaryStatuses.includes(row.status))
+      : scoped
   } catch (error) {
     message.error((error as Error).message)
   }

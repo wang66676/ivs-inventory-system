@@ -37,6 +37,9 @@ import { salesApi } from '../../api/sales'
 import { serialApi } from '../../api/masterdata'
 import type { SalesDelivery } from '../../types/sales'
 import type { ProductSerial } from '../../types/masterdata'
+import type { BusinessScope } from '../../utils/businessScope'
+
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 const rows = ref<SalesDelivery[]>([])
 const serials = ref<ProductSerial[]>([])
@@ -55,7 +58,8 @@ const serialNoOf = (id: string) => serials.value.find((item) => item.id === id)?
 
 async function reload() {
   try {
-    rows.value = await salesApi.deliveries()
+    const result = await salesApi.deliveries()
+    rows.value = result.filter((delivery) => (delivery.businessScope || 'VEHICLE') === props.scope)
   } catch (error) {
     message.error((error as Error).message)
   }

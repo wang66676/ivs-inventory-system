@@ -154,9 +154,15 @@ public class PurchaseOrderApplicationService {
         int lineNo = 1;
         BigDecimal total = BigDecimal.ZERO;
         Set<String> seenSerialNos = new LinkedHashSet<>();
+        String orderScope = null;
         for (ProcurementApi.SavePurchaseOrderLineCommand line : lines) {
             MasterDataQueryPort.ProductInfo product = masterData.requireProduct(line.productId());
             boolean battery = isBattery(product);
+            String lineScope = battery ? "BATTERY" : "VEHICLE";
+            if (orderScope != null && !orderScope.equals(lineScope)) {
+                throw new ConflictException("PURCHASE_SCOPE_MIXED", "整车与动力电池不能混在同一张采购单中");
+            }
+            orderScope = lineScope;
             if (battery && line.policyIds() != null && !line.policyIds().isEmpty()) {
                 throw new ConflictException("BATTERY_POLICY_NOT_ALLOWED", "动力电池不支持返利政策");
             }
@@ -571,7 +577,7 @@ public class PurchaseOrderApplicationService {
         return ProcurementApi.PurchaseOrderView.from(order,
                 new ProcurementApi.SupplierInfoView(supplier.id(), supplier.name(), supplier.supplierType()),
                 warehouse == null ? null : new ProcurementApi.WarehouseInfoView(warehouse.id(), warehouse.name()),
-                lines);
+                purchaseScope(lineEntities), lines);
     }
 
     private ProcurementApi.PurchaseReceiptView toReceiptView(PurchaseReceipt receipt) {
@@ -603,7 +609,10 @@ public class PurchaseOrderApplicationService {
                             orderLine == null ? null : orderLine.getBatteryEnergyKwh(),
                             orderLine == null ? null : orderLine.getBatteryPackUnitPrice());
                 }).toList();
-        return ProcurementApi.PurchaseReceiptView.from(receipt, orderNo, supplierName, warehouseName, lines);
+        String businessScope = orderRepository.findById(receipt.getOrderId())
+                .map(this::purchaseScope).orElse("VEHICLE");
+        return ProcurementApi.PurchaseReceiptView.from(receipt, orderNo, supplierName, warehouseName,
+                businessScope, lines);
     }
 
     private String cabType(String configText, String productName) {
@@ -660,6 +669,19 @@ public class PurchaseOrderApplicationService {
         String code = product.categoryCode() == null ? "" : product.categoryCode().toUpperCase();
         String name = product.categoryName() == null ? "" : product.categoryName();
         return code.equals("BATTERY") || code.startsWith("BATTERY-") || name.contains("电池");
+    }
+
+    private String purchaseScope(List<PurchaseOrderLine> lines) {
+        for (PurchaseOrderLine line : lines) {
+            if (isBattery(masterData.requireProduct(line.getProductId()))) {
+                return "BATTERY";
+            }
+        }
+        return "VEHICLE";
+    }
+
+    private String purchaseScope(PurchaseOrder order) {
+        return purchaseScope(lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()));
     }
 
     private String purchaseLineStatus(PurchaseOrderLine line) {
