@@ -46,6 +46,10 @@ public class PurchaseOrderLine {
     @Column(name = "certificate_application_date")
     private LocalDate certificateApplicationDate;
 
+    /** 电池采购明细预计到货时间。 */
+    @Column(name = "arrival_date")
+    private LocalDate arrivalDate;
+
     @Column(nullable = false, precision = 18, scale = 3)
     private BigDecimal quantity;
 
@@ -118,6 +122,18 @@ public class PurchaseOrderLine {
                                            String remark, String batteryBoxManufacturer, String batteryBoxModel,
                                            BigDecimal batteryBoxUnitPrice, String batteryPackManufacturer,
                                            BigDecimal batteryEnergyKwh, BigDecimal batteryPackUnitPrice) {
+        return create(orderId, lineNo, productId, quantity, unitPrice, taxRate, configText, warehouseId,
+                serialNo, certificateApplicationDate, null, remark, batteryBoxManufacturer, batteryBoxModel,
+                batteryBoxUnitPrice, batteryPackManufacturer, batteryEnergyKwh, batteryPackUnitPrice);
+    }
+
+    public static PurchaseOrderLine create(UUID orderId, int lineNo, UUID productId, BigDecimal quantity,
+                                           BigDecimal unitPrice, BigDecimal taxRate, String configText,
+                                           UUID warehouseId, String serialNo, LocalDate certificateApplicationDate,
+                                           LocalDate arrivalDate, String remark, String batteryBoxManufacturer,
+                                           String batteryBoxModel, BigDecimal batteryBoxUnitPrice,
+                                           String batteryPackManufacturer, BigDecimal batteryEnergyKwh,
+                                           BigDecimal batteryPackUnitPrice) {
         PurchaseOrderLine line = new PurchaseOrderLine();
         line.id = UUID.randomUUID();
         line.orderId = orderId;
@@ -127,6 +143,7 @@ public class PurchaseOrderLine {
         line.warehouseId = warehouseId;
         line.serialNo = normalize(serialNo == null ? null : serialNo.toUpperCase());
         line.certificateApplicationDate = certificateApplicationDate;
+        line.arrivalDate = arrivalDate;
         line.quantity = qty(quantity);
         if (line.quantity.signum() <= 0) {
             throw new IllegalArgumentException("采购数量必须大于 0");
@@ -216,6 +233,7 @@ public class PurchaseOrderLine {
     public UUID getWarehouseId() { return warehouseId; }
     public String getSerialNo() { return serialNo; }
     public LocalDate getCertificateApplicationDate() { return certificateApplicationDate; }
+    public LocalDate getArrivalDate() { return arrivalDate; }
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getReceivedQuantity() { return receivedQuantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }

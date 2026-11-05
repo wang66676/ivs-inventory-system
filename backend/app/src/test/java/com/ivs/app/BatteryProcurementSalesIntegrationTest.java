@@ -67,6 +67,7 @@ class BatteryProcurementSalesIntegrationTest {
         batteryLine.put("batteryPackManufacturer", "电池包厂 B");
         batteryLine.put("batteryEnergyKwh", new BigDecimal("282.000"));
         batteryLine.put("batteryPackUnitPrice", 200000);
+        batteryLine.put("arrivalDate", "2026-11-10");
 
         ResponseEntity<Map> policyRejected = restTemplate.postForEntity("/api/ivs/purchase-orders", Map.of(
                 "supplierId", supplier.id().toString(),
@@ -95,6 +96,7 @@ class BatteryProcurementSalesIntegrationTest {
         ), ProcurementApi.PurchaseOrderView.class);
         assertThat(purchase.lines()).hasSize(1);
         assertThat(purchase.businessScope()).isEqualTo("BATTERY");
+        assertThat(purchase.warehouseName()).isEqualTo("天津容大");
         ProcurementApi.PurchaseOrderLineView purchaseLine = purchase.lines().get(0);
         assertThat(purchaseLine.categoryName()).isEqualTo("动力电池");
         assertThat(purchaseLine.unitPrice()).isEqualByComparingTo("300000.00");
@@ -102,6 +104,8 @@ class BatteryProcurementSalesIntegrationTest {
         assertThat(purchaseLine.batteryBoxModel()).isEqualTo("BOX-282");
         assertThat(purchaseLine.batteryPackManufacturer()).isEqualTo("电池包厂 B");
         assertThat(purchaseLine.batteryEnergyKwh()).isEqualByComparingTo("282.000");
+        assertThat(purchaseLine.arrivalDate()).isEqualTo(java.time.LocalDate.parse("2026-11-10"));
+        assertThat(purchaseLine.warehouseName()).isEqualTo("天津容大");
         assertThat(purchaseLine.policies()).isEmpty();
 
         purchase = post("/api/ivs/purchase-orders/" + purchase.id() + "/approve", Map.of(),
@@ -117,6 +121,7 @@ class BatteryProcurementSalesIntegrationTest {
                 ), ProcurementApi.PurchaseReceiptView.class);
         assertThat(receipt.lines()).hasSize(1);
         assertThat(receipt.businessScope()).isEqualTo("BATTERY");
+        assertThat(receipt.warehouseName()).isEqualTo("天津容大");
         assertThat(receipt.lines().get(0).batteryBoxManufacturer()).isEqualTo("电池箱厂 A");
         assertThat(receipt.lines().get(0).batteryPackManufacturer()).isEqualTo("电池包厂 B");
 
@@ -142,6 +147,7 @@ class BatteryProcurementSalesIntegrationTest {
         ), SalesApi.SalesOrderView.class);
         SalesApi.SalesOrderLineView salesLine = sales.lines().get(0);
         assertThat(sales.businessScope()).isEqualTo("BATTERY");
+        assertThat(sales.warehouseName()).isEqualTo("天津容大");
         assertThat(salesLine.categoryName()).isEqualTo("动力电池");
         assertThat(salesLine.unitPrice()).isEqualByComparingTo("320000.00");
         assertThat(salesLine.batteryBoxUnitPrice()).isEqualByComparingTo("110000.00");
@@ -188,12 +194,14 @@ class BatteryProcurementSalesIntegrationTest {
         ), SalesApi.SalesDeliveryView.class);
         assertThat(delivery.amount()).isEqualByComparingTo("320000.00");
         assertThat(delivery.businessScope()).isEqualTo("BATTERY");
+        assertThat(delivery.warehouseName()).isEqualTo("天津容大");
         assertThat(delivery.costAmount()).isEqualByComparingTo("300000.00");
         assertThat(delivery.grossProfit()).isEqualByComparingTo("20000.00");
         assertThat(serialByKeyword("BAT-SN-TEST-001").status()).isEqualTo(SerialStatus.DELIVERED);
 
+        MasterdataApi.WarehouseView fixedWarehouse = warehouseByName("天津容大");
         InventoryApi.BalanceView[] balances = restTemplate.getForEntity(
-                "/api/ivs/inventory/balances?warehouseId=" + warehouse.id(), InventoryApi.BalanceView[].class).getBody();
+                "/api/ivs/inventory/balances?warehouseId=" + fixedWarehouse.id(), InventoryApi.BalanceView[].class).getBody();
         assertThat(balances).isNotNull().hasSize(1);
         assertThat(balances[0].onHandQty()).isEqualByComparingTo("0.000");
         assertThat(balances[0].lockedQty()).isEqualByComparingTo("0.000");
@@ -211,6 +219,16 @@ class BatteryProcurementSalesIntegrationTest {
                 "/api/ivs/product-serials?keyword=" + keyword, MasterdataApi.SerialView[].class).getBody();
         assertThat(serials).isNotNull().hasSize(1);
         return serials[0];
+    }
+
+    private MasterdataApi.WarehouseView warehouseByName(String name) {
+        MasterdataApi.WarehouseView[] warehouses = restTemplate.getForEntity(
+                "/api/ivs/warehouses", MasterdataApi.WarehouseView[].class).getBody();
+        assertThat(warehouses).isNotNull();
+        return java.util.Arrays.stream(warehouses)
+                .filter(item -> name.equals(item.name()))
+                .findFirst()
+                .orElseThrow();
     }
 
     private MasterdataApi.CategoryView createCategory(String code, String name, TrackingMode mode,

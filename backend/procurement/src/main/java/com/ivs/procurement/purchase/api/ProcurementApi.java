@@ -35,6 +35,7 @@ public final class ProcurementApi {
     public record PurchaseOrderLineView(
             UUID id, int lineNo, UUID productId, String productNo, String productName, String series, String configCode,
             String configText, String serialNo, String cabType, LocalDate certificateApplicationDate,
+            LocalDate arrivalDate,
             UUID warehouseId, String warehouseName,
             String categoryCode, String categoryName, String trackingMode, BigDecimal quantity, BigDecimal receivedQuantity,
             BigDecimal remainingQuantity, BigDecimal unitPrice, BigDecimal batteryBoxUnitPrice,
@@ -69,19 +70,19 @@ public final class ProcurementApi {
             List<UUID> policyIds, String configText, UUID warehouseId, String serialNo,
             LocalDate certificateApplicationDate, String batteryBoxManufacturer, String batteryBoxModel,
             BigDecimal batteryBoxUnitPrice, String batteryPackManufacturer, BigDecimal batteryEnergyKwh,
-            BigDecimal batteryPackUnitPrice
+            BigDecimal batteryPackUnitPrice, LocalDate arrivalDate
     ) {
         /** 兼容旧调用：不关联返利政策、配置文本和明细仓库。 */
         public SavePurchaseOrderLineCommand(UUID productId, BigDecimal quantity, BigDecimal unitPrice,
                                             BigDecimal taxRate, String remark) {
             this(productId, quantity, unitPrice, taxRate, remark, List.of(), null, null, null, null,
-                    null, null, null, null, null, null);
+                    null, null, null, null, null, null, null);
         }
 
         public SavePurchaseOrderLineCommand(UUID productId, BigDecimal quantity, BigDecimal unitPrice,
                                             BigDecimal taxRate, String remark, List<UUID> policyIds) {
             this(productId, quantity, unitPrice, taxRate, remark, policyIds, null, null, null, null,
-                    null, null, null, null, null, null);
+                    null, null, null, null, null, null, null);
         }
     }
 

@@ -2,7 +2,7 @@
   <div class="purchase-receipt-page">
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="收货入库按明细直接展示。申请合格证日期可后补；单个 VIN 的收货仓库可点击修改，并同步调整库存位置。" />
+               :message="props.scope === 'BATTERY' ? '电池收货入库按电池 SN 展示，统一仓库为天津容大，申请合格证日期可后补。' : '收货入库按明细直接展示。申请合格证日期可后补；单个 VIN 的收货仓库可点击修改，并同步调整库存位置。'" />
       <a-space style="margin-bottom:12px">
         <a-button @click="reload">刷新</a-button>
         <a-button @click="exportReceipts">导出</a-button>
@@ -24,7 +24,7 @@
             <span v-else>-</span>
           </template>
           <template v-else-if="column.key === 'warehouseName'">
-            <a-button v-if="record.serialNos?.length === 1" type="link" size="small" style="padding:0"
+            <a-button v-if="props.scope !== 'BATTERY' && record.serialNos?.length === 1" type="link" size="small" style="padding:0"
                       @click="openWarehouse(record)">{{ record.warehouseName || '选择仓库' }}</a-button>
             <span v-else>{{ record.warehouseName || '-' }}</span>
           </template>
@@ -91,10 +91,9 @@ const lines = computed<ReceiptLineRow[]>(() => receipts.value.flatMap((receipt) 
   (receipt.businessScope || 'VEHICLE') !== props.scope ? [] : receipt.lines.map((line) => ({
     ...line, receiptId: receipt.id, orderNo: receipt.orderNo, status: receipt.status,
   }))))
-const columns = [
+const vehicleColumns = [
   { title: '订单编号', key: 'orderNo', dataIndex: 'orderNo', width: 150, ellipsis: true },
   { title: '车系', key: 'series', dataIndex: 'series', width: 150, ellipsis: true },
-  { title: '电池信息', key: 'batteryInfo', width: 300, ellipsis: true },
   { title: '驾驶室', key: 'cabType', dataIndex: 'cabType', width: 90, align: 'center' },
   { title: 'VIN / SN', key: 'serialNos', width: 220 },
   { title: '配置', key: 'configText', dataIndex: 'configText', width: 170, ellipsis: true },
@@ -103,6 +102,17 @@ const columns = [
   { title: '收货仓库', key: 'warehouseName', dataIndex: 'warehouseName', width: 150, ellipsis: true },
   { title: '状态', key: 'status', width: 110, align: 'center' },
 ]
+const batteryColumns = [
+  { title: '订单编号', key: 'orderNo', dataIndex: 'orderNo', width: 150, ellipsis: true },
+  { title: '商品', key: 'series', dataIndex: 'series', width: 180, ellipsis: true },
+  { title: '电池信息', key: 'batteryInfo', width: 320, ellipsis: true },
+  { title: '电池 SN', key: 'serialNos', width: 220 },
+  { title: '申请合格证日期', key: 'certificateApplicationDate', width: 150, align: 'center' },
+  { title: '采购单价', key: 'unitPrice', width: 120, align: 'right' },
+  { title: '收货仓库', key: 'warehouseName', dataIndex: 'warehouseName', width: 140, ellipsis: true },
+  { title: '状态', key: 'status', width: 110, align: 'center' },
+]
+const columns = computed(() => props.scope === 'BATTERY' ? batteryColumns : vehicleColumns)
 
 function money(value?: number) {
   return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -113,10 +123,23 @@ function batteryText(line: PurchaseReceiptLine) {
 }
 function exportReceipts() {
   if (!lines.value.length) { message.warning('当前没有可导出的收货入库数据'); return }
+  if (props.scope === 'BATTERY') {
+    exportCsv<ReceiptLineRow>(`电池收货入库-${exportTimestamp()}`, [
+      { title: '订单编号', value: (row) => row.orderNo },
+      { title: '商品', value: (row) => row.series },
+      { title: '电池信息', value: (row) => batteryText(row) },
+      { title: '电池 SN', value: (row) => row.serialNos?.join('、') },
+      { title: '申请合格证日期', value: (row) => row.certificateApplicationDate },
+      { title: '采购单价', value: (row) => row.unitPrice },
+      { title: '收货仓库', value: () => '天津容大' },
+      { title: '状态', value: (row) => row.status === 'POSTED' ? '已入库' : '待入库' },
+    ], lines.value)
+    message.success('电池收货入库数据已导出')
+    return
+  }
   exportCsv<ReceiptLineRow>(`收货入库-${exportTimestamp()}`, [
     { title: '订单编号', value: (row) => row.orderNo },
     { title: '车系', value: (row) => row.series },
-    { title: '电池信息', value: (row) => batteryText(row) },
     { title: '驾驶室', value: (row) => row.cabType },
     { title: 'VIN/SN', value: (row) => row.serialNos?.join('、') },
     { title: '配置', value: (row) => row.configText },

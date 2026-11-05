@@ -101,12 +101,16 @@ public class PurchaseOrderApplicationService {
             throw new ConflictException("PURCHASE_LINE_REQUIRED", "采购单至少需要一行明细");
         }
         masterData.requireSupplier(command.supplierId());
-        if (command.warehouseId() != null) {
+        UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
+                : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                    ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
+        if (!command.lines().isEmpty() && !isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                && command.warehouseId() != null) {
             masterData.requireWarehouse(command.warehouseId());
         }
         String orderNo = "PO-%06d".formatted(orderRepository.nextOrderSequence());
         PurchaseOrder order = orderRepository.save(PurchaseOrder.create(orderNo, command.externalOrderNo(),
-                command.supplierId(), command.warehouseId(), BigDecimal.ZERO, command.expectedDate(),
+                command.supplierId(), orderWarehouseId, BigDecimal.ZERO, command.expectedDate(),
                 command.remark(), currentUserId()));
         BigDecimal total = saveLines(order, command.supplierId(), command.lines());
         order.updateTotal(total);
@@ -126,11 +130,15 @@ public class PurchaseOrderApplicationService {
             throw new ConflictException("PURCHASE_LINE_REQUIRED", "采购单至少需要一行明细");
         }
         masterData.requireSupplier(command.supplierId());
-        if (command.warehouseId() != null) {
+        UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
+                : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                    ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
+        if (!command.lines().isEmpty() && !isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                && command.warehouseId() != null) {
             masterData.requireWarehouse(command.warehouseId());
         }
         try {
-            order.updateDraft(command.externalOrderNo(), command.supplierId(), command.warehouseId(),
+            order.updateDraft(command.externalOrderNo(), command.supplierId(), orderWarehouseId,
                     command.expectedDate(), command.remark());
         } catch (IllegalStateException exception) {
             throw new ConflictException("PURCHASE_STATUS_INVALID", exception.getMessage());
@@ -167,7 +175,10 @@ public class PurchaseOrderApplicationService {
                 throw new ConflictException("BATTERY_POLICY_NOT_ALLOWED", "动力电池不支持返利政策");
             }
             BatteryPricing batteryPricing = batteryPricing(line, battery);
-            if (line.warehouseId() != null) {
+            UUID effectiveWarehouseId = line.warehouseId();
+            if (battery) {
+                effectiveWarehouseId = masterData.requireBatteryWarehouse().id();
+            } else if (line.warehouseId() != null) {
                 masterData.requireWarehouse(line.warehouseId());
             }
             String serialNo = line.serialNo() == null || line.serialNo().isBlank()
@@ -184,8 +195,8 @@ public class PurchaseOrderApplicationService {
             PurchaseOrderLine entity;
             try {
                 entity = PurchaseOrderLine.create(order.getId(), lineNo++, line.productId(), quantity,
-                        batteryPricing.unitPrice(), line.taxRate(), line.configText(), line.warehouseId(), serialNo,
-                        line.certificateApplicationDate(), line.remark(), batteryPricing.boxManufacturer(),
+                        batteryPricing.unitPrice(), line.taxRate(), battery ? null : line.configText(), effectiveWarehouseId, serialNo,
+                        line.certificateApplicationDate(), line.arrivalDate(), line.remark(), batteryPricing.boxManufacturer(),
                         batteryPricing.boxModel(), batteryPricing.boxUnitPrice(), batteryPricing.packManufacturer(),
                         batteryPricing.energyKwh(), batteryPricing.packUnitPrice());
             } catch (IllegalArgumentException exception) {
@@ -237,11 +248,14 @@ public class PurchaseOrderApplicationService {
             throw new ConflictException("RECEIVE_LINE_REQUIRED", "请至少填写一行收货明细");
         }
         UUID warehouseId = command.warehouseId() != null ? command.warehouseId() : order.getWarehouseId();
+        List<PurchaseOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(orderId);
+        boolean batteryOrder = "BATTERY".equals(purchaseScope(orderLines));
+        if (batteryOrder) {
+            warehouseId = masterData.requireBatteryWarehouse().id();
+        }
         if (warehouseId != null) {
             masterData.requireWarehouse(warehouseId);
         }
-
-        List<PurchaseOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(orderId);
         Map<UUID, PurchaseOrderLine> byId = new LinkedHashMap<>();
         orderLines.forEach(line -> byId.put(line.getId(), line));
 
@@ -255,8 +269,9 @@ public class PurchaseOrderApplicationService {
                 throw new NotFoundException("采购明细", receiveLine.orderLineId());
             }
             MasterDataQueryPort.ProductInfo product = masterData.requireProduct(orderLine.getProductId());
-            UUID lineWarehouseId = receiveLine.warehouseId() != null ? receiveLine.warehouseId()
-                    : (orderLine.getWarehouseId() != null ? orderLine.getWarehouseId() : warehouseId);
+            UUID lineWarehouseId = batteryOrder ? warehouseId
+                    : (receiveLine.warehouseId() != null ? receiveLine.warehouseId()
+                    : (orderLine.getWarehouseId() != null ? orderLine.getWarehouseId() : warehouseId));
             if (lineWarehouseId == null) {
                 throw new ConflictException("RECEIVE_WAREHOUSE_REQUIRED",
                         "商品「" + product.name() + "」请按本次到货明细指定收货仓库");
@@ -393,6 +408,9 @@ public class PurchaseOrderApplicationService {
                 .orElseThrow(() -> new NotFoundException("收货单", receiptId));
         PurchaseReceiptLine line = receiptLineRepository.findByIdAndReceiptId(lineId, receiptId)
                 .orElseThrow(() -> new NotFoundException("收货明细", lineId));
+        if (isBattery(masterData.requireProduct(line.getProductId()))) {
+            throw new ConflictException("BATTERY_WAREHOUSE_FIXED", "动力电池统一收货仓库为天津容大，不能单独修改");
+        }
         line.updateCertificateApplicationDate(certificateApplicationDate);
         receiptLineRepository.save(line);
         inventoryReceiptPort.updateCertificateApplicationDate(parseSerialNos(line.getSerialNos()),
@@ -566,7 +584,7 @@ public class PurchaseOrderApplicationService {
                     line.getProductId(), product.productNo(), product.name(), product.series(), product.configCode(),
                     line.getConfigText() != null ? line.getConfigText() : product.configCode(),
                     line.getSerialNo(), cabType(line.getConfigText(), product.name()),
-                    line.getCertificateApplicationDate(),
+                    line.getCertificateApplicationDate(), line.getArrivalDate(),
                     lineWarehouseId, lineWarehouse == null ? null : lineWarehouse.name(),
                     product.categoryCode(), product.categoryName(), product.trackingMode(), line.getQuantity(),
                     line.getReceivedQuantity(), line.remaining(), line.getUnitPrice(), line.getBatteryBoxUnitPrice(),
@@ -638,6 +656,9 @@ public class PurchaseOrderApplicationService {
         String boxManufacturer = requiredBatteryText(line.batteryBoxManufacturer(), "电池箱制造商");
         String boxModel = requiredBatteryText(line.batteryBoxModel(), "电池箱型号");
         String packManufacturer = requiredBatteryText(line.batteryPackManufacturer(), "电池包制造商");
+        if (line.arrivalDate() == null) {
+            throw new ConflictException("BATTERY_ARRIVAL_REQUIRED", "动力电池请填写到货时间");
+        }
         BigDecimal boxPrice = requiredBatteryMoney(line.batteryBoxUnitPrice(), "电池箱单价");
         BigDecimal packPrice = requiredBatteryMoney(line.batteryPackUnitPrice(), "电池包单价");
         if (line.batteryEnergyKwh() == null || line.batteryEnergyKwh().signum() <= 0) {

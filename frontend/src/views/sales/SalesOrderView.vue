@@ -64,8 +64,9 @@
           </a-col>
           <a-col :span="8">
             <a-form-item label="出库仓库">
-              <a-select v-model:value="form.warehouseId" :options="warehouseOptions" allow-clear
+              <a-select v-if="props.scope !== 'BATTERY'" v-model:value="form.warehouseId" :options="warehouseOptions" allow-clear
                         @change="onWarehouseChange" />
+              <a-input v-else value="天津容大" readonly />
             </a-form-item>
           </a-col>
           <a-col :span="8"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
@@ -97,22 +98,22 @@
                         @change="() => onProductChange(line)" />
             </template>
           </a-table-column>
-          <a-table-column title="电池箱制造商" :width="160">
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池箱制造商" :width="160">
             <template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryBoxManufacturer" placeholder="电池箱制造商" /></template>
           </a-table-column>
-          <a-table-column title="电池箱型号" :width="130">
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池箱型号" :width="130">
             <template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryBoxModel" placeholder="电池箱型号" /></template>
           </a-table-column>
-          <a-table-column title="电池箱单价" :width="130">
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池箱单价" :width="130">
             <template #default="{ record: line }"><MoneyInput v-if="isBatteryLine(line)" v-model:value="line.batteryBoxUnitPrice" :min="0" :precision="2" style="width:100%" /></template>
           </a-table-column>
-          <a-table-column title="电池包制造商" :width="160">
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池包制造商" :width="160">
             <template #default="{ record: line }"><a-input v-if="isBatteryLine(line)" v-model:value="line.batteryPackManufacturer" placeholder="电池包制造商" /></template>
           </a-table-column>
-          <a-table-column title="能量（kWh）" :width="120">
+          <a-table-column v-if="props.scope === 'BATTERY'" title="能量（kWh）" :width="120">
             <template #default="{ record: line }"><a-input-number v-if="isBatteryLine(line)" v-model:value="line.batteryEnergyKwh" :min="0.001" :precision="3" style="width:100%" /></template>
           </a-table-column>
-          <a-table-column title="电池包单价" :width="130">
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池包单价" :width="130">
             <template #default="{ record: line }"><MoneyInput v-if="isBatteryLine(line)" v-model:value="line.batteryPackUnitPrice" :min="0" :precision="2" style="width:100%" /></template>
           </a-table-column>
           <a-table-column title="数量" :width="110">
@@ -153,13 +154,13 @@
           <template #default="{ record }">{{ record.productName }}</template>
         </a-table-column>
         <a-table-column title="数量" data-index="quantity" :width="100" />
-        <a-table-column title="电池箱成交价" :width="180">
+        <a-table-column v-if="props.scope === 'BATTERY'" title="电池箱成交价" :width="180">
           <template #default="{ record }">
             <MoneyInput v-if="record.isBattery" v-model:value="record.batteryBoxUnitPrice" :min="0" :precision="2" style="width:100%" />
             <span v-else>-</span>
           </template>
         </a-table-column>
-        <a-table-column title="电池包成交价" :width="180">
+        <a-table-column v-if="props.scope === 'BATTERY'" title="电池包成交价" :width="180">
           <template #default="{ record }">
             <MoneyInput v-if="record.isBattery" v-model:value="record.batteryPackUnitPrice" :min="0" :precision="2" style="width:100%" />
             <span v-else>-</span>
@@ -179,7 +180,10 @@
       <a-alert type="warning" show-icon style="margin-bottom:12px"
                message="订单已锁货后方可出库。序列号商品选择本次交付的 VIN/SN（可不全交）；数量商品填写本次出库数量。" />
       <a-form layout="vertical">
-        <a-form-item label="出库仓库" required><a-select v-model:value="deliverForm.warehouseId" :options="warehouseOptions" /></a-form-item>
+        <a-form-item label="出库仓库" required>
+          <a-select v-if="props.scope !== 'BATTERY'" v-model:value="deliverForm.warehouseId" :options="warehouseOptions" />
+          <a-input v-else value="天津容大" readonly />
+        </a-form-item>
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false">
           <a-table-column title="商品" :width="200">
             <template #default="{ record }">{{ record.productName }}</template>
@@ -258,10 +262,9 @@ const salesRows = computed<SalesListRow[]>(() => rows.value.flatMap((order) => o
   line,
   isFirstLine: index === 0,
 }))))
-const columns = [
+const vehicleColumns = [
   { title: '行号', key: 'lineNo', width: 70, align: 'center' },
   { title: '商品', key: 'product', width: 240 },
-  { title: '电池信息', key: 'batteryInfo', width: 300, ellipsis: true },
   { title: '追踪', key: 'tracking', width: 100, align: 'center' },
   { title: '数量', key: 'quantity', width: 90, align: 'right' },
   { title: '已出', key: 'deliveredQuantity', width: 90, align: 'right' },
@@ -270,6 +273,12 @@ const columns = [
   { title: 'VIN/SN', key: 'vin', width: 260 },
   { title: '操作', key: 'actions', width: 330, fixed: 'right' },
 ]
+const batteryColumns = [
+  ...vehicleColumns.slice(0, 2),
+  { title: '电池信息', key: 'batteryInfo', width: 300, ellipsis: true },
+  ...vehicleColumns.slice(2),
+]
+const columns = computed(() => props.scope === 'BATTERY' ? batteryColumns : vehicleColumns)
 
 const productOptionsForWarehouse = computed(() => {
   const sellableIds = new Set(stockBalances.value

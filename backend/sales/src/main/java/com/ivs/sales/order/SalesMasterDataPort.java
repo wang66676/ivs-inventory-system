@@ -28,5 +28,7 @@ public interface SalesMasterDataPort {
 
     WarehouseInfo requireWarehouse(UUID warehouseId);
 
+    WarehouseInfo requireBatteryWarehouse();
+
     PriceInfo lookupPrice(UUID productId, String customerType, LocalDate date);
 }

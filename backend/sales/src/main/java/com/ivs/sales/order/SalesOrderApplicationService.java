@@ -93,12 +93,16 @@ public class SalesOrderApplicationService {
             throw new ConflictException("SALES_LINE_REQUIRED", "销售订单至少需要一行明细");
         }
         SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
-        if (command.warehouseId() != null) {
+        UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
+                : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                    ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
+        if (!command.lines().isEmpty() && !isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                && command.warehouseId() != null) {
             masterData.requireWarehouse(command.warehouseId());
         }
         String orderNo = "SO-%06d".formatted(orderRepository.nextOrderSequence());
         SalesOrder order = orderRepository.save(SalesOrder.create(orderNo, command.externalOrderNo(), customer.id(),
-                command.warehouseId(), BigDecimal.ZERO, false, command.remark(), currentUserId()));
+                orderWarehouseId, BigDecimal.ZERO, false, command.remark(), currentUserId()));
         PreparedOrder prepared = prepareLines(order, customer, command.lines());
         order.markPriceApprovalRequired(prepared.approvalRequired());
         order.updateTotal(prepared.total());
@@ -116,11 +120,15 @@ public class SalesOrderApplicationService {
             throw new ConflictException("SALES_STATUS_INVALID", "只有草稿订单可以编辑: " + order.getStatus());
         }
         SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
-        if (command.warehouseId() != null) {
+        UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
+                : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                    ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
+        if (!command.lines().isEmpty() && !isBattery(masterData.requireProduct(command.lines().get(0).productId()))
+                && command.warehouseId() != null) {
             masterData.requireWarehouse(command.warehouseId());
         }
         try {
-            order.updateDraft(command.externalOrderNo(), customer.id(), command.warehouseId(), command.remark());
+            order.updateDraft(command.externalOrderNo(), customer.id(), orderWarehouseId, command.remark());
         } catch (IllegalStateException exception) {
             throw new ConflictException("SALES_STATUS_INVALID", exception.getMessage());
         }
@@ -366,10 +374,11 @@ public class SalesOrderApplicationService {
         if (command.lines() == null || command.lines().isEmpty()) {
             throw new ConflictException("DELIVERY_LINE_REQUIRED", "请至少填写一行出库明细");
         }
-        UUID warehouseId = resolveWarehouseId(order, command.warehouseId());
-        masterData.requireWarehouse(warehouseId);
-
         List<SalesOrderLine> orderLines = lineRepository.findByOrderIdOrderByLineNoAsc(orderId);
+        UUID warehouseId = "BATTERY".equals(salesScope(orderLines))
+                ? masterData.requireBatteryWarehouse().id()
+                : resolveWarehouseId(order, command.warehouseId());
+        masterData.requireWarehouse(warehouseId);
         Map<UUID, SalesOrderLine> byId = new LinkedHashMap<>();
         orderLines.forEach(line -> byId.put(line.getId(), line));
 

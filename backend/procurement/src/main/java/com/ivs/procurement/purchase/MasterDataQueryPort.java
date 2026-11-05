@@ -23,5 +23,8 @@ public interface MasterDataQueryPort {
     SupplierInfo requireSupplier(UUID supplierId);
 
     WarehouseInfo requireWarehouse(UUID warehouseId);
+
+    /** 动力电池统一收货仓库：天津容大。 */
+    WarehouseInfo requireBatteryWarehouse();
 }
 

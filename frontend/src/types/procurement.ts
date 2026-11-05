@@ -19,6 +19,7 @@ export interface PurchaseOrderLine {
   serialNo?: string
   cabType?: string
   certificateApplicationDate?: string
+  arrivalDate?: string
   warehouseId?: string
   warehouseName?: string
   categoryCode: string
