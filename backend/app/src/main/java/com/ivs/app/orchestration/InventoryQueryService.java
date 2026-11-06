@@ -215,6 +215,39 @@ public class InventoryQueryService {
         return buckets;
     }
 
+    /** 一物一档库龄明细：按序列号当前在库/锁定状态和实际入库时间计算。 */
+    @Transactional(readOnly = true)
+    public List<InventoryApi.AgeAnalysisView> ageAnalysis() {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select ps.id serial_id, p.id product_id, ps.serial_no, ps.status, ps.purchase_price, ps.inbound_at,
+                       p.product_no, p.name product_name, p.series,
+                       c.code category_code, c.name category_name, c.status_template,
+                       w.id warehouse_id, w.name warehouse_name
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                  left join ivs.warehouse w on w.id = ps.warehouse_id
+                 where ps.inbound_at is not null and ps.status in ('IN_STOCK', 'LOCKED')
+                 order by ps.inbound_at asc, ps.serial_no
+                """);
+        Instant now = Instant.now();
+        List<InventoryApi.AgeAnalysisView> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Instant inboundAt = toInstant(row.get("inbound_at"));
+            long days = inboundAt == null ? 0 : Math.max(0, Duration.between(inboundAt, now).toDays());
+            String bucket = days <= 30 ? "0-30 天" : days <= 60 ? "31-60 天" : days <= 90 ? "61-90 天" : "90 天以上";
+            result.add(new InventoryApi.AgeAnalysisView(
+                    (UUID) row.get("serial_id"), (UUID) row.get("product_id"), String.valueOf(row.get("serial_no")),
+                    String.valueOf(row.get("product_no")), String.valueOf(row.get("product_name")),
+                    String.valueOf(row.get("category_code")), String.valueOf(row.get("category_name")),
+                    row.get("series") == null ? null : String.valueOf(row.get("series")),
+                    (UUID) row.get("warehouse_id"), row.get("warehouse_name") == null ? null : String.valueOf(row.get("warehouse_name")),
+                    String.valueOf(row.get("status")), inboundAt, days, bucket,
+                    row.get("purchase_price") == null ? BigDecimal.ZERO : toMoney(row.get("purchase_price"))));
+        }
+        return result;
+    }
+
     private InventoryApi.BalanceView toBalanceView(StockBalance balance) {
         MasterdataApi.ProductView product = productService.get(balance.getProductId());
         String warehouseName = warehouseService.get(balance.getWarehouseId()).name();

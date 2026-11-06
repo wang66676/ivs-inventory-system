@@ -65,6 +65,24 @@ export interface AgeBucket {
   amount: number
 }
 
+export interface AgeAnalysisItem {
+  serialId: string
+  productId: string
+  serialNo: string
+  productNo: string
+  productName: string
+  categoryCode: string
+  categoryName: string
+  series?: string
+  warehouseId?: string
+  warehouseName?: string
+  status: string
+  inboundAt: string
+  ageDays: number
+  ageBucket: string
+  purchasePrice: number
+}
+
 export interface InventorySummary {
   serialInStock: number
   vehicleInStockNotLocked: number

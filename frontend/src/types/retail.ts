@@ -38,6 +38,21 @@ export interface RetailRecord {
   createdAt: string
 }
 
+export interface RetailPendingItem {
+  serial: ProductSerial
+  orderId: string
+  orderNo: string
+  deliveryId: string
+  deliveryNo: string
+  deliveredAt: string
+  pendingDays: number
+  series?: string
+  customerId: string
+  customerName: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+}
+
 export const RETAIL_STATUS_LABELS: Record<RetailStatus, string> = {
   DRAFT: '草稿',
   SUBMITTED: '待复核',

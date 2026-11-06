@@ -46,6 +46,13 @@ public final class InventoryApi {
     public record AgeBucketView(String label, int serialCount, BigDecimal amount) {
     }
 
+    public record AgeAnalysisView(
+            UUID serialId, UUID productId, String serialNo, String productNo, String productName, String categoryCode,
+            String categoryName, String series, UUID warehouseId, String warehouseName, String status,
+            Instant inboundAt, long ageDays, String ageBucket, BigDecimal purchasePrice
+    ) {
+    }
+
     public record CategorySummaryView(String categoryName, int itemCount, BigDecimal amount) {
     }
 

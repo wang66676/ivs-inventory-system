@@ -48,7 +48,7 @@ const modulePages: MenuPage[] = [
   { path: '/inventory/battery-locks', name: 'stock-lock-battery', component: () => import('../views/inventory/StockLockView.vue'), title: '电池库存锁定', scope: 'BATTERY', description: '动力电池销售订单锁货与超时自动释放。', permission: 'IVS_READ' },
   { path: '/inventory/stocktakes', name: 'stocktake', component: () => import('../views/inventory/StocktakeView.vue'), title: '库存盘点', description: '盘点单：草稿 → 过账，差异写台账。', permission: 'IVS_STOCK_ADJUST' },
   { path: '/inventory/transfers', name: 'stock-transfer', component: () => import('../views/inventory/StockTransferView.vue'), title: '库存调拨', description: '调拨单：审核、在途、签收与差异处理。', permission: 'IVS_STOCK_TRANSFER' },
-  { path: '/inventory/age', name: 'stock-age', title: '库龄分析', description: '0-30 / 31-60 / 61-90 / 90+ 天库龄与呆滞预警。', permission: 'IVS_READ' },
+  { path: '/inventory/age', name: 'stock-age', component: () => import('../views/inventory/AgeAnalysisView.vue'), title: '库龄分析', description: '按 VIN/SN 查看 0-30 / 31-60 / 61-90 / 90+ 天库龄与呆滞预警。', permission: 'IVS_READ' },
 
   // 销售
   { path: '/sales/orders', name: 'sales-order', component: () => import('../views/sales/SalesOrderView.vue'), title: '整车销售订单', scope: 'VEHICLE', description: '整车销售订单、VIN 锁货与出库。', permission: 'IVS_READ' },
@@ -65,7 +65,7 @@ const modulePages: MenuPage[] = [
   { path: '/retail/records', name: 'retail-record', component: () => import('../views/retail/RetailView.vue'), title: '实销登记', description: '实销登记：车辆使用人、手机号、终端发票开票时间（必填），车牌照号（选填）；实销日期须晚于开票时间。', permission: 'IVS_RETAIL_WRITE' },
   { path: '/retail/verify', name: 'retail-verify', component: () => import('../views/retail/RetailView.vue'), title: '实销复核', description: '实销复核、确认与冲正；确认后触发政策匹配与预享受项转可申请。', permission: 'IVS_RETAIL_VERIFY', hideable: true },
   { path: '/retail/ledger', name: 'retail-ledger', component: () => import('../views/retail/RetailView.vue'), title: '实销台账', description: '按期间/门店/车型的实销台账。', permission: 'IVS_READ', hideable: true },
-  { path: '/retail/pending', name: 'retail-pending', title: '未实销预警', description: '已交付未实销清单（直接影响返利申报，必须预警）。', permission: 'IVS_READ' },
+  { path: '/retail/pending', name: 'retail-pending', component: () => import('../views/retail/RetailPendingView.vue'), title: '未实销预警', description: '已交付未实销车辆清单（直接影响返利申报，必须预警）。', permission: 'IVS_READ' },
 
   // 政策与返利
   { path: '/policy/policies', name: 'policy', component: () => import('../views/policy/PolicyView.vue'), title: '政策管理', description: '政策手工录入：名目、车型多选、金额或比例、生效与失效日期、限制维度（时间/金额/条件）、参考时间、周期与截止日。', permission: 'IVS_POLICY_WRITE' },

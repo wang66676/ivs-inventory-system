@@ -108,7 +108,7 @@ jobs:
       - name: 构建 Android APK
         working-directory: android-app
         env:
-          IVS_SERVER_URL: ${{ vars.IVS_SERVER_URL || 'https://ooo-thousands-block-hereby.trycloudflare.com/' }}
+          IVS_SERVER_URL: ${{ vars.IVS_SERVER_URL || 'https://radio-together-placed-facilitate.trycloudflare.com/' }}
         run: gradle assembleRelease --no-daemon
 
       - name: 整理 APK

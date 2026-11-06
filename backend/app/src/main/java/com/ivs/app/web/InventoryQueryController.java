@@ -51,4 +51,10 @@ public class InventoryQueryController {
     public InventoryApi.SummaryView summary() {
         return service.summary();
     }
+
+    @GetMapping("/age-analysis")
+    @PreAuthorize("hasAuthority('IVS_READ')")
+    public List<InventoryApi.AgeAnalysisView> ageAnalysis() {
+        return service.ageAnalysis();
+    }
 }
