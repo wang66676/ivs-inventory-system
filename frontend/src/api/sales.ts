@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { AgingBucket, Invoice, Receipt, Receivable, SalesDelivery, SalesOrder } from '../types/sales'
+import type { AgingBucket, InstallmentPlan, Invoice, Receipt, Receivable, SalesDelivery, SalesOrder } from '../types/sales'
 
 export const salesApi = {
   orders: (params?: { keyword?: string; status?: string; customerId?: string }) =>
@@ -21,6 +21,8 @@ export const salesApi = {
   receivables: (params?: { customerId?: string }) =>
     http.get<Receivable[]>('/ivs/receivables', { params }).then((r) => r.data),
   aging: () => http.get<AgingBucket[]>('/ivs/receivables/aging').then((r) => r.data),
+  installmentPlans: () => http.get<InstallmentPlan[]>('/ivs/installment-plans').then((r) => r.data),
+  installmentPlan: (id: string) => http.get<InstallmentPlan>(`/ivs/installment-plans/${id}`).then((r) => r.data),
   receipts: () => http.get<Receipt[]>('/ivs/receipts').then((r) => r.data),
   createReceipt: (body: Record<string, unknown>) => http.post<Receipt>('/ivs/receipts', body).then((r) => r.data),
 }

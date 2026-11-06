@@ -26,19 +26,22 @@ public class ReceiptApplicationService {
     private final SalesMasterDataPort masterData;
     private final SalesOrderRepository orderRepository;
     private final SalesOrderApplicationService orderService;
+    private final InstallmentPlanService installmentPlanService;
 
     public ReceiptApplicationService(ReceivableRepository receivableRepository,
                                      ReceiptRepository receiptRepository,
                                      ReceiptAllocationRepository allocationRepository,
                                      SalesMasterDataPort masterData,
                                      SalesOrderRepository orderRepository,
-                                     SalesOrderApplicationService orderService) {
+                                     SalesOrderApplicationService orderService,
+                                     InstallmentPlanService installmentPlanService) {
         this.receivableRepository = receivableRepository;
         this.receiptRepository = receiptRepository;
         this.allocationRepository = allocationRepository;
         this.masterData = masterData;
         this.orderRepository = orderRepository;
         this.orderService = orderService;
+        this.installmentPlanService = installmentPlanService;
     }
 
     @Transactional(readOnly = true)
@@ -56,6 +59,13 @@ public class ReceiptApplicationService {
     public SalesApi.ReceiptView createReceipt(SalesApi.CreateReceiptCommand command) {
         SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
         List<Receivable> outstanding = receivableRepository.findOutstandingForUpdate(customer.id());
+        if (command.receivableIds() != null && !command.receivableIds().isEmpty()) {
+            var selected = new java.util.HashSet<>(command.receivableIds());
+            outstanding = outstanding.stream().filter(item -> selected.contains(item.getId())).toList();
+            if (outstanding.size() != selected.size()) {
+                throw new ConflictException("RECEIVABLE_NOT_FOUND", "选中的分期应收不存在、已结清或不属于当前客户");
+            }
+        }
         BigDecimal totalOutstanding = outstanding.stream().map(Receivable::outstanding)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal amount = command.amount() == null ? BigDecimal.ZERO : command.amount();
@@ -88,6 +98,7 @@ public class ReceiptApplicationService {
             }
             receivableRepository.save(receivable);
             allocationRepository.save(ReceiptAllocation.create(receipt.getId(), receivable.getId(), applied));
+            installmentPlanService.refreshForReceivable(receivable.getId());
             allocations.add(new SalesApi.ReceiptAllocationView(receivable.getId(), receivable.getReceivableNo(), applied));
             remaining = remaining.subtract(applied);
         }

@@ -7,6 +7,7 @@ import com.ivs.inventory.stock.StockLockRepository;
 import com.ivs.inventory.stock.StockMoveType;
 import com.ivs.inventory.stock.StockService;
 import com.ivs.masterdata.SerialStatus;
+import com.ivs.masterdata.OwnershipType;
 import com.ivs.masterdata.serial.ProductSerialRepository;
 import com.ivs.masterdata.serial.ProductSerialService;
 import com.ivs.sales.order.SalesStockPort;
@@ -123,6 +124,15 @@ public class SalesStockAdapter implements SalesStockPort {
         if (balance.getOnHandQty().compareTo(quantity) < 0) {
             throw new ConflictException("STOCK_NOT_AVAILABLE", "在库数量不足，当前在库："
                     + balance.getOnHandQty().toPlainString());
+        }
+    }
+
+    @Override
+    public void markOwnership(List<UUID> serialIds, boolean leaseToOwn) {
+        if (serialIds == null || serialIds.isEmpty()) return;
+        OwnershipType ownershipType = leaseToOwn ? OwnershipType.LEASE_TO_OWN : OwnershipType.OWNED;
+        for (UUID serialId : serialIds) {
+            serialService.changeOwnership(serialId, ownershipType);
         }
     }
 

@@ -25,6 +25,7 @@ public final class SalesApi {
             UUID id, String orderNo, String externalOrderNo, UUID customerId, String customerName, String customerType,
             UUID warehouseId, String warehouseName, SalesOrderStatus status, String businessScope, BigDecimal totalAmount,
             boolean priceApprovalRequired, boolean priceApproved, Instant lockedAt, String remark, Instant createdAt,
+            String paymentMode, BigDecimal downPayment, int installmentCount, LocalDate firstDueDate,
             List<SalesOrderLineView> lines
     ) {
         public static SalesOrderView from(SalesOrder order, String customerName, String customerType,
@@ -33,7 +34,8 @@ public final class SalesApi {
                     order.getCustomerId(), customerName, customerType, order.getWarehouseId(), warehouseName,
                     order.getStatus(), businessScope, order.getTotalAmount(),
                     order.isPriceApprovalRequired(), order.getPriceApprovedBy() != null, order.getLockedAt(),
-                    order.getRemark(), order.getCreatedAt(), lines);
+                    order.getRemark(), order.getCreatedAt(), order.getPaymentMode().name(), order.getDownPayment(),
+                    order.getInstallmentCount(), order.getFirstDueDate(), lines);
         }
     }
 
@@ -50,8 +52,13 @@ public final class SalesApi {
 
     public record SaveSalesOrderCommand(
             String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
-            List<SaveSalesOrderLineCommand> lines
+            List<SaveSalesOrderLineCommand> lines, String paymentMode, BigDecimal downPayment,
+            int installmentCount, LocalDate firstDueDate
     ) {
+        public SaveSalesOrderCommand(String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
+                                     List<SaveSalesOrderLineCommand> lines) {
+            this(externalOrderNo, customerId, warehouseId, remark, lines, "CASH", BigDecimal.ZERO, 0, null);
+        }
     }
 
     public record SaveSalesOrderLineCommand(
@@ -119,7 +126,24 @@ public final class SalesApi {
     }
 
     public record CreateReceiptCommand(
-            UUID customerId, BigDecimal amount, PaymentMethod method, String remark
+            UUID customerId, BigDecimal amount, PaymentMethod method, String remark, List<UUID> receivableIds
+    ) {
+        public CreateReceiptCommand(UUID customerId, BigDecimal amount, PaymentMethod method, String remark) {
+            this(customerId, amount, method, remark, null);
+        }
+    }
+
+    public record InstallmentScheduleView(
+            UUID id, int periodNo, UUID receivableId, String receivableNo, LocalDate dueDate, BigDecimal amount,
+            BigDecimal receivedAmount, BigDecimal outstanding, ReceivableStatus status, long overdueDays
+    ) {
+    }
+
+    public record InstallmentPlanView(
+            UUID id, String planNo, UUID orderId, String orderNo, UUID customerId, String customerName,
+            BigDecimal totalAmount, BigDecimal downPayment, BigDecimal financedAmount, int installmentCount,
+            LocalDate firstDueDate, String status, BigDecimal receivedAmount, BigDecimal outstanding,
+            BigDecimal overdueAmount, LocalDate nextDueDate, Instant createdAt, List<InstallmentScheduleView> schedules
     ) {
     }
 

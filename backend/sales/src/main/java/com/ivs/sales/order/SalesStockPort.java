@@ -32,4 +32,7 @@ public interface SalesStockPort {
      * （锁定占用的是可用量，而本次出库正是在消耗自己锁定的那部分）。
      */
     void requireDeliverable(UUID productId, UUID warehouseId, BigDecimal quantity);
+
+    /** 分期以租代售时标记所有权，结清后转回自有。 */
+    void markOwnership(List<UUID> serialIds, boolean leaseToOwn);
 }

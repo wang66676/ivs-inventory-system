@@ -190,6 +190,16 @@ public class ProductSerialService {
         }
     }
 
+    /** 分期以租代售出库时标记为租赁转自有，全部结清后再转为自有。 */
+    @Transactional
+    public void changeOwnership(UUID id, com.ivs.masterdata.OwnershipType ownershipType) {
+        ProductSerial serial = find(id);
+        serial.changeOwnership(ownershipType);
+        ProductSerial saved = serialRepository.save(serial);
+        publish(saved, "SerialOwnershipChanged", Map.of("serialNo", saved.getSerialNo(),
+                "ownershipType", saved.getOwnershipType().name()));
+    }
+
     /** 按状态机模板求合法流转路径，供收货等场景逐步推进状态。 */
     @Transactional(readOnly = true)
     public java.util.List<SerialStatus> statusPath(UUID id, SerialStatus target) {

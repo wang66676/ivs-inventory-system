@@ -13,6 +13,7 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** 销售订单：一期按全价成交、全价开票；优惠由 M4 的政策与返利承接。 */
@@ -41,6 +42,19 @@ public class SalesOrder {
 
     @Column(name = "total_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal totalAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_mode", nullable = false, length = 20)
+    private PaymentMode paymentMode;
+
+    @Column(name = "down_payment", nullable = false, precision = 18, scale = 2)
+    private BigDecimal downPayment;
+
+    @Column(name = "installment_count", nullable = false)
+    private int installmentCount;
+
+    @Column(name = "first_due_date")
+    private LocalDate firstDueDate;
 
     /** 存在低于最低限价的明细时需要价格审批。 */
     @Column(name = "price_approval_required", nullable = false)
@@ -78,6 +92,14 @@ public class SalesOrder {
     public static SalesOrder create(String orderNo, String externalOrderNo, UUID customerId, UUID warehouseId,
                                     BigDecimal totalAmount,
                                     boolean priceApprovalRequired, String remark, UUID ownerId) {
+        return create(orderNo, externalOrderNo, customerId, warehouseId, totalAmount,
+                priceApprovalRequired, remark, ownerId, PaymentMode.CASH, BigDecimal.ZERO, 0, null);
+    }
+
+    public static SalesOrder create(String orderNo, String externalOrderNo, UUID customerId, UUID warehouseId,
+                                    BigDecimal totalAmount, boolean priceApprovalRequired, String remark,
+                                    UUID ownerId, PaymentMode paymentMode, BigDecimal downPayment,
+                                    int installmentCount, LocalDate firstDueDate) {
         SalesOrder order = new SalesOrder();
         order.id = UUID.randomUUID();
         order.orderNo = orderNo;
@@ -86,6 +108,10 @@ public class SalesOrder {
         order.warehouseId = warehouseId;
         order.status = SalesOrderStatus.DRAFT;
         order.totalAmount = money(totalAmount);
+        order.paymentMode = paymentMode == null ? PaymentMode.CASH : paymentMode;
+        order.downPayment = money(downPayment);
+        order.installmentCount = Math.max(installmentCount, 0);
+        order.firstDueDate = firstDueDate;
         order.priceApprovalRequired = priceApprovalRequired;
         order.remark = remark;
         order.ownerId = ownerId;
@@ -110,6 +136,13 @@ public class SalesOrder {
 
     /** 草稿补全客户、仓库与备注。 */
     public void updateDraft(String externalOrderNo, UUID customerId, UUID warehouseId, String remark) {
+        updateDraft(externalOrderNo, customerId, warehouseId, remark, paymentMode, downPayment,
+                installmentCount, firstDueDate);
+    }
+
+    public void updateDraft(String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
+                            PaymentMode paymentMode, BigDecimal downPayment, int installmentCount,
+                            LocalDate firstDueDate) {
         if (status != SalesOrderStatus.DRAFT) {
             throw new IllegalStateException("只有草稿订单可以编辑: " + status);
         }
@@ -117,6 +150,29 @@ public class SalesOrder {
         this.externalOrderNo = normalize(externalOrderNo) == null ? orderNo : normalize(externalOrderNo);
         this.warehouseId = warehouseId;
         this.remark = remark;
+        this.paymentMode = paymentMode == null ? PaymentMode.CASH : paymentMode;
+        this.downPayment = money(downPayment);
+        this.installmentCount = Math.max(installmentCount, 0);
+        this.firstDueDate = firstDueDate;
+    }
+
+    public void validateInstallment(BigDecimal total) {
+        BigDecimal orderTotal = money(total);
+        if (paymentMode != PaymentMode.INSTALLMENT) {
+            this.downPayment = money(BigDecimal.ZERO);
+            this.installmentCount = 0;
+            this.firstDueDate = null;
+            return;
+        }
+        if (firstDueDate == null) {
+            throw new IllegalArgumentException("分期收款必须填写首期到期日");
+        }
+        if (installmentCount <= 0 || installmentCount > 60) {
+            throw new IllegalArgumentException("分期期数必须在 1 到 60 之间");
+        }
+        if (downPayment.signum() < 0 || downPayment.compareTo(orderTotal) >= 0) {
+            throw new IllegalArgumentException("首付金额必须大于等于 0 且小于订单总额");
+        }
     }
 
     /** 低价审批：仅当存在低于最低限价的明细时需要。 */
@@ -193,6 +249,12 @@ public class SalesOrder {
         if (totalAmount == null) {
             totalAmount = money(BigDecimal.ZERO);
         }
+        if (paymentMode == null) {
+            paymentMode = PaymentMode.CASH;
+        }
+        if (downPayment == null) {
+            downPayment = money(BigDecimal.ZERO);
+        }
         if (createdAt == null) {
             createdAt = now;
         }
@@ -221,6 +283,10 @@ public class SalesOrder {
     public UUID getWarehouseId() { return warehouseId; }
     public SalesOrderStatus getStatus() { return status; }
     public BigDecimal getTotalAmount() { return totalAmount; }
+    public PaymentMode getPaymentMode() { return paymentMode; }
+    public BigDecimal getDownPayment() { return downPayment; }
+    public int getInstallmentCount() { return installmentCount; }
+    public LocalDate getFirstDueDate() { return firstDueDate; }
     public boolean isPriceApprovalRequired() { return priceApprovalRequired; }
     public UUID getPriceApprovedBy() { return priceApprovedBy; }
     public Instant getPriceApprovedAt() { return priceApprovedAt; }

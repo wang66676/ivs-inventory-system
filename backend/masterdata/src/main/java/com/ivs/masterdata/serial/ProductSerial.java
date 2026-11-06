@@ -234,6 +234,13 @@ public class ProductSerial {
     public Instant getWarrantyStart() { return warrantyStart; }
     public Instant getWarrantyEnd() { return warrantyEnd; }
     public OwnershipType getOwnershipType() { return ownershipType; }
+
+    public void changeOwnership(OwnershipType ownershipType) {
+        if (ownershipType == null) {
+            throw new IllegalArgumentException("所有权类型不能为空");
+        }
+        this.ownershipType = ownershipType;
+    }
     public UUID getLeaseContractId() { return leaseContractId; }
     public String getAttrsJson() { return attrsJson; }
     public String getRemark() { return remark; }

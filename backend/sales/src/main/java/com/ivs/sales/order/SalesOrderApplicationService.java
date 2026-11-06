@@ -3,6 +3,7 @@ package com.ivs.sales.order;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivs.sales.order.api.SalesApi;
+import com.ivs.sales.settlement.InstallmentPlanService;
 import com.ivs.sales.settlement.Receivable;
 import com.ivs.sales.settlement.ReceivableRepository;
 import com.ivs.shared.error.ConflictException;
@@ -41,6 +42,7 @@ public class SalesOrderApplicationService {
     private final ReceivableRepository receivableRepository;
     private final SalesMasterDataPort masterData;
     private final SalesStockPort stockPort;
+    private final InstallmentPlanService installmentPlanService;
     private final EventPublisher events;
     private final CurrentActorProvider actors;
     private final ObjectMapper objectMapper;
@@ -52,6 +54,7 @@ public class SalesOrderApplicationService {
                                         ReceivableRepository receivableRepository,
                                         SalesMasterDataPort masterData,
                                         SalesStockPort stockPort,
+                                        InstallmentPlanService installmentPlanService,
                                         EventPublisher events,
                                         CurrentActorProvider actors,
                                         ObjectMapper objectMapper) {
@@ -62,6 +65,7 @@ public class SalesOrderApplicationService {
         this.receivableRepository = receivableRepository;
         this.masterData = masterData;
         this.stockPort = stockPort;
+        this.installmentPlanService = installmentPlanService;
         this.events = events;
         this.actors = actors;
         this.objectMapper = objectMapper;
@@ -101,11 +105,14 @@ public class SalesOrderApplicationService {
             masterData.requireWarehouse(command.warehouseId());
         }
         String orderNo = "SO-%06d".formatted(orderRepository.nextOrderSequence());
+        PaymentMode paymentMode = paymentMode(command.paymentMode());
         SalesOrder order = orderRepository.save(SalesOrder.create(orderNo, command.externalOrderNo(), customer.id(),
-                orderWarehouseId, BigDecimal.ZERO, false, command.remark(), currentUserId()));
+                orderWarehouseId, BigDecimal.ZERO, false, command.remark(), currentUserId(), paymentMode,
+                command.downPayment(), command.installmentCount(), command.firstDueDate()));
         PreparedOrder prepared = prepareLines(order, customer, command.lines());
         order.markPriceApprovalRequired(prepared.approvalRequired());
         order.updateTotal(prepared.total());
+        validateInstallment(order, prepared.total());
         orderRepository.save(order);
         publish(order, "SalesOrderCreated", Map.of("orderNo", orderNo, "totalAmount", prepared.total()));
         return toView(order);
@@ -120,6 +127,7 @@ public class SalesOrderApplicationService {
             throw new ConflictException("SALES_STATUS_INVALID", "只有草稿订单可以编辑: " + order.getStatus());
         }
         SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
+        PaymentMode paymentMode = paymentMode(command.paymentMode());
         UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
                 : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
                     ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
@@ -128,7 +136,8 @@ public class SalesOrderApplicationService {
             masterData.requireWarehouse(command.warehouseId());
         }
         try {
-            order.updateDraft(command.externalOrderNo(), customer.id(), orderWarehouseId, command.remark());
+            order.updateDraft(command.externalOrderNo(), customer.id(), orderWarehouseId, command.remark(),
+                    paymentMode, command.downPayment(), command.installmentCount(), command.firstDueDate());
         } catch (IllegalStateException exception) {
             throw new ConflictException("SALES_STATUS_INVALID", exception.getMessage());
         }
@@ -140,6 +149,7 @@ public class SalesOrderApplicationService {
         order.resetPriceApproval();
         order.markPriceApprovalRequired(prepared.approvalRequired());
         order.updateTotal(prepared.total());
+        validateInstallment(order, prepared.total());
         SalesOrder saved = orderRepository.saveAndFlush(order);
         publish(saved, "SalesOrderUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", prepared.total()));
         return toView(saved);
@@ -451,16 +461,25 @@ public class SalesOrderApplicationService {
                     item.serialIds(), remainingSerialIds, item.orderLine().remaining());
         }
 
-        // 生成应收（到期日 = 今天 + 客户账期天数，默认 30 天）
-        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(order.getCustomerId());
-        int termDays = customer.paymentTermDays() > 0 ? customer.paymentTermDays() : DEFAULT_PAYMENT_TERM_DAYS;
-        LocalDate dueDate = delivery.getDeliveredAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                .plusDays(termDays);
-        Receivable receivable = Receivable.create("AR-%06d".formatted(receivableRepository.nextReceivableSequence()),
-                order.getCustomerId(), order.getId(), delivery.getId(), totalAmount, dueDate, "出库 " + deliveryNo);
-        receivableRepository.save(receivable);
-
         boolean fullyDelivered = orderLines.stream().allMatch(SalesOrderLine::fullyDelivered);
+        if (order.getPaymentMode() == PaymentMode.INSTALLMENT && !fullyDelivered) {
+            throw new ConflictException("INSTALLMENT_PARTIAL_DELIVERY_NOT_ALLOWED",
+                    "分期收款订单必须一次性完成全部车辆/电池出库");
+        }
+        if (order.getPaymentMode() == PaymentMode.INSTALLMENT) {
+            List<UUID> deliveredSerialIds = prepared.stream()
+                    .flatMap(item -> item.serialIds().stream()).toList();
+            installmentPlanService.createForDelivery(order, delivery, totalAmount, deliveredSerialIds);
+        } else {
+            // 全款订单生成单一应收，到期日 = 今天 + 客户账期天数。
+            SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(order.getCustomerId());
+            int termDays = customer.paymentTermDays() > 0 ? customer.paymentTermDays() : DEFAULT_PAYMENT_TERM_DAYS;
+            LocalDate dueDate = delivery.getDeliveredAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    .plusDays(termDays);
+            Receivable receivable = Receivable.create("AR-%06d".formatted(receivableRepository.nextReceivableSequence()),
+                    order.getCustomerId(), order.getId(), delivery.getId(), totalAmount, dueDate, "出库 " + deliveryNo);
+            receivableRepository.save(receivable);
+        }
         order.refreshDeliveryStatus(fullyDelivered);
         if (fullyDelivered) {
             stockPort.releaseAll(order.getId());
@@ -611,6 +630,22 @@ public class SalesOrderApplicationService {
         String code = product.categoryCode() == null ? "" : product.categoryCode().toUpperCase();
         String name = product.categoryName() == null ? "" : product.categoryName();
         return code.equals("BATTERY") || code.startsWith("BATTERY-") || name.contains("电池");
+    }
+
+    private PaymentMode paymentMode(String value) {
+        try {
+            return value == null || value.isBlank() ? PaymentMode.CASH : PaymentMode.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            throw new ConflictException("PAYMENT_MODE_INVALID", "不支持的结算方式：" + value);
+        }
+    }
+
+    private void validateInstallment(SalesOrder order, BigDecimal total) {
+        try {
+            order.validateInstallment(total);
+        } catch (IllegalArgumentException exception) {
+            throw new ConflictException("INSTALLMENT_INVALID", exception.getMessage());
+        }
     }
 
     private String requiredBatteryText(String value, String field) {

@@ -1,4 +1,5 @@
 export type SalesOrderStatus = 'DRAFT' | 'CONFIRMED' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'CLOSED' | 'CANCELLED'
+export type PaymentMode = 'CASH' | 'INSTALLMENT'
 export type ReceivableStatus = 'OPEN' | 'PARTIALLY_SETTLED' | 'SETTLED' | 'OVERDUE'
 export type PaymentMethod = 'BANK_TRANSFER' | 'CASH' | 'ACCEPTANCE_BILL' | 'OTHER'
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'VOID' | 'RED_FLUSHED'
@@ -43,6 +44,10 @@ export interface SalesOrder {
   warehouseName?: string
   status: SalesOrderStatus
   businessScope?: 'VEHICLE' | 'BATTERY'
+  paymentMode?: PaymentMode
+  downPayment?: number
+  installmentCount?: number
+  firstDueDate?: string
   totalAmount: number
   priceApprovalRequired: boolean
   priceApproved: boolean
@@ -120,6 +125,40 @@ export interface AgingBucket {
   label: string
   count: number
   amount: number
+}
+
+export interface InstallmentSchedule {
+  id: string
+  periodNo: number
+  receivableId: string
+  receivableNo: string
+  dueDate: string
+  amount: number
+  receivedAmount: number
+  outstanding: number
+  status: ReceivableStatus
+  overdueDays: number
+}
+
+export interface InstallmentPlan {
+  id: string
+  planNo: string
+  orderId: string
+  orderNo?: string
+  customerId: string
+  customerName: string
+  totalAmount: number
+  downPayment: number
+  financedAmount: number
+  installmentCount: number
+  firstDueDate: string
+  status: 'ACTIVE' | 'SETTLED' | 'CANCELLED'
+  receivedAmount: number
+  outstanding: number
+  overdueAmount: number
+  nextDueDate?: string
+  createdAt: string
+  schedules: InstallmentSchedule[]
 }
 
 export interface Invoice {

@@ -15,6 +15,7 @@
           <template v-if="column.key === 'lineNo'">{{ record.line.lineNo }}</template>
           <template v-else-if="column.key === 'product'">
             <div>{{ record.line.productName }}</div>
+            <a-tag v-if="record.order.paymentMode === 'INSTALLMENT'" color="purple" style="margin-top:3px">分期 / 以租代售</a-tag>
             <a-tag v-if="record.line.belowMinPrice" color="red" style="margin-top:3px">低于限价 {{ record.line.minPrice }}</a-tag>
             <a-tag v-if="record.order.priceApprovalRequired && !record.order.priceApproved" color="red" style="margin-top:3px">需价格审批</a-tag>
           </template>
@@ -70,6 +71,27 @@
             </a-form-item>
           </a-col>
           <a-col :span="8"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
+        </a-row>
+        <a-row :gutter="12" style="margin-top:4px">
+          <a-col :span="8">
+            <a-form-item label="结算方式">
+              <a-radio-group v-model:value="form.paymentMode">
+                <a-radio-button value="CASH">全款</a-radio-button>
+                <a-radio-button value="INSTALLMENT">分期 / 以租代售</a-radio-button>
+              </a-radio-group>
+            </a-form-item>
+          </a-col>
+          <template v-if="form.paymentMode === 'INSTALLMENT'">
+            <a-col :span="6">
+              <a-form-item label="首付金额"><MoneyInput v-model:value="form.downPayment" :min="0" :precision="2" style="width:100%" /></a-form-item>
+            </a-col>
+            <a-col :span="4">
+              <a-form-item label="分期期数"><a-input-number v-model:value="form.installmentCount" :min="1" :max="60" :precision="0" style="width:100%" /></a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item label="首期到期日"><a-date-picker v-model:value="form.firstDueDate" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item>
+            </a-col>
+          </template>
         </a-row>
         <a-divider orientation="left" style="font-size:13px">客户</a-divider>
         <a-radio-group v-model:value="customerMode" button-style="solid" style="margin-bottom:12px">
@@ -419,6 +441,10 @@ async function openCreate() {
   manualCustomer.contactName = ''
   manualCustomer.contactPhone = ''
   form.lines = [newLine()]
+  form.paymentMode = 'CASH'
+  form.downPayment = 0
+  form.installmentCount = 12
+  form.firstDueDate = undefined
   formOpen.value = true
 }
 function openEdit(record: SalesOrder) {
@@ -429,6 +455,10 @@ function openEdit(record: SalesOrder) {
   customerMode.value = 'EXISTING'
   form.warehouseId = record.warehouseId
   form.remark = record.remark
+  form.paymentMode = record.paymentMode || 'CASH'
+  form.downPayment = Number(record.downPayment || 0)
+  form.installmentCount = Number(record.installmentCount || 12)
+  form.firstDueDate = record.firstDueDate
   form.lines = record.lines.map((line) => ({
     _key: line.id,
     productId: line.productId,
@@ -520,11 +550,20 @@ async function submit() {
       return
     }
   }
+  if (form.paymentMode === 'INSTALLMENT') {
+    if (!form.firstDueDate) { message.warning('请选择首期到期日'); return }
+    if (!(Number(form.installmentCount) > 0)) { message.warning('分期期数必须大于 0'); return }
+    if (Number(form.downPayment || 0) < 0) { message.warning('首付金额不能为负数'); return }
+  }
   const payload = {
     externalOrderNo: form.externalOrderNo || null,
     customerId: form.customerId,
     warehouseId: form.warehouseId,
     remark: form.remark,
+    paymentMode: form.paymentMode || 'CASH',
+    downPayment: form.paymentMode === 'INSTALLMENT' ? Number(form.downPayment || 0) : 0,
+    installmentCount: form.paymentMode === 'INSTALLMENT' ? Number(form.installmentCount) : 0,
+    firstDueDate: form.paymentMode === 'INSTALLMENT' ? form.firstDueDate : null,
     lines: lines.map((line) => ({
       productId: line.productId,
       quantity: line.quantity,
