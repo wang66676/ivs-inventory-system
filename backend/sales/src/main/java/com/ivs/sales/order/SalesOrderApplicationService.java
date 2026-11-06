@@ -42,6 +42,7 @@ public class SalesOrderApplicationService {
     private final ReceivableRepository receivableRepository;
     private final SalesMasterDataPort masterData;
     private final SalesStockPort stockPort;
+    private final SalesApprovalPort approval;
     private final InstallmentPlanService installmentPlanService;
     private final EventPublisher events;
     private final CurrentActorProvider actors;
@@ -54,6 +55,7 @@ public class SalesOrderApplicationService {
                                         ReceivableRepository receivableRepository,
                                         SalesMasterDataPort masterData,
                                         SalesStockPort stockPort,
+                                        SalesApprovalPort approval,
                                         InstallmentPlanService installmentPlanService,
                                         EventPublisher events,
                                         CurrentActorProvider actors,
@@ -65,6 +67,7 @@ public class SalesOrderApplicationService {
         this.receivableRepository = receivableRepository;
         this.masterData = masterData;
         this.stockPort = stockPort;
+        this.approval = approval;
         this.installmentPlanService = installmentPlanService;
         this.events = events;
         this.actors = actors;
@@ -216,7 +219,7 @@ public class SalesOrderApplicationService {
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("SALES_LINE_INVALID", exception.getMessage());
             }
-            if (entity.belowMinPrice()) {
+            if (approval.lowPriceRequiresApproval(effectiveUnitPrice, reference.minPrice())) {
                 approvalRequired = true;
             }
             lineRepository.save(entity);
@@ -247,6 +250,7 @@ public class SalesOrderApplicationService {
             }
         }
         BigDecimal total = BigDecimal.ZERO;
+        boolean approvalRequired = false;
         for (SalesOrderLine line : orderLines) {
             SalesApi.UpdatePriceLineCommand priceLine = prices.get(line.getId());
             BigDecimal price = priceLine == null ? null : priceLine.unitPrice();
@@ -267,14 +271,13 @@ public class SalesOrderApplicationService {
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("SALES_PRICE_REQUIRED", exception.getMessage());
             }
-            if (line.belowMinPrice()) {
-                throw new ConflictException("SALES_PRICE_BELOW_MIN", "成交价低于最低限价，请通过草稿编辑并完成价格审批");
-            }
+            approvalRequired = approvalRequired
+                    || approval.lowPriceRequiresApproval(line.getUnitPrice(), line.getMinPrice());
             lineRepository.save(line);
             total = total.add(line.getAmount());
         }
         order.resetPriceApproval();
-        order.markPriceApprovalRequired(false);
+        order.markPriceApprovalRequired(approvalRequired);
         order.updateTotal(total);
         SalesOrder saved = orderRepository.saveAndFlush(order);
         publish(saved, "SalesOrderPricesUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", total));

@@ -133,7 +133,7 @@ export const router = createRouter({
     { path: '/system/migration', name: 'data-migration', component: () => import('../views/system/DataMigrationView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/settings', name: 'system-settings', component: () => import('../views/system/SystemSettingView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/update', name: 'system-update', component: () => import('../views/system/SystemUpdateView.vue'), meta: { permission: 'IVS_READ' } },
-    { path: '/system/approvals', name: 'approval-placeholder', component: Placeholder, props: { title: '审批配置', description: '审批矩阵：低价审批、库存调整、政策发布、额度池调整、资金池调整等阈值配置。' }, meta: { permission: 'USER_MANAGE' } },
+    { path: '/system/approvals', name: 'approval-config', component: () => import('../views/system/ApprovalConfigView.vue'), meta: { permission: 'USER_MANAGE' } },
   ],
 })
 
