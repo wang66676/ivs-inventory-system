@@ -58,6 +58,7 @@ const modulePages: MenuPage[] = [
   { path: '/sales/returns', name: 'sales-return', component: () => import('../views/sales/SalesReturnView.vue'), title: '整车销售退货', scope: 'VEHICLE', description: '整车退货回库、恢复可售或转维修。', permission: 'IVS_READ' },
   { path: '/sales/battery-returns', name: 'sales-return-battery', component: () => import('../views/sales/SalesReturnView.vue'), title: '电池销售退货', scope: 'BATTERY', description: '动力电池退货回库与应收冲减。', permission: 'IVS_READ' },
   { path: '/sales/installments', name: 'installment-plan', component: () => import('../views/sales/InstallmentPlanView.vue'), title: '分期收款', description: '以租代售的分期计划、首付、期次、逾期与所有权转移。', permission: 'IVS_FINANCE_READ' },
+  { path: '/sales/leases', name: 'battery-lease', component: () => import('../views/sales/LeaseView.vue'), title: '电池租赁', description: '二期：电池租赁资产池、租赁合同与月租应收。', permission: 'IVS_LEASE_MANAGE' },
   { path: '/sales/receivables', name: 'receivable', component: () => import('../views/sales/ReceivableView.vue'), title: '应收管理', description: '应收台账、账龄与到期管理。', permission: 'IVS_FINANCE_READ' },
   { path: '/sales/receipts', name: 'receipt', component: () => import('../views/sales/ReceiptView.vue'), title: '收款管理', description: '收款登记与核销（一收多单、一单多收）。', permission: 'IVS_FINANCE_READ' },
 

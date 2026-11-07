@@ -242,6 +242,12 @@ public class ProductSerial {
         this.ownershipType = ownershipType;
     }
     public UUID getLeaseContractId() { return leaseContractId; }
+    public void bindLeaseContract(UUID contractId) {
+        this.leaseContractId = contractId;
+    }
+    public void clearLeaseContract() {
+        this.leaseContractId = null;
+    }
     public String getAttrsJson() { return attrsJson; }
     public String getRemark() { return remark; }
     public Instant getCreatedAt() { return createdAt; }

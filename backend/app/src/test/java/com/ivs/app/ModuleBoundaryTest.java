@@ -16,7 +16,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 class ModuleBoundaryTest {
 
     private static final List<String> BUSINESS_MODULES = List.of(
-            "masterdata", "inventory", "procurement", "sales", "billing", "retail", "policy");
+            "masterdata", "inventory", "procurement", "sales", "billing", "retail", "policy", "lease");
 
     private static final JavaClasses CLASSES = new ClassFileImporter().importPackages("com.ivs");
 

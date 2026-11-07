@@ -5,7 +5,7 @@ $jar = Join-Path $root 'backend\app\target\ivs-app-0.1.0-SNAPSHOT.jar'
 if (-not (Test-Path $jar)) { throw "未找到构建产物，请先执行 scripts\build-all.ps1：$jar" }
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'logs'), (Join-Path $root '.run') | Out-Null
 
-$proc = Start-Process -FilePath 'java' -ArgumentList @('-jar', $jar) `
+$proc = Start-Process -FilePath 'java' -ArgumentList @('-jar', $jar, '--spring.profiles.active=prod') `
   -WorkingDirectory (Join-Path $root 'backend') -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $root 'logs\backend.out.log') `
   -RedirectStandardError  (Join-Path $root 'logs\backend.err.log') -PassThru

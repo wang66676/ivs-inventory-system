@@ -18,7 +18,7 @@ public enum SerialStatusTemplate {
     VEHICLE(vehicleTransitions()),
 
     /** 动力电池：与整车同构（二期扩展在站充电、客户在用、退役）。 */
-    BATTERY(vehicleTransitions()),
+    BATTERY(batteryTransitions()),
 
     /** 简单序列号商品：建档 → 在库 → 已售 → 已交付。 */
     SIMPLE(simpleTransitions());
@@ -108,6 +108,30 @@ public enum SerialStatusTemplate {
         map.put(SerialStatus.PLANNED, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.SCRAPPED));
         map.put(SerialStatus.IN_STOCK, EnumSet.of(SerialStatus.SOLD, SerialStatus.SCRAPPED));
         map.put(SerialStatus.SOLD, EnumSet.of(SerialStatus.DELIVERED));
+        return map;
+    }
+
+    private static Map<SerialStatus, Set<SerialStatus>> batteryTransitions() {
+        Map<SerialStatus, Set<SerialStatus>> map = new EnumMap<>(SerialStatus.class);
+        map.put(SerialStatus.PLANNED, EnumSet.of(SerialStatus.IN_TRANSIT, SerialStatus.SCRAPPED));
+        map.put(SerialStatus.IN_TRANSIT, EnumSet.of(SerialStatus.ARRIVED, SerialStatus.SCRAPPED));
+        map.put(SerialStatus.ARRIVED, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.SCRAPPED));
+        map.put(SerialStatus.IN_STOCK, EnumSet.of(SerialStatus.LOCKED, SerialStatus.IN_LEASE,
+                SerialStatus.RETURNED, SerialStatus.SCRAPPED));
+        map.put(SerialStatus.LOCKED, EnumSet.of(SerialStatus.SOLD, SerialStatus.IN_STOCK, SerialStatus.IN_LEASE));
+        map.put(SerialStatus.SOLD, EnumSet.of(SerialStatus.DELIVERED));
+        map.put(SerialStatus.DELIVERED, EnumSet.of(SerialStatus.RETURNED));
+        map.put(SerialStatus.RETURNED, EnumSet.of(SerialStatus.REPAIRING, SerialStatus.IN_STOCK, SerialStatus.SCRAPPED));
+        map.put(SerialStatus.REPAIRING, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.AT_STATION, SerialStatus.RETIRED));
+        map.put(SerialStatus.IN_LEASE, EnumSet.of(SerialStatus.AT_STATION, SerialStatus.IN_USE,
+                SerialStatus.REPAIRING, SerialStatus.RETIRED, SerialStatus.IN_STOCK));
+        map.put(SerialStatus.AT_STATION, EnumSet.of(SerialStatus.IN_USE, SerialStatus.CHARGING,
+                SerialStatus.REPAIRING, SerialStatus.RETIRED));
+        map.put(SerialStatus.IN_USE, EnumSet.of(SerialStatus.AT_STATION, SerialStatus.REPAIRING, SerialStatus.RETIRED));
+        map.put(SerialStatus.CHARGING, EnumSet.of(SerialStatus.AT_STATION, SerialStatus.IN_USE,
+                SerialStatus.REPAIRING, SerialStatus.RETIRED));
+        map.put(SerialStatus.RETIRED, EnumSet.of(SerialStatus.SCRAPPED));
+        map.put(SerialStatus.SCRAPPED, EnumSet.noneOf(SerialStatus.class));
         return map;
     }
 }

@@ -6,7 +6,8 @@ export type CustomerType = 'INDIVIDUAL' | 'COMPANY' | 'FLEET'
 export type OwnershipType = 'OWNED' | 'LEASE_TO_OWN' | 'LEASED'
 export type SerialStatus =
   | 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'IN_STOCK' | 'LOCKED'
-  | 'SOLD' | 'DELIVERED' | 'RETURNED' | 'REPAIRING' | 'SCRAPPED'
+  | 'SOLD' | 'DELIVERED' | 'RETURNED' | 'REPAIRING'
+  | 'IN_LEASE' | 'AT_STATION' | 'IN_USE' | 'CHARGING' | 'RETIRED' | 'SCRAPPED'
 
 export interface AttrDef {
   id: string
@@ -172,6 +173,11 @@ export const SERIAL_STATUS_LABELS: Record<SerialStatus, string> = {
   DELIVERED: '已交付',
   RETURNED: '退回',
   REPAIRING: '维修中',
+  IN_LEASE: '租赁中',
+  AT_STATION: '在站',
+  IN_USE: '在用',
+  CHARGING: '充电中',
+  RETIRED: '已退役',
   SCRAPPED: '已报废',
 }
 

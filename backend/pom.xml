@@ -22,6 +22,7 @@
         <module>retail</module>
         <module>policy</module>
         <module>billing</module>
+        <module>lease</module>
         <module>app</module>
     </modules>
 
