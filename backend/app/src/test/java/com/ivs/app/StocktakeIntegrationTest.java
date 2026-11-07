@@ -103,7 +103,48 @@ class StocktakeIntegrationTest {
         assertThat(response.getBody().get("code")).isEqualTo("STOCKTAKE_BALANCE_CHANGED");
     }
 
+    @Test
+    void 大额盘点差异进入审批通过后自动过账() {
+        Fixture fixture = fixture("0.13", new BigDecimal("1000"));
+        StocktakeApi.StocktakeView draft = post("/api/ivs/stocktakes",
+                Map.of("warehouseId", fixture.warehouseId().toString(), "remark", "大额盘亏"),
+                StocktakeApi.StocktakeView.class);
+        put("/api/ivs/stocktakes/" + draft.id(), Map.of(
+                "lines", List.of(Map.of("productId", fixture.productId().toString(), "batchNo", "-",
+                        "actualQty", 0, "unitCost", 1000, "differenceReason", "大额盘亏"))),
+                StocktakeApi.StocktakeView.class);
+
+        StocktakeApi.StocktakeView pending = post("/api/ivs/stocktakes/" + draft.id() + "/post", Map.of(),
+                StocktakeApi.StocktakeView.class);
+        assertThat(pending.status().name()).isEqualTo("PENDING_APPROVAL");
+        com.ivs.platform.approval.ApprovalTaskService.TaskView[] tasks = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=PENDING",
+                com.ivs.platform.approval.ApprovalTaskService.TaskView[].class).getBody();
+        assertThat(tasks).isNotNull().anySatisfy(task -> {
+            assertThat(task.businessId()).isEqualTo(draft.id());
+            assertThat(task.taskType()).isEqualTo("STOCKTAKE_POST");
+        });
+        var task = java.util.Arrays.stream(tasks).filter(item -> item.businessId().equals(draft.id()))
+                .findFirst().orElseThrow();
+        post("/api/ivs/approval-actions/" + task.id() + "/approve", Map.of(),
+                com.ivs.platform.approval.ApprovalTaskService.TaskView.class);
+
+        StocktakeApi.StocktakeView posted = restTemplate.getForEntity(
+                "/api/ivs/stocktakes/" + draft.id(), StocktakeApi.StocktakeView.class).getBody();
+        assertThat(posted).isNotNull();
+        assertThat(posted.status().name()).isEqualTo("POSTED");
+        InventoryApi.BalanceView[] balances = restTemplate.getForEntity(
+                "/api/ivs/inventory/balances?warehouseId=" + fixture.warehouseId(),
+                InventoryApi.BalanceView[].class).getBody();
+        assertThat(balances).isNotNull().singleElement()
+                .satisfies(row -> assertThat(row.onHandQty()).isEqualByComparingTo("0.000"));
+    }
+
     private Fixture fixture(String taxRate) {
+        return fixture(taxRate, new BigDecimal("100"));
+    }
+
+    private Fixture fixture(String taxRate, BigDecimal unitPrice) {
         MasterdataApi.CategoryView category = post("/api/ivs/product-categories", Map.of(
                 "code", "PART-" + UUID.randomUUID().toString().substring(0, 6), "name", "配件",
                 "trackingMode", TrackingMode.QUANTITY.name(), "statusTemplate", "SIMPLE",
@@ -120,7 +161,7 @@ class StocktakeIntegrationTest {
         ProcurementApi.PurchaseOrderView order = post("/api/ivs/purchase-orders", Map.of(
                 "supplierId", supplier.id().toString(), "warehouseId", warehouse.id().toString(),
                 "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 10,
-                        "unitPrice", 100, "taxRate", new BigDecimal(taxRate)))), ProcurementApi.PurchaseOrderView.class);
+                        "unitPrice", unitPrice, "taxRate", new BigDecimal(taxRate)))), ProcurementApi.PurchaseOrderView.class);
         order = post("/api/ivs/purchase-orders/" + order.id() + "/approve", Map.of(),
                 ProcurementApi.PurchaseOrderView.class);
         post("/api/ivs/purchase-orders/" + order.id() + "/receive", Map.of(

@@ -1,4 +1,4 @@
-export type StocktakeStatus = 'DRAFT' | 'POSTED' | 'CANCELLED'
+export type StocktakeStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'POSTED' | 'CANCELLED'
 
 export interface StocktakeLine {
   id: string
@@ -29,12 +29,14 @@ export interface Stocktake {
 
 export const STOCKTAKE_STATUS_LABELS: Record<StocktakeStatus, string> = {
   DRAFT: '草稿',
+  PENDING_APPROVAL: '待审批',
   POSTED: '已过账',
   CANCELLED: '已取消',
 }
 
 export const STOCKTAKE_STATUS_COLORS: Record<StocktakeStatus, string> = {
   DRAFT: 'orange',
+  PENDING_APPROVAL: 'gold',
   POSTED: 'green',
   CANCELLED: 'default',
 }

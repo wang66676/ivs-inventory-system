@@ -57,10 +57,22 @@ public class Stocktake {
     }
 
     public void post(UUID operatorId) {
-        if (status != StocktakeStatus.DRAFT) throw new IllegalStateException("只有草稿盘点单可以过账");
+        if (status != StocktakeStatus.DRAFT && status != StocktakeStatus.PENDING_APPROVAL) {
+            throw new IllegalStateException("只有草稿或待审批盘点单可以过账");
+        }
         this.status = StocktakeStatus.POSTED;
         this.postedBy = operatorId;
         this.postedAt = Instant.now();
+    }
+
+    public void markPendingApproval() {
+        if (status != StocktakeStatus.DRAFT) throw new IllegalStateException("只有草稿盘点单可以提交审批");
+        status = StocktakeStatus.PENDING_APPROVAL;
+    }
+
+    public void rejectApproval() {
+        if (status != StocktakeStatus.PENDING_APPROVAL) throw new IllegalStateException("盘点单不在待审批状态");
+        status = StocktakeStatus.DRAFT;
     }
 
     public void cancel() {

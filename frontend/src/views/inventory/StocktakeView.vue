@@ -57,7 +57,7 @@
               <a-button v-if="record.status === 'DRAFT'" size="small" @click="openEdit(record)">录入实盘</a-button>
               <a-button v-if="record.status === 'DRAFT'" size="small" type="primary"
                         @click="postStocktake(record)">过账</a-button>
-              <a-button v-if="record.status === 'DRAFT'" size="small" danger
+              <a-button v-if="record.status === 'DRAFT' || record.status === 'PENDING_APPROVAL'" size="small" danger
                         @click="cancelStocktake(record)">取消</a-button>
             </a-space>
           </template>
@@ -229,7 +229,11 @@ function postStocktake(record: Stocktake) {
     content: '过账后将写库存台账并调整余额，不可修改。',
     okText: '确认过账', cancelText: '取消',
     onOk: async () => {
-      try { await stocktakeApi.post(record.id); message.success('盘点已过账'); await reload() }
+      try {
+        const result = await stocktakeApi.post(record.id)
+        message.success(result.status === 'PENDING_APPROVAL' ? '盘点差异已提交审批，审批通过后自动过账' : '盘点已过账')
+        await reload()
+      }
       catch (error) { message.error((error as Error).message) }
     },
   })

@@ -92,13 +92,15 @@ function money(value: number) { return `¥${Number(value || 0).toLocaleString('z
 function formatDate(value?: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '-' }
 function goBusiness(task: ApprovalTask) {
   if (task.businessType === 'SALES_ORDER') router.push('/sales/orders')
+  else if (task.businessType === 'STOCKTAKE') router.push('/inventory/stocktake')
   else message.info('关联业务页面尚未开放')
 }
 async function approve(task: ApprovalTask) {
-  if (task.taskType !== 'SALES_PRICE') { message.warning('该类型审批将在对应业务模块中处理'); return }
   saving.value = true
   try {
-    await salesApi.approvePrice(task.businessId)
+    if (task.taskType === 'SALES_PRICE') await salesApi.approvePrice(task.businessId)
+    else if (task.taskType === 'STOCKTAKE_POST') await approvalApi.approveTask(task.id)
+    else { message.warning('该类型审批将在对应业务模块中处理'); return }
     message.success('审批已通过')
     await reload()
   } catch (error) { message.error((error as Error).message) }
@@ -112,10 +114,13 @@ function openReject(task: ApprovalTask) {
 async function reject() {
   if (!current.value) return
   if (!rejectReason.value.trim()) { message.warning('请填写驳回原因'); return }
-  if (current.value.taskType !== 'SALES_PRICE') { message.warning('该类型审批将在对应业务模块中处理'); return }
   saving.value = true
   try {
-    await salesApi.rejectPrice(current.value.businessId, rejectReason.value.trim())
+    if (current.value.taskType === 'SALES_PRICE') {
+      await salesApi.rejectPrice(current.value.businessId, rejectReason.value.trim())
+    } else if (current.value.taskType === 'STOCKTAKE_POST') {
+      await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
+    } else { message.warning('该类型审批将在对应业务模块中处理'); return }
     message.success('审批已驳回')
     rejectOpen.value = false
     await reload()

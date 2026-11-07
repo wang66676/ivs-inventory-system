@@ -6,6 +6,9 @@ export const approvalApi = {
   update: (ruleCode: string, body: ApprovalRuleUpdate) =>
     http.put<ApprovalRule>(`/ivs/approval-rules/${encodeURIComponent(ruleCode)}`, body).then((r) => r.data),
   tasks: (status?: string) => http.get<ApprovalTask[]>('/ivs/approval-tasks', { params: { status } }).then((r) => r.data),
+  approveTask: (id: string) => http.post<ApprovalTask>(`/ivs/approval-actions/${id}/approve`).then((r) => r.data),
+  rejectTask: (id: string, reason: string) =>
+    http.post<ApprovalTask>(`/ivs/approval-actions/${id}/reject`, { reason }).then((r) => r.data),
 }
 
 export const notificationApi = {

@@ -22,17 +22,20 @@ public class StocktakeApplicationService {
     private final StocktakeLineRepository lineRepository;
     private final StockBalanceRepository balanceRepository;
     private final StockService stockService;
+    private final StocktakeApprovalPort approval;
     private final CurrentActorProvider actors;
 
     public StocktakeApplicationService(StocktakeRepository stocktakeRepository,
                                        StocktakeLineRepository lineRepository,
                                        StockBalanceRepository balanceRepository,
                                        StockService stockService,
+                                       StocktakeApprovalPort approval,
                                        CurrentActorProvider actors) {
         this.stocktakeRepository = stocktakeRepository;
         this.lineRepository = lineRepository;
         this.balanceRepository = balanceRepository;
         this.stockService = stockService;
+        this.approval = approval;
         this.actors = actors;
     }
 
@@ -91,6 +94,47 @@ public class StocktakeApplicationService {
         Stocktake stocktake = find(id);
         requireDraft(stocktake);
         List<StocktakeLine> lines = lineRepository.findByStocktakeIdOrderByCreatedAtAsc(id);
+        validatePostable(stocktake, lines);
+        BigDecimal differenceAmount = lines.stream()
+                .map(line -> line.getDifferenceQty().abs().multiply(line.getUnitCost()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        StocktakeApprovalPort.AdjustmentDecision decision = approval.evaluate(differenceAmount);
+        if (decision.required()) {
+            stocktake.markPendingApproval();
+            Stocktake saved = stocktakeRepository.save(stocktake);
+            approval.syncPending(saved.getId(), saved.getStocktakeNo(), differenceAmount, decision);
+            return toView(saved);
+        }
+        approval.cancel(id);
+        return executePost(stocktake, lines);
+    }
+
+    /** 审批通过后执行实际过账；只允许待审批状态调用。 */
+    @Transactional
+    public StocktakeApi.StocktakeView postApproved(UUID id) {
+        Stocktake stocktake = find(id);
+        if (stocktake.getStatus() != StocktakeStatus.PENDING_APPROVAL) {
+            throw new ConflictException("STOCKTAKE_STATUS_INVALID", "盘点单不在待审批状态");
+        }
+        List<StocktakeLine> lines = lineRepository.findByStocktakeIdOrderByCreatedAtAsc(id);
+        validatePostable(stocktake, lines);
+        return executePost(stocktake, lines);
+    }
+
+    /** 审批驳回后回到草稿，申请人可修改后重新提交。 */
+    @Transactional
+    public StocktakeApi.StocktakeView rejectApproval(UUID id) {
+        Stocktake stocktake = find(id);
+        try {
+            stocktake.rejectApproval();
+        } catch (IllegalStateException exception) {
+            throw new ConflictException("STOCKTAKE_STATUS_INVALID", exception.getMessage());
+        }
+        return toView(stocktakeRepository.save(stocktake));
+    }
+
+    private void validatePostable(Stocktake stocktake, List<StocktakeLine> lines) {
         if (lines.isEmpty()) {
             throw new ConflictException("STOCKTAKE_LINE_EMPTY", "盘点单没有明细，不能过账");
         }
@@ -105,6 +149,9 @@ public class StocktakeApplicationService {
                                 + "，当前 " + current.getOnHandQty().toPlainString() + "），请重新生成盘点单");
             }
         }
+    }
+
+    private StocktakeApi.StocktakeView executePost(Stocktake stocktake, List<StocktakeLine> lines) {
         for (StocktakeLine line : lines) {
             if (line.getDifferenceQty().signum() != 0) {
                 stockService.adjustTo(line.getProductId(), stocktake.getWarehouseId(), line.getBatchNo(),
@@ -124,7 +171,9 @@ public class StocktakeApplicationService {
         } catch (IllegalStateException exception) {
             throw new ConflictException("STOCKTAKE_STATUS_INVALID", exception.getMessage());
         }
-        return toView(stocktakeRepository.save(stocktake));
+        Stocktake saved = stocktakeRepository.save(stocktake);
+        approval.cancel(saved.getId());
+        return toView(saved);
     }
 
     private void saveLines(Stocktake stocktake, List<StocktakeApi.SaveLineCommand> commands,

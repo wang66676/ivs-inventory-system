@@ -92,6 +92,34 @@ public class ApprovalTaskService {
                 .orElse(null);
         if (task == null) return null;
         if (!canDecide(task, user)) throw new AccessDeniedException("没有该审批任务的审批权限");
+        return resolveEntity(task, user, approved, reason);
+    }
+
+    @Transactional(readOnly = true)
+    public TaskView getPendingForCurrentUser(UUID id) {
+        AuthenticatedUser user = currentUsers.require();
+        ApprovalTask task = repository.findById(id)
+                .orElseThrow(() -> new com.ivs.shared.error.NotFoundException("审批任务", id));
+        if (task.getStatus() != ApprovalTaskStatus.PENDING) {
+            throw new ConflictException("APPROVAL_TASK_PROCESSED", "该审批任务已处理");
+        }
+        if (!canDecide(task, user)) throw new AccessDeniedException("没有该审批任务的审批权限");
+        return TaskView.from(task, true);
+    }
+
+    @Transactional
+    public TaskView resolveById(UUID id, boolean approved, String reason) {
+        AuthenticatedUser user = currentUsers.require();
+        ApprovalTask task = repository.findById(id)
+                .orElseThrow(() -> new com.ivs.shared.error.NotFoundException("审批任务", id));
+        if (task.getStatus() != ApprovalTaskStatus.PENDING) {
+            throw new ConflictException("APPROVAL_TASK_PROCESSED", "该审批任务已处理");
+        }
+        if (!canDecide(task, user)) throw new AccessDeniedException("没有该审批任务的审批权限");
+        return resolveEntity(task, user, approved, reason);
+    }
+
+    private TaskView resolveEntity(ApprovalTask task, AuthenticatedUser user, boolean approved, String reason) {
         String note = reason == null || reason.isBlank() ? null : reason.trim();
         if (!approved && note == null) {
             throw new ConflictException("APPROVAL_REASON_REQUIRED", "驳回时必须填写原因");
@@ -101,7 +129,7 @@ public class ApprovalTaskService {
         String result = approved ? "已通过" : "已驳回";
         notifications.notifyUser("APPROVAL_RESULT", "审批结果：" + result,
                 task.getTitle() + " " + result + (note == null ? "" : "；原因：" + note),
-                businessType, businessId, task.getApplicantId());
+                task.getBusinessType(), task.getBusinessId(), task.getApplicantId());
         return TaskView.from(task, false);
     }
 
