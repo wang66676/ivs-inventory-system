@@ -9,6 +9,8 @@ export interface Payable {
   orderNo?: string
   receiptNo?: string
   amount: number
+  invoiceMatchedAmount?: number
+  uninvoicedAmount?: number
   paidAmount: number
   outstanding: number
   dueDate?: string

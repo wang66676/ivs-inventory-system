@@ -19,6 +19,7 @@ public class PurchaseInvoice {
     @Column(name = "original_invoice_no", length = 100) private String originalInvoiceNo;
     @Column(name = "supplier_id", nullable = false) private UUID supplierId;
     @Column(nullable = false, precision = 18, scale = 2) private BigDecimal amount;
+    @Column(name = "matched_amount", nullable = false, precision = 18, scale = 2) private BigDecimal matchedAmount;
     @Column(name = "tax_rate", precision = 8, scale = 4) private BigDecimal taxRate;
     @Column(name = "tax_amount", precision = 18, scale = 2) private BigDecimal taxAmount;
     @Column(nullable = false, length = 20) private String status;
@@ -59,6 +60,50 @@ public class PurchaseInvoice {
         return invoice;
     }
 
+    public static PurchaseInvoice registerBlue(String invoiceNo, UUID supplierId, BigDecimal amount,
+                                               BigDecimal taxRate, String externalInvoiceNo,
+                                               Instant issuedAt, String remark) {
+        PurchaseInvoice invoice = new PurchaseInvoice();
+        invoice.id = UUID.randomUUID();
+        invoice.invoiceNo = invoiceNo;
+        invoice.direction = "IN";
+        invoice.type = "BLUE";
+        invoice.supplierId = supplierId;
+        invoice.amount = money(amount);
+        if (invoice.amount.signum() <= 0) throw new IllegalArgumentException("蓝字发票金额必须大于 0");
+        invoice.taxRate = taxRate;
+        invoice.taxAmount = taxAmountOf(invoice.amount, taxRate);
+        invoice.status = "ISSUED";
+        invoice.matchedAmount = money(BigDecimal.ZERO);
+        invoice.externalInvoiceNo = externalInvoiceNo;
+        invoice.issuedAt = issuedAt == null ? Instant.now() : issuedAt;
+        invoice.remark = remark;
+        invoice.createdAt = Instant.now();
+        invoice.updatedAt = invoice.createdAt;
+        return invoice;
+    }
+
+    public void matchAmount(BigDecimal value) {
+        BigDecimal target = money(value);
+        if (target.signum() <= 0 || target.compareTo(unmatchedAmount()) > 0) {
+            throw new IllegalArgumentException("匹配金额必须大于 0 且不能超过发票未匹配金额");
+        }
+        matchedAmount = money((matchedAmount == null ? BigDecimal.ZERO : matchedAmount).add(target));
+    }
+
+    public void unmatchAmount(BigDecimal value) {
+        BigDecimal current = matchedAmount == null ? BigDecimal.ZERO : matchedAmount;
+        BigDecimal target = money(value);
+        if (target.signum() <= 0 || target.compareTo(current) > 0) {
+            throw new IllegalArgumentException("取消匹配金额不合法");
+        }
+        matchedAmount = money(current.subtract(target));
+    }
+
+    public BigDecimal unmatchedAmount() {
+        return money(amount.subtract(matchedAmount == null ? BigDecimal.ZERO : matchedAmount));
+    }
+
     public static BigDecimal taxAmountOf(BigDecimal gross, BigDecimal rate) {
         if (rate == null || rate.signum() <= 0) return BigDecimal.ZERO.setScale(2);
         BigDecimal net = gross.divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
@@ -69,6 +114,7 @@ public class PurchaseInvoice {
         Instant now = Instant.now();
         if (id == null) id = UUID.randomUUID();
         if (status == null) status = "ISSUED";
+        if (matchedAmount == null) matchedAmount = money(BigDecimal.ZERO);
         if (createdAt == null) createdAt = now;
         updatedAt = now;
     }
@@ -82,6 +128,8 @@ public class PurchaseInvoice {
     public String getOriginalInvoiceNo() { return originalInvoiceNo; }
     public UUID getSupplierId() { return supplierId; }
     public BigDecimal getAmount() { return amount; }
+    public BigDecimal getMatchedAmount() { return matchedAmount == null ? money(BigDecimal.ZERO) : matchedAmount; }
+    public BigDecimal getUnmatchedAmount() { return unmatchedAmount(); }
     public BigDecimal getTaxRate() { return taxRate; }
     public BigDecimal getTaxAmount() { return taxAmount; }
     public String getStatus() { return status; }
@@ -91,4 +139,8 @@ public class PurchaseInvoice {
     public String getRemark() { return remark; }
     public Instant getCreatedAt() { return createdAt; }
     public long getVersion() { return version; }
+
+    private static BigDecimal money(BigDecimal value) {
+        return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
+    }
 }

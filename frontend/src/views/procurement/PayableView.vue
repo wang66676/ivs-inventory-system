@@ -12,6 +12,8 @@
                :pagination="{ pageSize: 15 }" :scroll="{ x: 1300 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'amount'">{{ money(record.amount) }}</template>
+          <template v-else-if="column.key === 'invoiced'">{{ money(record.invoiceMatchedAmount) }}</template>
+          <template v-else-if="column.key === 'uninvoiced'">{{ money(record.uninvoicedAmount) }}</template>
           <template v-else-if="column.key === 'paid'">{{ money(record.paidAmount) }}</template>
           <template v-else-if="column.key === 'outstanding'">{{ money(record.outstanding) }}</template>
           <template v-else-if="column.key === 'status'">
@@ -53,6 +55,8 @@ const columns = [
   { title: '采购单', key: 'orderNo', dataIndex: 'orderNo', width: 130 },
   { title: '入库单', key: 'receiptNo', dataIndex: 'receiptNo', width: 130 },
   { title: '应付金额', key: 'amount', width: 130 },
+  { title: '已开票', key: 'invoiced', width: 130 },
+  { title: '未开票', key: 'uninvoiced', width: 130 },
   { title: '已付', key: 'paid', width: 130 },
   { title: '未付', key: 'outstanding', width: 130 },
   { title: '到期日', key: 'dueDate', dataIndex: 'dueDate', width: 110 },

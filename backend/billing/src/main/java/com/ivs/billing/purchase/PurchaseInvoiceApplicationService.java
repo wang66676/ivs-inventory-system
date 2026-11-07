@@ -83,4 +83,31 @@ public class PurchaseInvoiceApplicationService {
                 saved.getId(), saved.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
         return PurchaseInvoiceApi.PurchaseInvoiceView.from(saved);
     }
+
+    /** 登记厂家蓝字进项发票，用于与供应商应付匹配。 */
+    @Transactional
+    public PurchaseInvoiceApi.PurchaseInvoiceView registerBlue(
+            PurchaseInvoiceApi.RegisterBlueInvoiceCommand command) {
+        if (command.supplierId() == null) {
+            throw new ConflictException("SUPPLIER_REQUIRED", "请指定开票厂家");
+        }
+        PurchaseInvoice invoice;
+        try {
+            invoice = PurchaseInvoice.registerBlue(
+                    "PINV-B-%06d".formatted(repository.nextInvoiceSequence()), command.supplierId(),
+                    command.amount(), command.taxRate(), command.externalInvoiceNo(),
+                    command.issuedAt(), command.remark());
+        } catch (IllegalArgumentException exception) {
+            throw new ConflictException("PURCHASE_INVOICE_INVALID", exception.getMessage());
+        }
+        PurchaseInvoice saved = repository.save(invoice);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("invoiceNo", saved.getInvoiceNo());
+        payload.put("supplierId", saved.getSupplierId().toString());
+        payload.put("amount", saved.getAmount());
+        payload.put("taxAmount", saved.getTaxAmount());
+        events.publish(new EventEnvelope(UUID.randomUUID(), "PurchaseInvoiceRegistered", "PurchaseInvoice",
+                saved.getId(), saved.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
+        return PurchaseInvoiceApi.PurchaseInvoiceView.from(saved);
+    }
 }

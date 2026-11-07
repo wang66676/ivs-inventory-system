@@ -24,4 +24,8 @@ public interface PayableRepository extends JpaRepository<Payable, UUID> {
 
     @Query(value = "select nextval('ivs.payable_no_seq')", nativeQuery = true)
     long nextPayableSequence();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payable p where p.id = :id")
+    Optional<Payable> findByIdForUpdate(@Param("id") UUID id);
 }

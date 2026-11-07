@@ -68,5 +68,31 @@ public class PayableService {
         }
     }
 
+    /** 记录进项发票匹配金额，由 app 层发票匹配服务调用。 */
+    @Transactional
+    public void matchInvoice(UUID payableId, BigDecimal amount) {
+        Payable payable = repository.findById(payableId)
+                .orElseThrow(() -> new NotFoundException("应付单", payableId));
+        try {
+            payable.matchInvoice(amount);
+        } catch (IllegalArgumentException exception) {
+            throw new ConflictException("PAYABLE_INVOICE_MATCH_INVALID", exception.getMessage());
+        }
+        repository.save(payable);
+    }
+
+    /** 取消进项发票匹配金额。 */
+    @Transactional
+    public void unmatchInvoice(UUID payableId, BigDecimal amount) {
+        Payable payable = repository.findById(payableId)
+                .orElseThrow(() -> new NotFoundException("应付单", payableId));
+        try {
+            payable.unmatchInvoice(amount);
+        } catch (IllegalArgumentException exception) {
+            throw new ConflictException("PAYABLE_INVOICE_MATCH_INVALID", exception.getMessage());
+        }
+        repository.save(payable);
+    }
+
 }
 

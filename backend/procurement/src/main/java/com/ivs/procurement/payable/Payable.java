@@ -22,6 +22,8 @@ public class Payable {
     @Column(name = "receipt_no", length = 40) private String receiptNo;
     @Column(nullable = false, precision = 18, scale = 2) private BigDecimal amount;
     @Column(name = "paid_amount", nullable = false, precision = 18, scale = 2) private BigDecimal paidAmount;
+    @Column(name = "invoice_matched_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal invoiceMatchedAmount;
     @Column(name = "due_date") private LocalDate dueDate;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PayableStatus status;
     @Column(length = 300) private String remark;
@@ -44,6 +46,7 @@ public class Payable {
         value.receiptNo = receiptNo;
         value.amount = money(amount);
         value.paidAmount = money(BigDecimal.ZERO);
+        value.invoiceMatchedAmount = money(BigDecimal.ZERO);
         value.dueDate = dueDate;
         value.status = PayableStatus.OPEN;
         value.createdAt = Instant.now();
@@ -59,6 +62,7 @@ public class Payable {
         value.supplierId = supplierId;
         value.amount = money(amount);
         value.paidAmount = money(paidAmount);
+        value.invoiceMatchedAmount = money(BigDecimal.ZERO);
         if (value.amount.signum() <= 0) throw new IllegalArgumentException("期初应付金额必须大于 0");
         if (value.paidAmount.signum() < 0 || value.paidAmount.compareTo(value.amount) > 0) {
             throw new IllegalArgumentException("已付金额必须在 0 与应付金额之间");
@@ -95,6 +99,26 @@ public class Payable {
         this.remark = value == null || value.isBlank() ? null : value.trim();
     }
 
+    public void matchInvoice(BigDecimal value) {
+        BigDecimal target = money(value);
+        if (target.signum() <= 0 || target.compareTo(uninvoicedAmount()) > 0) {
+            throw new IllegalArgumentException("匹配金额必须大于 0 且不能超过应付未开票金额");
+        }
+        invoiceMatchedAmount = money(invoiceMatchedAmount.add(target));
+    }
+
+    public void unmatchInvoice(BigDecimal value) {
+        BigDecimal target = money(value);
+        if (target.signum() <= 0 || target.compareTo(invoiceMatchedAmount) > 0) {
+            throw new IllegalArgumentException("取消匹配金额不合法");
+        }
+        invoiceMatchedAmount = money(invoiceMatchedAmount.subtract(target));
+    }
+
+    public BigDecimal uninvoicedAmount() {
+        return money(amount.subtract(invoiceMatchedAmount).max(BigDecimal.ZERO));
+    }
+
     public BigDecimal outstanding() {
         return money(amount.subtract(paidAmount).max(BigDecimal.ZERO));
     }
@@ -109,6 +133,7 @@ public class Payable {
         if (id == null) id = UUID.randomUUID();
         if (amount == null) amount = money(BigDecimal.ZERO);
         if (paidAmount == null) paidAmount = money(BigDecimal.ZERO);
+        if (invoiceMatchedAmount == null) invoiceMatchedAmount = money(BigDecimal.ZERO);
         if (status == null) status = PayableStatus.OPEN;
         if (createdAt == null) createdAt = now;
         updatedAt = now;
@@ -128,6 +153,10 @@ public class Payable {
     public String getReceiptNo() { return receiptNo; }
     public BigDecimal getAmount() { return amount; }
     public BigDecimal getPaidAmount() { return paidAmount; }
+    public BigDecimal getInvoiceMatchedAmount() {
+        return invoiceMatchedAmount == null ? money(BigDecimal.ZERO) : invoiceMatchedAmount;
+    }
+    public BigDecimal getUninvoicedAmount() { return uninvoicedAmount(); }
     public LocalDate getDueDate() { return dueDate; }
     public PayableStatus getStatus() { return status; }
     public String getRemark() { return remark; }

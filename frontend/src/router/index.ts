@@ -32,7 +32,7 @@ const modulePages: MenuPage[] = [
   { path: '/procurement/battery-receipts', name: 'purchase-receipt-battery', component: () => import('../views/procurement/PurchaseReceiptView.vue'), title: '电池收货入库', scope: 'BATTERY', description: '动力电池按电池 SN 逐块收货并自动建档入库。', permission: 'IVS_READ' },
   { path: '/procurement/returns', name: 'purchase-return', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '整车采购退货', scope: 'VEHICLE', description: '整车采购退货与应付冲减。', permission: 'IVS_READ' },
   { path: '/procurement/battery-returns', name: 'purchase-return-battery', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '电池采购退货', scope: 'BATTERY', description: '动力电池采购退货与应付冲减。', permission: 'IVS_READ' },
-  { path: '/procurement/invoices', name: 'purchase-invoice', title: '进项发票', description: '厂家进项发票（含红字，关联申报单与权益）。', permission: 'IVS_FINANCE_READ' },
+  { path: '/procurement/invoices', name: 'purchase-invoice', component: () => import('../views/procurement/PurchaseInvoiceView.vue'), title: '进项发票', description: '厂家进项蓝字与红字发票；蓝字自动匹配供应商应付。', permission: 'IVS_FINANCE_READ' },
   { path: '/procurement/payables', name: 'supplier-payable', component: () => import('../views/procurement/PayableView.vue'), title: '供应商应付', description: '按收货单生成应付，支持发票匹配与付款核销。', permission: 'IVS_FINANCE_READ' },
   { path: '/procurement/offsets', name: 'rebate-offset', title: '返利抵扣', description: '入库单确认时的返利抵扣单：按厂家分账、余额分批使用、无需审批。', permission: 'IVS_FUND_OFFSET' },
 

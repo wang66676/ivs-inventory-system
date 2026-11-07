@@ -40,4 +40,12 @@ public class PurchaseInvoiceController {
         PurchaseInvoiceApi.PurchaseInvoiceView view = service.registerRed(command);
         return ResponseEntity.created(URI.create("/api/ivs/purchase-invoices/" + view.id())).body(view);
     }
+
+    @PostMapping("/blue")
+    @PreAuthorize("hasAuthority('IVS_INVOICE_WRITE')")
+    public ResponseEntity<PurchaseInvoiceApi.PurchaseInvoiceView> registerBlue(
+            @Valid @RequestBody PurchaseInvoiceApi.RegisterBlueInvoiceCommand command) {
+        PurchaseInvoiceApi.PurchaseInvoiceView view = service.registerBlue(command);
+        return ResponseEntity.created(URI.create("/api/ivs/purchase-invoices/" + view.id())).body(view);
+    }
 }
