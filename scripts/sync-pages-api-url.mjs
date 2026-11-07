@@ -23,9 +23,9 @@ async function readToken() {
 }
 
 async function main() {
-  const rawUrl = process.argv[2]?.trim().replace(/\/+$/, '')
-  if (!rawUrl || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(rawUrl)) {
-    console.error('用法: node sync-pages-api-url.mjs https://<tunnel>.trycloudflare.com')
+  const rawUrl = process.argv[2]?.trim().replace(/\/+$/, '').replace(/\/api$/i, '')
+  if (!rawUrl || !/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(rawUrl)) {
+    console.error('用法: node sync-pages-api-url.mjs https://<固定域名或隧道域名>')
     process.exitCode = 2
     return
   }

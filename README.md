@@ -746,6 +746,18 @@ git push origin v1.0.0
 | 页面 | 新增独立退款页面，支持申请、执行、模拟失败、重试、人工兜底和取消 |
 | 测试 | 新增退款审批→失败→重试成功→人工兜底测试；全量 **81 个测试通过** |
 
+### ✅ PostgreSQL + 固定域名 + HTTPS 生产部署栈（2026-11-07）
+
+| 项 | 内容 |
+|---|---|
+| 数据库 | PostgreSQL 16，数据卷持久化，仅绑定服务器本机回环地址 |
+| 应用 | Java 21 单 JAR 容器，非 root 运行，SQL 连接池和优雅停机已启用 |
+| HTTPS | Caddy 自动申请并续期 TLS 证书，外网只开放 80/443，应用不直接暴露公网 |
+| 固定域名 | `IVS_PUBLIC_HOST` 固定配置；支持 `scripts/configure-pages-backend.ps1` 将 GitHub Pages 后端永久指向正式域名 |
+| 预检 | 新增 `preflight-prod.ps1`：检查密码强度、域名、DNS、80/443 可达性和 Compose 配置 |
+| 冒烟 | 生产冒烟覆盖审批、发票、应付、退款、通知及新增页面 |
+| 验证 | `docker compose config` 配置校验通过；实际公网切换仍需正式服务器和域名 DNS |
+
 ## M4 业务验收
 
 运行 `scripts/verify-m4-uat.ps1` 会自动完成：
