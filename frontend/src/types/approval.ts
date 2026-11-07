@@ -20,3 +20,36 @@ export interface ApprovalRuleUpdate {
   approvalPermission: string
   description?: string
 }
+
+export type ApprovalTaskStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+
+export interface ApprovalTask {
+  id: string
+  taskNo: string
+  taskType: string
+  businessType: string
+  businessId: string
+  businessNo: string
+  title: string
+  summary?: string
+  amount?: number
+  approvalPermission: string
+  status: ApprovalTaskStatus
+  applicantName: string
+  decisionByName?: string
+  decisionReason?: string
+  decidedAt?: string
+  createdAt: string
+  canDecide: boolean
+}
+
+export interface NotificationItem {
+  id: string
+  category: string
+  title: string
+  content: string
+  businessType?: string
+  businessId?: string
+  read: boolean
+  createdAt: string
+}

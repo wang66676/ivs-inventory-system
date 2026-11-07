@@ -5,6 +5,7 @@ import com.ivs.masterdata.WarehouseType;
 import com.ivs.masterdata.api.MasterdataApi;
 import com.ivs.masterdata.product.TrackingMode;
 import com.ivs.platform.approval.ApprovalRuleService;
+import com.ivs.platform.approval.ApprovalTaskService;
 import com.ivs.platform.security.api.LoginResponse;
 import com.ivs.platform.security.api.PlatformUserView;
 import com.ivs.sales.order.api.SalesApi;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -117,6 +119,82 @@ class ApprovalRuleIntegrationTest {
                 new HttpEntity<>(Map.of("enabled", false, "metricType", "NONE", "thresholdValue", 0,
                         "approvalPermission", "IVS_PRICE_APPROVE"), headers), Map.class);
         assertThat(updateForbidden.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void 低价订单生成审批待办和通知并支持通过驳回() {
+        MasterdataApi.CategoryView vehicle = post("/api/ivs/product-categories", Map.of(
+                "code", "TASK-VEHICLE", "name", "待办测试整车", "trackingMode", TrackingMode.SERIAL.name(),
+                "statusTemplate", "VEHICLE", "unit", "台", "sortOrder", 0), MasterdataApi.CategoryView.class);
+        Map<String, Object> productBody = new HashMap<>();
+        productBody.put("name", "待办测试车型");
+        productBody.put("categoryId", vehicle.id().toString());
+        productBody.put("unit", "台");
+        productBody.put("minPrice", 430000);
+        productBody.put("salePriceGuide", 460000);
+        MasterdataApi.ProductView product = post("/api/ivs/products", productBody, MasterdataApi.ProductView.class);
+        MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
+                "code", "TASK-WH", "name", "待办测试仓", "type", WarehouseType.MAIN.name()),
+                MasterdataApi.WarehouseView.class);
+        MasterdataApi.CustomerView customer = post("/api/ivs/customers", Map.of(
+                "name", "待办测试客户", "customerType", CustomerType.COMPANY.name(), "creditLimit", 1000000),
+                MasterdataApi.CustomerView.class);
+
+        SalesApi.SalesOrderView first = createLowPriceOrder(customer, warehouse, product);
+        assertThat(first.priceApprovalRequired()).isTrue();
+        ApprovalRuleService.RuleView[] rules = restTemplate.getForEntity(
+                "/api/ivs/approval-rules", ApprovalRuleService.RuleView[].class).getBody();
+        assertThat(rules).isNotNull();
+
+        ApprovalTaskService.TaskView[] pending = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=PENDING", ApprovalTaskService.TaskView[].class).getBody();
+        assertThat(pending).isNotNull().anySatisfy(task -> {
+            assertThat(task.businessId()).isEqualTo(first.id());
+            assertThat(task.taskType()).isEqualTo("SALES_PRICE");
+            assertThat(task.canDecide()).isTrue();
+        });
+        Map<?, ?> unreadBefore = restTemplate.getForEntity(
+                "/api/ivs/notifications/unread-count", Map.class).getBody();
+        assertThat(unreadBefore).isNotNull();
+        assertThat(((Number) unreadBefore.get("count")).longValue()).isGreaterThan(0);
+
+        post("/api/ivs/sales-orders/" + first.id() + "/approve-price", Map.of(), SalesApi.SalesOrderView.class);
+        ApprovalTaskService.TaskView[] approved = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=APPROVED", ApprovalTaskService.TaskView[].class).getBody();
+        assertThat(approved).isNotNull().anySatisfy(task -> {
+            assertThat(task.businessId()).isEqualTo(first.id());
+            assertThat(task.status().name()).isEqualTo("APPROVED");
+            assertThat(task.decisionByName()).isNotBlank();
+        });
+        restTemplate.postForEntity("/api/ivs/notifications/read-all", Map.of(), Map.class);
+
+        SalesApi.SalesOrderView second = createLowPriceOrder(customer, warehouse, product);
+        ResponseEntity<Map> rejectWithoutReason = restTemplate.postForEntity(
+                "/api/ivs/sales-orders/" + second.id() + "/reject-price", Map.of(), Map.class);
+        assertThat(rejectWithoutReason.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(rejectWithoutReason.getBody().get("code")).isEqualTo("APPROVAL_REASON_REQUIRED");
+        post("/api/ivs/sales-orders/" + second.id() + "/reject-price", Map.of("reason", "成交价需重新核算"),
+                SalesApi.SalesOrderView.class);
+        ApprovalTaskService.TaskView[] rejected = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=REJECTED", ApprovalTaskService.TaskView[].class).getBody();
+        assertThat(rejected).isNotNull().anySatisfy(task -> {
+            assertThat(task.businessId()).isEqualTo(second.id());
+            assertThat(task.decisionReason()).isEqualTo("成交价需重新核算");
+        });
+        SalesApi.SalesOrderView afterReject = restTemplate.getForEntity(
+                "/api/ivs/sales-orders/" + second.id(), SalesApi.SalesOrderView.class).getBody();
+        assertThat(afterReject).isNotNull();
+        assertThat(afterReject.priceApprovalRequired()).isTrue();
+        assertThat(afterReject.priceApproved()).isFalse();
+    }
+
+    private SalesApi.SalesOrderView createLowPriceOrder(MasterdataApi.CustomerView customer,
+                                                        MasterdataApi.WarehouseView warehouse,
+                                                        MasterdataApi.ProductView product) {
+        return post("/api/ivs/sales-orders", Map.of(
+                "customerId", customer.id().toString(), "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 1,
+                        "unitPrice", 420000))), SalesApi.SalesOrderView.class);
     }
 
     private <T> T post(String url, Map<String, Object> body, Class<T> type) {

@@ -134,6 +134,7 @@ export const router = createRouter({
     { path: '/system/settings', name: 'system-settings', component: () => import('../views/system/SystemSettingView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/update', name: 'system-update', component: () => import('../views/system/SystemUpdateView.vue'), meta: { permission: 'IVS_READ' } },
     { path: '/system/approvals', name: 'approval-config', component: () => import('../views/system/ApprovalConfigView.vue'), meta: { permission: 'USER_MANAGE' } },
+    { path: '/system/approval-tasks', name: 'approval-tasks', component: () => import('../views/system/ApprovalTaskView.vue'), meta: { permission: 'IVS_READ' } },
   ],
 })
 

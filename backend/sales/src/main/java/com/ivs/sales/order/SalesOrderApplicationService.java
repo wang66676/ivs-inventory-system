@@ -113,12 +113,14 @@ public class SalesOrderApplicationService {
                 orderWarehouseId, BigDecimal.ZERO, false, command.remark(), currentUserId(), paymentMode,
                 command.downPayment(), command.installmentCount(), command.firstDueDate()));
         PreparedOrder prepared = prepareLines(order, customer, command.lines());
-        order.markPriceApprovalRequired(prepared.approvalRequired());
+        order.markPriceApprovalRequired(prepared.approvalDecision().required());
         order.updateTotal(prepared.total());
         validateInstallment(order, prepared.total());
-        orderRepository.save(order);
+        SalesOrder saved = orderRepository.saveAndFlush(order);
+        approval.syncLowPriceApproval(saved.getId(), saved.getExternalOrderNo(), saved.getTotalAmount(),
+                prepared.approvalDecision());
         publish(order, "SalesOrderCreated", Map.of("orderNo", orderNo, "totalAmount", prepared.total()));
-        return toView(order);
+        return toView(saved);
     }
 
     /** 草稿订单补全 VIN、客户、仓库或备注；一旦确认锁货后不可再修改。 */
@@ -150,10 +152,12 @@ public class SalesOrderApplicationService {
 
         PreparedOrder prepared = prepareLines(order, customer, command.lines());
         order.resetPriceApproval();
-        order.markPriceApprovalRequired(prepared.approvalRequired());
+        order.markPriceApprovalRequired(prepared.approvalDecision().required());
         order.updateTotal(prepared.total());
         validateInstallment(order, prepared.total());
         SalesOrder saved = orderRepository.saveAndFlush(order);
+        approval.syncLowPriceApproval(saved.getId(), saved.getExternalOrderNo(), saved.getTotalAmount(),
+                prepared.approvalDecision());
         publish(saved, "SalesOrderUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", prepared.total()));
         return toView(saved);
     }
@@ -165,7 +169,7 @@ public class SalesOrderApplicationService {
         }
         int lineNo = 1;
         BigDecimal total = BigDecimal.ZERO;
-        boolean approvalRequired = false;
+        SalesApprovalPort.LowPriceDecision approvalDecision = SalesApprovalPort.LowPriceDecision.none();
         String orderScope = null;
         for (SalesApi.SaveSalesOrderLineCommand line : commands) {
             SalesMasterDataPort.ProductInfo product = masterData.requireProduct(line.productId());
@@ -219,13 +223,15 @@ public class SalesOrderApplicationService {
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("SALES_LINE_INVALID", exception.getMessage());
             }
-            if (approval.lowPriceRequiresApproval(effectiveUnitPrice, reference.minPrice())) {
-                approvalRequired = true;
+            SalesApprovalPort.LowPriceDecision lineDecision =
+                    approval.evaluateLowPrice(effectiveUnitPrice, reference.minPrice());
+            if (lineDecision.required()) {
+                approvalDecision = lineDecision;
             }
             lineRepository.save(entity);
             total = total.add(entity.getAmount());
         }
-        return new PreparedOrder(total, approvalRequired);
+        return new PreparedOrder(total, approvalDecision);
     }
 
     /** 已确认订单在出库前补录成交价，不改变商品、数量和已锁定的 VIN。 */
@@ -250,7 +256,7 @@ public class SalesOrderApplicationService {
             }
         }
         BigDecimal total = BigDecimal.ZERO;
-        boolean approvalRequired = false;
+        SalesApprovalPort.LowPriceDecision approvalDecision = SalesApprovalPort.LowPriceDecision.none();
         for (SalesOrderLine line : orderLines) {
             SalesApi.UpdatePriceLineCommand priceLine = prices.get(line.getId());
             BigDecimal price = priceLine == null ? null : priceLine.unitPrice();
@@ -271,15 +277,20 @@ public class SalesOrderApplicationService {
             } catch (IllegalArgumentException exception) {
                 throw new ConflictException("SALES_PRICE_REQUIRED", exception.getMessage());
             }
-            approvalRequired = approvalRequired
-                    || approval.lowPriceRequiresApproval(line.getUnitPrice(), line.getMinPrice());
+            SalesApprovalPort.LowPriceDecision lineDecision =
+                    approval.evaluateLowPrice(line.getUnitPrice(), line.getMinPrice());
+            if (lineDecision.required()) {
+                approvalDecision = lineDecision;
+            }
             lineRepository.save(line);
             total = total.add(line.getAmount());
         }
         order.resetPriceApproval();
-        order.markPriceApprovalRequired(approvalRequired);
+        order.markPriceApprovalRequired(approvalDecision.required());
         order.updateTotal(total);
         SalesOrder saved = orderRepository.saveAndFlush(order);
+        approval.syncLowPriceApproval(saved.getId(), saved.getExternalOrderNo(), saved.getTotalAmount(),
+                approvalDecision);
         publish(saved, "SalesOrderPricesUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", total));
         return toView(saved);
     }
@@ -291,10 +302,33 @@ public class SalesOrderApplicationService {
         if (!order.isPriceApprovalRequired()) {
             throw new ConflictException("PRICE_APPROVAL_NOT_REQUIRED", "该订单不存在低于最低限价的明细");
         }
+        if (!approval.resolveLowPriceApproval(order.getId(), true, null)) {
+            throw new ConflictException("APPROVAL_TASK_NOT_FOUND", "该订单没有待审批任务，请修改订单后重新提交");
+        }
         order.approvePrice(currentUserId());
         orderRepository.save(order);
         publish(order, "SalesOrderPriceApproved", Map.of("orderNo", order.getOrderNo()));
         return toView(order);
+    }
+
+    /** 价格审批驳回：订单保留为草稿，申请人修改后重新提交。 */
+    @Transactional
+    public SalesApi.SalesOrderView rejectPrice(UUID id, String reason) {
+        SalesOrder order = find(id);
+        if (!order.isPriceApprovalRequired()) {
+            throw new ConflictException("PRICE_APPROVAL_NOT_REQUIRED", "该订单不存在待审批的低价明细");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new ConflictException("APPROVAL_REASON_REQUIRED", "驳回时必须填写原因");
+        }
+        if (!approval.resolveLowPriceApproval(order.getId(), false, reason)) {
+            throw new ConflictException("APPROVAL_TASK_NOT_FOUND", "该订单没有待审批任务，请修改订单后重新提交");
+        }
+        order.resetPriceApproval();
+        order.markPriceApprovalRequired(true);
+        SalesOrder saved = orderRepository.saveAndFlush(order);
+        publish(saved, "SalesOrderPriceRejected", Map.of("orderNo", saved.getOrderNo(), "reason", reason.trim()));
+        return toView(saved);
     }
 
     @Transactional
@@ -358,7 +392,9 @@ public class SalesOrderApplicationService {
             throw new ConflictException("SALES_STATUS_INVALID", exception.getMessage());
         }
         stockPort.releaseAll(order.getId());
-        return toView(orderRepository.saveAndFlush(order));
+        SalesOrder saved = orderRepository.saveAndFlush(order);
+        approval.cancelLowPriceApproval(saved.getId());
+        return toView(saved);
     }
 
     /** 已取消订单可直接删除；业务上取消前不允许存在出库记录。 */
@@ -519,7 +555,7 @@ public class SalesOrderApplicationService {
     }
 
 
-    private record PreparedOrder(BigDecimal total, boolean approvalRequired) {
+    private record PreparedOrder(BigDecimal total, SalesApprovalPort.LowPriceDecision approvalDecision) {
     }
 
     private record PreparedDelivery(SalesOrderLine orderLine, SalesMasterDataPort.ProductInfo product,

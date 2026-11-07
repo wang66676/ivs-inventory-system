@@ -11,6 +11,8 @@ export const salesApi = {
   updatePrices: (id: string, lines: { orderLineId: string; unitPrice: number }[]) =>
     http.put<SalesOrder>(`/ivs/sales-orders/${id}/prices`, { lines }).then((r) => r.data),
   approvePrice: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/approve-price`).then((r) => r.data),
+  rejectPrice: (id: string, reason: string) =>
+    http.post<SalesOrder>(`/ivs/sales-orders/${id}/reject-price`, { reason }).then((r) => r.data),
   confirm: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/confirm`).then((r) => r.data),
   lock: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/lock`, {}).then((r) => r.data),
   cancel: (id: string) => http.post<SalesOrder>(`/ivs/sales-orders/${id}/cancel`).then((r) => r.data),

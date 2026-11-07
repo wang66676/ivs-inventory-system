@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** 销售订单与出库。 */
@@ -72,6 +73,14 @@ public class SalesOrderController {
     @PreAuthorize("hasAuthority('IVS_PRICE_APPROVE')")
     public SalesApi.SalesOrderView approvePrice(@PathVariable("id") UUID id) {
         return service.approvePrice(id);
+    }
+
+    /** 价格审批驳回：必须填写原因，订单保留为草稿等待申请人修改。 */
+    @PostMapping("/{id}/reject-price")
+    @PreAuthorize("hasAuthority('IVS_PRICE_APPROVE')")
+    public SalesApi.SalesOrderView rejectPrice(@PathVariable("id") UUID id,
+                                               @RequestBody Map<String, String> body) {
+        return service.rejectPrice(id, body.get("reason"));
     }
 
     @PostMapping("/{id}/confirm")

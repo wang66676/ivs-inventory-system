@@ -11,11 +11,20 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** 审批规则中心：维护矩阵并为业务端口提供统一判定。 */
 @Service
 public class ApprovalRuleService {
+    private static final Map<String, String> FIXED_PERMISSIONS = Map.of(
+            "SALES_LOW_PRICE", "IVS_PRICE_APPROVE",
+            "STOCK_ADJUSTMENT", "IVS_STOCK_ADJUST",
+            "POLICY_PUBLISH", "IVS_POLICY_APPROVE",
+            "SUBSIDY_POOL_ADJUSTMENT", "IVS_SUBSIDY_POOL_MANAGE",
+            "FUND_POOL_ADJUSTMENT", "IVS_FUND_POOL_ADJUST"
+    );
+
     private final ApprovalRuleRepository repository;
     private final CurrentActorProvider actors;
 
@@ -52,6 +61,10 @@ public class ApprovalRuleService {
         String permission = command.approvalPermission() == null ? "" : command.approvalPermission().trim();
         if (!PermissionCatalog.allCodes().contains(permission)) {
             throw new ConflictException("APPROVAL_PERMISSION_INVALID", "审批权限码不存在");
+        }
+        String fixedPermission = FIXED_PERMISSIONS.get(ruleCode);
+        if (fixedPermission != null && !fixedPermission.equals(permission)) {
+            throw new ConflictException("APPROVAL_PERMISSION_FIXED", "该审批规则必须使用指定权限：" + fixedPermission);
         }
         rule.update(Boolean.TRUE.equals(command.enabled()), metricType,
                 threshold.setScale(4, RoundingMode.HALF_UP), permission,

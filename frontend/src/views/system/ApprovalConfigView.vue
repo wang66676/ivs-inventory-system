@@ -47,7 +47,8 @@
           <div class="field-hint">例如填 5：低于最低限价达到 5% 才触发审批；填 0 表示任何低价都触发。</div>
         </a-form-item>
         <a-form-item label="审批权限">
-          <a-select v-model:value="form.approvalPermission" :options="permissionOptions" show-search />
+          <a-input v-model:value="form.approvalPermission" disabled />
+          <div class="field-hint">审批权限与业务入口固定绑定，避免待办可见但业务接口无权处理。</div>
         </a-form-item>
         <a-form-item label="规则说明"><a-textarea v-model:value="form.description" :rows="3" :maxlength="500" show-count /></a-form-item>
         <a-alert type="info" show-icon message="影响范围：保存后新提交的业务立即按新阈值判断，已进入审批或已完成的单据不会被追溯修改。" />
@@ -88,14 +89,6 @@ const metricOptions = [
   { value: 'NONE', label: '无需审批' },
   { value: 'AMOUNT', label: '金额达到阈值' },
   { value: 'DISCOUNT_PERCENT', label: '折让比例达到阈值' },
-]
-const permissionOptions = [
-  { value: 'IVS_PRICE_APPROVE', label: '价格审批（IVS_PRICE_APPROVE）' },
-  { value: 'IVS_STOCK_ADJUST', label: '库存调整（IVS_STOCK_ADJUST）' },
-  { value: 'IVS_POLICY_APPROVE', label: '政策审批（IVS_POLICY_APPROVE）' },
-  { value: 'IVS_SUBSIDY_POOL_MANAGE', label: '额度池管理（IVS_SUBSIDY_POOL_MANAGE）' },
-  { value: 'IVS_FUND_POOL_ADJUST', label: '资金池调整（IVS_FUND_POOL_ADJUST）' },
-  { value: 'USER_MANAGE', label: '系统管理员（USER_MANAGE）' },
 ]
 const enabledCount = computed(() => rows.value.filter((row) => row.enabled).length)
 const latestUpdate = computed(() => {

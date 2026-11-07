@@ -17,17 +17,20 @@
           <template #title>{{ group.title }}</template>
           <a-menu-item v-for="item in group.items" :key="item.path">{{ item.title }}</a-menu-item>
         </a-sub-menu>
-        <a-sub-menu v-if="auth.can('USER_MANAGE')" key="system">
+        <a-sub-menu v-if="auth.can('USER_MANAGE') || auth.can('IVS_READ')" key="system">
           <template #icon><SettingOutlined /></template>
           <template #title>系统</template>
-          <a-menu-item key="/system/organizations">组织架构</a-menu-item>
-          <a-menu-item key="/system/users">用户管理</a-menu-item>
-          <a-menu-item key="/system/roles">角色权限</a-menu-item>
-          <a-menu-item key="/system/approvals">审批配置</a-menu-item>
-          <a-menu-item key="/system/settings">全局参数</a-menu-item>
-          <a-menu-item key="/system/update">在线更新</a-menu-item>
-          <a-menu-item key="/system/migration">数据迁移</a-menu-item>
-          <a-menu-item key="/system/audit">审计日志</a-menu-item>
+          <a-menu-item key="/system/approval-tasks">审批待办</a-menu-item>
+          <template v-if="auth.can('USER_MANAGE')">
+            <a-menu-item key="/system/organizations">组织架构</a-menu-item>
+            <a-menu-item key="/system/users">用户管理</a-menu-item>
+            <a-menu-item key="/system/roles">角色权限</a-menu-item>
+            <a-menu-item key="/system/approvals">审批配置</a-menu-item>
+            <a-menu-item key="/system/settings">全局参数</a-menu-item>
+            <a-menu-item key="/system/update">在线更新</a-menu-item>
+            <a-menu-item key="/system/migration">数据迁移</a-menu-item>
+            <a-menu-item key="/system/audit">审计日志</a-menu-item>
+          </template>
         </a-sub-menu>
       </a-menu>
     </a-layout-sider>
@@ -38,6 +41,9 @@
           <div class="header-note">商品、采购、库存、销售、实销、返利与资金池的统一入口</div>
         </div>
         <a-space>
+          <a-badge :count="unreadNotificationCount" :overflow-count="99">
+            <a-button type="text" title="站内通知" @click="openNotifications"><BellOutlined /></a-button>
+          </a-badge>
           <a-tag color="blue">M5 完整性与上线</a-tag>
           <a-dropdown>
             <a-button type="text"><template #icon><UserOutlined /></template>{{ auth.user?.displayName || auth.user?.username }}</a-button>
@@ -83,19 +89,45 @@
     </div>
     <a-button @click="showAllModules">恢复显示全部模块</a-button>
   </a-modal>
+
+  <a-drawer v-model:open="notificationOpen" title="站内通知" :width="440">
+    <template #extra>
+      <a-space>
+        <a-button size="small" @click="router.push('/system/approval-tasks'); notificationOpen = false">审批待办</a-button>
+        <a-button size="small" :disabled="!unreadNotificationCount" @click="markAllNotificationsRead">全部已读</a-button>
+      </a-space>
+    </template>
+    <a-list :data-source="notifications" :loading="notificationLoading" locale="暂无通知">
+      <template #renderItem="{ item }">
+        <a-list-item class="notification-item" @click="readNotification(item)">
+          <a-list-item-meta>
+            <template #title>
+              <a-space><a-badge v-if="!item.read" status="processing" /><span :class="{ unread: !item.read }">{{ item.title }}</span></a-space>
+            </template>
+            <template #description>
+              <div>{{ item.content }}</div>
+              <div class="notification-time">{{ formatNotificationTime(item.createdAt) }}</div>
+            </template>
+          </a-list-item-meta>
+        </a-list-item>
+      </template>
+    </a-list>
+  </a-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
-  AppstoreOutlined, BarChartOutlined, CheckSquareOutlined, DashboardOutlined, DatabaseOutlined,
+  AppstoreOutlined, BarChartOutlined, BellOutlined, CheckSquareOutlined, DashboardOutlined, DatabaseOutlined,
   FileTextOutlined, GiftOutlined, SettingOutlined, ShopOutlined, ShoppingCartOutlined, UserOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from './stores/auth'
 import { authApi } from './api/auth'
+import { notificationApi } from './api/approval'
 import { hideablePages, menuGroups, pageTitles } from './router'
+import type { NotificationItem } from './types/approval'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,8 +194,63 @@ function openModuleSettings() {
   moduleSettingsOpen.value = true
 }
 
+const notificationOpen = ref(false)
+const notificationLoading = ref(false)
+const notifications = ref<NotificationItem[]>([])
+const unreadNotificationCount = ref(0)
+let notificationTimer: ReturnType<typeof setInterval> | undefined
+
+async function loadNotifications() {
+  if (!auth.token) return
+  notificationLoading.value = true
+  try {
+    const [items, count] = await Promise.all([notificationApi.list(false), notificationApi.unreadCount()])
+    notifications.value = items
+    unreadNotificationCount.value = count
+  } catch {
+    // 页面主体不应因通知接口短暂失败而中断
+  } finally {
+    notificationLoading.value = false
+  }
+}
+
+async function openNotifications() {
+  notificationOpen.value = true
+  await loadNotifications()
+}
+
+async function readNotification(item: NotificationItem) {
+  if (item.read) return
+  try {
+    await notificationApi.markRead(item.id)
+    await loadNotifications()
+  } catch (error) {
+    message.error((error as Error).message)
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    await notificationApi.markAllRead()
+    await loadNotifications()
+  } catch (error) {
+    message.error((error as Error).message)
+  }
+}
+
+function formatNotificationTime(value: string) {
+  return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
+}
+
 watch(hiddenMenuStorageKey, loadHiddenMenus, { immediate: true })
-onMounted(loadHiddenMenus)
+onMounted(() => {
+  loadHiddenMenus()
+  loadNotifications()
+  notificationTimer = setInterval(loadNotifications, 30000)
+})
+onBeforeUnmount(() => {
+  if (notificationTimer) clearInterval(notificationTimer)
+})
 
 const openKeys = ref<string[]>(['masterdata'])
 function handleMenuOpenChange(keys: (string | number)[]) {
@@ -189,6 +276,7 @@ const systemTitles: Record<string, string> = {
   '/system/users': '用户管理',
   '/system/roles': '角色权限',
   '/system/approvals': '审批配置',
+  '/system/approval-tasks': '审批待办',
   '/system/audit': '审计日志',
   '/system/migration': '数据迁移',
   '/system/settings': '全局参数',
@@ -248,6 +336,10 @@ async function submitChangePassword() {
 .module-visibility-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid #eef2f7; }
 .module-title { color: #172033; font-weight: 600; }
 .module-note { margin-top: 3px; color: #8b96a8; font-size: 12px; line-height: 1.5; }
+.notification-item { cursor: pointer; padding-inline: 4px; }
+.notification-item:hover { background: #f7f9fc; }
+.notification-item .unread { font-weight: 600; color: #172033; }
+.notification-time { margin-top: 5px; color: #98a2b3; font-size: 12px; }
 </style>
 
 
