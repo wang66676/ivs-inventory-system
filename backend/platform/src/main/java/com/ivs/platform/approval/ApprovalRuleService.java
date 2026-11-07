@@ -22,7 +22,8 @@ public class ApprovalRuleService {
             "STOCK_ADJUSTMENT", "IVS_STOCK_ADJUST",
             "POLICY_PUBLISH", "IVS_POLICY_APPROVE",
             "SUBSIDY_POOL_ADJUSTMENT", "IVS_SUBSIDY_POOL_MANAGE",
-            "FUND_POOL_ADJUSTMENT", "IVS_FUND_POOL_ADJUST"
+            "FUND_POOL_ADJUSTMENT", "IVS_FUND_POOL_ADJUST",
+            "REFUND_APPROVAL", "IVS_REFUND_MANAGE"
     );
 
     private final ApprovalRuleRepository repository;

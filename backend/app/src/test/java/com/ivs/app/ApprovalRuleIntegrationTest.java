@@ -58,10 +58,10 @@ class ApprovalRuleIntegrationTest {
     void 管理员调整低价审批阈值后销售订单立即按新规则判断() {
         ApprovalRuleService.RuleView[] rules = restTemplate.getForEntity(
                 "/api/ivs/approval-rules", ApprovalRuleService.RuleView[].class).getBody();
-        assertThat(rules).isNotNull().hasSize(5);
+        assertThat(rules).isNotNull().hasSize(6);
         assertThat(rules).extracting(ApprovalRuleService.RuleView::ruleCode)
                 .contains("SALES_LOW_PRICE", "STOCK_ADJUSTMENT", "POLICY_PUBLISH",
-                        "SUBSIDY_POOL_ADJUSTMENT", "FUND_POOL_ADJUSTMENT");
+                        "SUBSIDY_POOL_ADJUSTMENT", "FUND_POOL_ADJUSTMENT", "REFUND_APPROVAL");
 
         ApprovalRuleService.RuleView updated = restTemplate.exchange(
                 "/api/ivs/approval-rules/SALES_LOW_PRICE", HttpMethod.PUT,

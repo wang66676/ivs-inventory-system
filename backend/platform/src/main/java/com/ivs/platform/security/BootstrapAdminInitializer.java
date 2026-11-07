@@ -29,7 +29,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
                     PermissionCodes.POLICY_SELECT, PermissionCodes.PRE_ENTITLEMENT_MANAGE, PermissionCodes.ENTITLEMENT_APPLY,
                     PermissionCodes.CLAIM_SUBMIT, PermissionCodes.CLAIM_CONFIRM,
                     PermissionCodes.FUND_POOL_VIEW, PermissionCodes.FUND_POOL_ADJUST, PermissionCodes.FUND_OFFSET,
-                    PermissionCodes.INVOICE_WRITE, PermissionCodes.INVOICE_REDFLUSH,
+                    PermissionCodes.INVOICE_WRITE, PermissionCodes.INVOICE_REDFLUSH, PermissionCodes.REFUND_MANAGE,
                     PermissionCodes.FINANCE_READ, PermissionCodes.LEASE_MANAGE,
                     PermissionCodes.PROCESS_READ, PermissionCodes.USER_MANAGE
             ),
@@ -43,7 +43,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
             ),
             "FINANCE", List.of(
                     PermissionCodes.IVS_READ, PermissionCodes.IVS_WRITE,
-                    PermissionCodes.INVOICE_WRITE, PermissionCodes.INVOICE_REDFLUSH,
+                    PermissionCodes.INVOICE_WRITE, PermissionCodes.INVOICE_REDFLUSH, PermissionCodes.REFUND_MANAGE,
                     PermissionCodes.CLAIM_SUBMIT, PermissionCodes.CLAIM_CONFIRM,
                     PermissionCodes.FUND_POOL_VIEW, PermissionCodes.FUND_POOL_ADJUST,
                     PermissionCodes.PRICE_APPROVE, PermissionCodes.FINANCE_READ, PermissionCodes.PROCESS_READ

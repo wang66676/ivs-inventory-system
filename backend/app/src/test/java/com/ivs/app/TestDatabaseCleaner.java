@@ -12,6 +12,7 @@ final class TestDatabaseCleaner {
         jdbcTemplate.execute("delete from ivs.user_notification");
         jdbcTemplate.execute("delete from ivs.approval_task");
         jdbcTemplate.execute("delete from ivs.payable_invoice_match");
+        jdbcTemplate.execute("delete from ivs.refund_order");
         jdbcTemplate.execute("delete from ivs.data_migration_item");
         jdbcTemplate.execute("delete from ivs.data_migration_batch");
         jdbcTemplate.execute("delete from ivs.user_session");

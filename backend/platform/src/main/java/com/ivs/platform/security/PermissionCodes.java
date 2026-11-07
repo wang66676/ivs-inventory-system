@@ -48,6 +48,8 @@ public final class PermissionCodes {
     public static final String INVOICE_WRITE = "IVS_INVOICE_WRITE";
     /** 红冲（销项与进项） */
     public static final String INVOICE_REDFLUSH = "IVS_INVOICE_REDFLUSH";
+    /** 退款执行与人工兜底 */
+    public static final String REFUND_MANAGE = "IVS_REFUND_MANAGE";
 
     /** 应收应付与返利报表 */
     public static final String FINANCE_READ = "IVS_FINANCE_READ";

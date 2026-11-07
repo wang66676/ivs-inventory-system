@@ -81,7 +81,7 @@ const modulePages: MenuPage[] = [
   // 票据资金
   { path: '/billing/sales-invoices', name: 'sales-invoice', component: () => import('../views/billing/InvoiceView.vue'), title: '销项发票', description: '开票、作废与红冲（一期整车按全价开票）。', permission: 'IVS_INVOICE_WRITE' },
   { path: '/billing/red-invoices', name: 'red-invoice', component: () => import('../views/billing/RedInvoiceView.vue'), title: '红字发票', description: '进项红字（厂家 → 我方）为主通道；关联原蓝票与申报单。', permission: 'IVS_INVOICE_REDFLUSH' },
-  { path: '/billing/refunds', name: 'refund', title: '退款', description: '退款单：审批 → 执行 → 成功/失败/重试 → 人工兜底。', permission: 'IVS_FINANCE_READ' },
+  { path: '/billing/refunds', name: 'refund', component: () => import('../views/billing/RefundView.vue'), title: '退款', description: '退款单：审批 → 执行 → 成功/失败/重试 → 人工兜底。', permission: 'IVS_FINANCE_READ' },
   { path: '/billing/payments', name: 'payment', title: '付款', description: '付款与批次执行。', permission: 'IVS_FINANCE_READ' },
 
   // 报表

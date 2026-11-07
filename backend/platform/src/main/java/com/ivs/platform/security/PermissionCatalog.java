@@ -63,7 +63,8 @@ public final class PermissionCatalog {
         ));
         GROUPS.put("票据", List.of(
                 new Item(PermissionCodes.INVOICE_WRITE, "开票"),
-                new Item(PermissionCodes.INVOICE_REDFLUSH, "红冲（销项与进项）")
+                new Item(PermissionCodes.INVOICE_REDFLUSH, "红冲（销项与进项）"),
+                new Item(PermissionCodes.REFUND_MANAGE, "退款执行、重试与人工兜底")
         ));
         GROUPS.put("报表", List.of(
                 new Item(PermissionCodes.FINANCE_READ, "应收应付、返利与政策报表"),

@@ -1,6 +1,7 @@
 package com.ivs.app.orchestration;
 
 import com.ivs.inventory.stocktake.StocktakeApplicationService;
+import com.ivs.billing.refund.RefundApplicationService;
 import com.ivs.platform.approval.ApprovalTaskService;
 import com.ivs.policy.policy.PolicyApplicationService;
 import com.ivs.policy.fund.RebateFundService;
@@ -17,13 +18,16 @@ public class ApprovalActionService {
     private final StocktakeApplicationService stocktakes;
     private final PolicyApplicationService policies;
     private final RebateFundService fundPool;
+    private final RefundApplicationService refunds;
 
     public ApprovalActionService(ApprovalTaskService tasks, StocktakeApplicationService stocktakes,
-                                 PolicyApplicationService policies, RebateFundService fundPool) {
+                                 PolicyApplicationService policies, RebateFundService fundPool,
+                                 RefundApplicationService refunds) {
         this.tasks = tasks;
         this.stocktakes = stocktakes;
         this.policies = policies;
         this.fundPool = fundPool;
+        this.refunds = refunds;
     }
 
     @Transactional
@@ -34,6 +38,7 @@ public class ApprovalActionService {
             case "POLICY_PUBLISH" -> policies.publishApproved(task.businessId());
             case "SUBSIDY_POOL_ADJUSTMENT" -> policies.applyPoolAdjustment(task.businessId(), task.payloadJson());
             case "FUND_POOL_CREDIT" -> fundPool.applyApprovedCredit(task.payloadJson());
+            case "REFUND_APPROVAL" -> refunds.approve(task.businessId());
             default -> throw new ConflictException("APPROVAL_ACTION_UNSUPPORTED",
                     "该审批类型请在对应业务模块处理：" + task.taskType());
         }
@@ -54,6 +59,8 @@ public class ApprovalActionService {
             // 驳回时不修改额度池。
         } else if ("FUND_POOL_CREDIT".equals(task.taskType())) {
             // 驳回时不修改资金池。
+        } else if ("REFUND_APPROVAL".equals(task.taskType())) {
+            refunds.reject(task.businessId());
         } else {
             throw new ConflictException("APPROVAL_ACTION_UNSUPPORTED",
                     "该审批类型请在对应业务模块处理：" + task.taskType());

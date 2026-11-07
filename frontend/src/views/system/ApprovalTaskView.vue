@@ -96,6 +96,7 @@ function goBusiness(task: ApprovalTask) {
   else if (task.businessType === 'POLICY') router.push('/policy/policies')
   else if (task.businessType === 'POLICY_POOL') router.push('/policy/subsidy-pools')
   else if (task.businessType === 'REBATE_FUND') router.push('/policy/fund-pool')
+  else if (task.businessType === 'REFUND') router.push('/billing/refunds')
   else message.info('关联业务页面尚未开放')
 }
 async function approve(task: ApprovalTask) {
@@ -106,6 +107,7 @@ async function approve(task: ApprovalTask) {
     else if (task.taskType === 'POLICY_PUBLISH') await approvalApi.approveTask(task.id)
     else if (task.taskType === 'SUBSIDY_POOL_ADJUSTMENT') await approvalApi.approveTask(task.id)
     else if (task.taskType === 'FUND_POOL_CREDIT') await approvalApi.approveTask(task.id)
+    else if (task.taskType === 'REFUND_APPROVAL') await approvalApi.approveTask(task.id)
     else { message.warning('该类型审批将在对应业务模块中处理'); return }
     message.success('审批已通过')
     await reload()
@@ -130,6 +132,8 @@ async function reject() {
       await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
     } else if (current.value.taskType === 'SUBSIDY_POOL_ADJUSTMENT'
       || current.value.taskType === 'FUND_POOL_CREDIT') {
+      await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
+    } else if (current.value.taskType === 'REFUND_APPROVAL') {
       await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
     } else { message.warning('该类型审批将在对应业务模块中处理'); return }
     message.success('审批已驳回')
