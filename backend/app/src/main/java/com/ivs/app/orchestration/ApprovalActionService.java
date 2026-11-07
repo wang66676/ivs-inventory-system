@@ -2,6 +2,7 @@ package com.ivs.app.orchestration;
 
 import com.ivs.inventory.stocktake.StocktakeApplicationService;
 import com.ivs.platform.approval.ApprovalTaskService;
+import com.ivs.policy.policy.PolicyApplicationService;
 import com.ivs.shared.error.ConflictException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,10 +14,13 @@ import java.util.UUID;
 public class ApprovalActionService {
     private final ApprovalTaskService tasks;
     private final StocktakeApplicationService stocktakes;
+    private final PolicyApplicationService policies;
 
-    public ApprovalActionService(ApprovalTaskService tasks, StocktakeApplicationService stocktakes) {
+    public ApprovalActionService(ApprovalTaskService tasks, StocktakeApplicationService stocktakes,
+                                 PolicyApplicationService policies) {
         this.tasks = tasks;
         this.stocktakes = stocktakes;
+        this.policies = policies;
     }
 
     @Transactional
@@ -24,6 +28,7 @@ public class ApprovalActionService {
         ApprovalTaskService.TaskView task = tasks.getPendingForCurrentUser(taskId);
         switch (task.taskType()) {
             case "STOCKTAKE_POST" -> stocktakes.postApproved(task.businessId());
+            case "POLICY_PUBLISH" -> policies.publishApproved(task.businessId());
             default -> throw new ConflictException("APPROVAL_ACTION_UNSUPPORTED",
                     "该审批类型请在对应业务模块处理：" + task.taskType());
         }
@@ -38,6 +43,8 @@ public class ApprovalActionService {
         ApprovalTaskService.TaskView task = tasks.getPendingForCurrentUser(taskId);
         if ("STOCKTAKE_POST".equals(task.taskType())) {
             stocktakes.rejectApproval(task.businessId());
+        } else if ("POLICY_PUBLISH".equals(task.taskType())) {
+            // 政策保持草稿，申请人修改后可重新提交。
         } else {
             throw new ConflictException("APPROVAL_ACTION_UNSUPPORTED",
                     "该审批类型请在对应业务模块处理：" + task.taskType());

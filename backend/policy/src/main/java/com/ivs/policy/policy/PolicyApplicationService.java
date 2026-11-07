@@ -42,6 +42,7 @@ public class PolicyApplicationService {
     private final PolicyEntitlementRepository entitlementRepository;
     private final PolicyCostAllocationRepository costAllocationRepository;
     private final PolicySubsidyPoolUsageRepository poolUsageRepository;
+    private final PolicyApprovalPort approval;
     private final PreEntitlementReferencePort referencePort;
     private final PolicyReferencePort policyReferences;
     private final EventPublisher events;
@@ -54,6 +55,7 @@ public class PolicyApplicationService {
                                     PolicyEntitlementRepository entitlementRepository,
                                     PolicyCostAllocationRepository costAllocationRepository,
                                     PolicySubsidyPoolUsageRepository poolUsageRepository,
+                                    PolicyApprovalPort approval,
                                     PreEntitlementReferencePort referencePort,
                                     PolicyReferencePort policyReferences,
                                     EventPublisher events,
@@ -65,6 +67,7 @@ public class PolicyApplicationService {
         this.entitlementRepository = entitlementRepository;
         this.costAllocationRepository = costAllocationRepository;
         this.poolUsageRepository = poolUsageRepository;
+        this.approval = approval;
         this.referencePort = referencePort;
         this.policyReferences = policyReferences;
         this.events = events;
@@ -119,19 +122,48 @@ public class PolicyApplicationService {
     @Transactional
     public PolicyApi.PolicyView publish(UUID id) {
         PromotionPolicy policy = find(id);
+        approval.resolvePending(id, true, "政策审批人直接发布");
+        return publishEntity(policy);
+    }
+
+    /** 政策维护人员提交发布审批；规则关闭时直接发布。 */
+    @Transactional
+    public PolicyApi.PolicyView submitPublish(UUID id) {
+        PromotionPolicy policy = find(id);
+        if (policy.getStatus() != PolicyStatus.DRAFT) {
+            throw new ConflictException("POLICY_STATUS_INVALID", "只有草稿政策可以提交发布审批");
+        }
+        PolicyApprovalPort.PublishDecision decision = approval.evaluatePublish();
+        if (decision.required()) {
+            approval.syncPending(policy.getId(), policy.getPolicyNo(), policy.getName(), decision);
+            return toView(policy);
+        }
+        approval.cancel(id);
+        return publishEntity(policy);
+    }
+
+    /** 审批通过后发布，由 app 层审批动作调用。 */
+    @Transactional
+    public PolicyApi.PolicyView publishApproved(UUID id) {
+        return publishEntity(find(id));
+    }
+
+    private PolicyApi.PolicyView publishEntity(PromotionPolicy policy) {
         try {
             policy.publish();
         } catch (IllegalStateException exception) {
             throw new ConflictException("POLICY_STATUS_INVALID", exception.getMessage());
         }
-        return PolicyApi.PolicyView.from(policyRepository.save(policy), poolOf(id));
+        return PolicyApi.PolicyView.from(policyRepository.save(policy), poolOf(policy.getId()));
     }
 
     @Transactional
     public PolicyApi.PolicyView cancel(UUID id) {
         PromotionPolicy policy = find(id);
         policy.cancel();
-        return PolicyApi.PolicyView.from(policyRepository.save(policy), poolOf(id));
+        PromotionPolicy saved = policyRepository.save(policy);
+        approval.cancel(id);
+        return PolicyApi.PolicyView.from(saved, poolOf(id));
     }
 
     /** 条件类政策：业务人工标记「条件已达成」后，预享受才能通过。 */

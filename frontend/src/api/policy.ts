@@ -9,6 +9,7 @@ export const policyApi = {
   get: (id: string) => http.get<Policy>(`/ivs/policies/${id}`).then((r) => r.data),
   create: (body: Record<string, unknown>) => http.post<Policy>('/ivs/policies', body).then((r) => r.data),
   publish: (id: string) => http.post<Policy>(`/ivs/policies/${id}/publish`, {}).then((r) => r.data),
+  submitPublish: (id: string) => http.post<Policy>(`/ivs/policies/${id}/submit-publish`, {}).then((r) => r.data),
   cancel: (id: string) => http.post<Policy>(`/ivs/policies/${id}/cancel`, {}).then((r) => r.data),
   markConditionMet: (id: string) => http.post<Policy>(`/ivs/policies/${id}/condition-met`, {}).then((r) => r.data),
 

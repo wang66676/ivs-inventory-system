@@ -136,6 +136,38 @@ class PolicyEngineIntegrationTest {
         assertThat(response.getBody().get("code")).isEqualTo("NO_POLICY_AVAILABLE");
     }
 
+    @Test
+    void 政策维护人员提交发布审批_通过后发布_驳回保持草稿() {
+        PolicyApi.PolicyView first = createPolicy("待审批发布政策", "AMOUNT", new BigDecimal("10000"),
+                new BigDecimal("50000"), LocalDate.now().minusDays(1), LocalDate.now().plusDays(30));
+        PolicyApi.PolicyView submitted = post("/api/ivs/policies/" + first.id() + "/submit-publish", Map.of(),
+                PolicyApi.PolicyView.class);
+        assertThat(submitted.status().name()).isEqualTo("DRAFT");
+
+        com.ivs.platform.approval.ApprovalTaskService.TaskView[] pending = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=PENDING",
+                com.ivs.platform.approval.ApprovalTaskService.TaskView[].class).getBody();
+        var firstTask = java.util.Arrays.stream(pending).filter(task -> task.businessId().equals(first.id()))
+                .findFirst().orElseThrow();
+        assertThat(firstTask.taskType()).isEqualTo("POLICY_PUBLISH");
+        post("/api/ivs/approval-actions/" + firstTask.id() + "/approve", Map.of(),
+                com.ivs.platform.approval.ApprovalTaskService.TaskView.class);
+        assertThat(get("/api/ivs/policies/" + first.id(), PolicyApi.PolicyView.class).status().name())
+                .isEqualTo("PUBLISHED");
+
+        PolicyApi.PolicyView second = createPolicy("驳回发布政策", "AMOUNT", new BigDecimal("5000"),
+                new BigDecimal("30000"), LocalDate.now().minusDays(1), LocalDate.now().plusDays(30));
+        post("/api/ivs/policies/" + second.id() + "/submit-publish", Map.of(), PolicyApi.PolicyView.class);
+        pending = restTemplate.getForEntity("/api/ivs/approval-tasks?status=PENDING",
+                com.ivs.platform.approval.ApprovalTaskService.TaskView[].class).getBody();
+        var secondTask = java.util.Arrays.stream(pending).filter(task -> task.businessId().equals(second.id()))
+                .findFirst().orElseThrow();
+        post("/api/ivs/approval-actions/" + secondTask.id() + "/reject", Map.of("reason", "政策金额需复核"),
+                com.ivs.platform.approval.ApprovalTaskService.TaskView.class);
+        assertThat(get("/api/ivs/policies/" + second.id(), PolicyApi.PolicyView.class).status().name())
+                .isEqualTo("DRAFT");
+    }
+
     /* ===================== 辅助 ===================== */
 
     private PolicyApi.PolicyView createPolicy(String name, String benefitType, BigDecimal value,

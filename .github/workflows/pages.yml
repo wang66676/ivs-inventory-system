@@ -40,7 +40,7 @@ jobs:
           VITE_ROUTER_MODE: hash
           VITE_API_BASE_URL: ${{ vars.IVS_API_BASE_URL || 'https://radio-together-placed-facilitate.trycloudflare.com/api' }}
           VITE_LIVE_API_CONFIG: 'true'
-          VITE_APP_VERSION: 1.0.5
+          VITE_APP_VERSION: 1.0.6
           VITE_GITHUB_OWNER: wang66676
           VITE_GITHUB_REPO: ivs-inventory-system
         run: |

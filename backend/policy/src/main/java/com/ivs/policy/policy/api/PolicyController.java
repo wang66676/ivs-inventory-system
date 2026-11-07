@@ -72,6 +72,13 @@ public class PolicyController {
         return service.publish(id);
     }
 
+    /** 政策维护人员提交发布审批，审批通过后才正式发布。 */
+    @PostMapping("/policies/{id}/submit-publish")
+    @PreAuthorize("hasAuthority('IVS_POLICY_WRITE')")
+    public PolicyApi.PolicyView submitPublish(@PathVariable("id") UUID id) {
+        return service.submitPublish(id);
+    }
+
     @PostMapping("/policies/{id}/cancel")
     @PreAuthorize("hasAuthority('IVS_POLICY_APPROVE')")
     public PolicyApi.PolicyView cancel(@PathVariable("id") UUID id) {

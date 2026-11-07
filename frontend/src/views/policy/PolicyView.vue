@@ -32,6 +32,8 @@
             <a-space>
               <a-button v-if="canApprove && record.status === 'DRAFT'" size="small" type="primary"
                         @click="publish(record)">发布</a-button>
+              <a-button v-if="!canApprove && canWrite && record.status === 'DRAFT'" size="small" type="primary"
+                        @click="submitPublish(record)">提交审批</a-button>
               <a-button v-if="canPool && record.pool && !record.pool.conditionMet && record.pool.conditionDesc"
                         size="small" @click="markCondition(record)">条件已达成</a-button>
               <a-button v-if="canApprove && record.status !== 'CANCELLED'" size="small" danger
@@ -207,6 +209,11 @@ async function save() {
 
 async function publish(record: Policy) {
   try { await policyApi.publish(record.id); message.success('政策已发布'); await reload() }
+  catch (error) { message.error((error as Error).message) }
+}
+
+async function submitPublish(record: Policy) {
+  try { await policyApi.submitPublish(record.id); message.success('政策已提交发布审批'); await reload() }
   catch (error) { message.error((error as Error).message) }
 }
 
