@@ -94,6 +94,8 @@ function goBusiness(task: ApprovalTask) {
   if (task.businessType === 'SALES_ORDER') router.push('/sales/orders')
   else if (task.businessType === 'STOCKTAKE') router.push('/inventory/stocktake')
   else if (task.businessType === 'POLICY') router.push('/policy/policies')
+  else if (task.businessType === 'POLICY_POOL') router.push('/policy/subsidy-pools')
+  else if (task.businessType === 'REBATE_FUND') router.push('/policy/fund-pool')
   else message.info('关联业务页面尚未开放')
 }
 async function approve(task: ApprovalTask) {
@@ -102,6 +104,8 @@ async function approve(task: ApprovalTask) {
     if (task.taskType === 'SALES_PRICE') await salesApi.approvePrice(task.businessId)
     else if (task.taskType === 'STOCKTAKE_POST') await approvalApi.approveTask(task.id)
     else if (task.taskType === 'POLICY_PUBLISH') await approvalApi.approveTask(task.id)
+    else if (task.taskType === 'SUBSIDY_POOL_ADJUSTMENT') await approvalApi.approveTask(task.id)
+    else if (task.taskType === 'FUND_POOL_CREDIT') await approvalApi.approveTask(task.id)
     else { message.warning('该类型审批将在对应业务模块中处理'); return }
     message.success('审批已通过')
     await reload()
@@ -123,6 +127,9 @@ async function reject() {
     } else if (current.value.taskType === 'STOCKTAKE_POST') {
       await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
     } else if (current.value.taskType === 'POLICY_PUBLISH') {
+      await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
+    } else if (current.value.taskType === 'SUBSIDY_POOL_ADJUSTMENT'
+      || current.value.taskType === 'FUND_POOL_CREDIT') {
       await approvalApi.rejectTask(current.value.id, rejectReason.value.trim())
     } else { message.warning('该类型审批将在对应业务模块中处理'); return }
     message.success('审批已驳回')

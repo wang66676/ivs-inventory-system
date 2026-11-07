@@ -37,6 +37,26 @@ public class PolicyApprovalAdapter implements PolicyApprovalPort {
     }
 
     @Override
+    public PublishDecision evaluatePoolAdjustment(java.math.BigDecimal adjustmentAmount) {
+        ApprovalRuleService.Decision decision = rules.evaluate("SUBSIDY_POOL_ADJUSTMENT", adjustmentAmount, null);
+        return new PublishDecision(decision.required(), decision.approvalPermission(), decision.reason());
+    }
+
+    @Override
+    public void syncPoolAdjustment(UUID policyId, String policyNo, String policyName,
+                                   java.math.BigDecimal adjustmentAmount, PublishDecision decision,
+                                   String payloadJson) {
+        if (decision == null || !decision.required()) {
+            tasks.cancel("POLICY_POOL", policyId);
+            return;
+        }
+        tasks.sync(new ApprovalTaskService.CreateCommand("SUBSIDY_POOL_ADJUSTMENT", "POLICY_POOL", policyId,
+                policyNo, "政策额度池调整审批：" + policyName,
+                "额度池调整金额 " + adjustmentAmount.toPlainString() + " 元，" + decision.reason(),
+                adjustmentAmount, decision.approvalPermission(), true, payloadJson));
+    }
+
+    @Override
     public boolean resolvePending(UUID policyId, boolean approved, String reason) {
         return tasks.resolve("POLICY", policyId, approved, reason) != null;
     }

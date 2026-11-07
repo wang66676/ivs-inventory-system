@@ -168,6 +168,28 @@ class PolicyEngineIntegrationTest {
                 .isEqualTo("DRAFT");
     }
 
+    @Test
+    void 大额额度池调整提交审批_通过后才修改额度() {
+        PolicyApi.PolicyView policy = createPolicy("额度池调整审批政策", "AMOUNT", new BigDecimal("5000"),
+                new BigDecimal("50000"), LocalDate.now().minusDays(1), LocalDate.now().plusDays(30));
+        PolicyApi.PolicyView submitted = post("/api/ivs/policies/" + policy.id() + "/adjust-pool",
+                Map.of("newTotalAmount", 70000, "reason", "厂家追加四季度预算"), PolicyApi.PolicyView.class);
+        assertThat(submitted.pool().totalAmount()).isEqualByComparingTo("50000.00");
+
+        com.ivs.platform.approval.ApprovalTaskService.TaskView[] pending = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=PENDING",
+                com.ivs.platform.approval.ApprovalTaskService.TaskView[].class).getBody();
+        var task = java.util.Arrays.stream(pending).filter(item -> item.businessId().equals(policy.id()))
+                .findFirst().orElseThrow();
+        assertThat(task.taskType()).isEqualTo("SUBSIDY_POOL_ADJUSTMENT");
+        post("/api/ivs/approval-actions/" + task.id() + "/approve", Map.of(),
+                com.ivs.platform.approval.ApprovalTaskService.TaskView.class);
+
+        PolicyApi.PolicyView adjusted = get("/api/ivs/policies/" + policy.id(), PolicyApi.PolicyView.class);
+        assertThat(adjusted.pool().totalAmount()).isEqualByComparingTo("70000.00");
+        assertThat(adjusted.pool().remainingAmount()).isEqualByComparingTo("70000.00");
+    }
+
     /* ===================== 辅助 ===================== */
 
     private PolicyApi.PolicyView createPolicy(String name, String benefitType, BigDecimal value,

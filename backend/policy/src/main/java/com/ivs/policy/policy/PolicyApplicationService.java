@@ -178,6 +178,66 @@ public class PolicyApplicationService {
         return toView(find(id));
     }
 
+    /** 提交额度池调整；达到阈值时只生成待办，审批通过后才修改额度。 */
+    @Transactional
+    public PolicyApi.PolicyView submitPoolAdjustment(UUID policyId, BigDecimal newTotalAmount, String reason) {
+        PromotionPolicy policy = find(policyId);
+        PolicySubsidyPool pool = poolRepository.findByPolicyIdForUpdate(policyId)
+                .orElseThrow(() -> new NotFoundException("政策额度池", policyId));
+        if (!pool.amountLimited()) {
+            throw new ConflictException("POOL_ADJUST_NOT_AMOUNT_LIMITED", "只有金额类额度池可以调整总额");
+        }
+        if (newTotalAmount == null || newTotalAmount.signum() < 0) {
+            throw new ConflictException("POOL_ADJUST_AMOUNT_INVALID", "额度池总额不能小于 0");
+        }
+        BigDecimal current = pool.getTotalAmount() == null ? BigDecimal.ZERO : pool.getTotalAmount();
+        BigDecimal adjustmentAmount = newTotalAmount.subtract(current).abs().setScale(2, java.math.RoundingMode.HALF_UP);
+        PolicyApprovalPort.PublishDecision decision = approval.evaluatePoolAdjustment(adjustmentAmount);
+        if (decision.required()) {
+            try {
+                String payload = objectMapper.writeValueAsString(new PolicyApprovalPort.PoolAdjustmentPayload(
+                        newTotalAmount.setScale(2, java.math.RoundingMode.HALF_UP), reason == null ? null : reason.trim()));
+                approval.syncPoolAdjustment(policyId, policy.getPolicyNo(), policy.getName(),
+                        adjustmentAmount, decision, payload);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+                throw new ConflictException("POOL_ADJUST_PAYLOAD_INVALID", "额度池调整申请数据无法保存");
+            }
+            return toView(policy);
+        }
+        applyPoolAdjustment(policyId, newTotalAmount, reason);
+        return toView(policy);
+    }
+
+    /** 审批通过后执行额度池调整，由 app 层调用。 */
+    @Transactional
+    public PolicyApi.PolicyView applyPoolAdjustment(UUID policyId, String payloadJson) {
+        try {
+            PolicyApprovalPort.PoolAdjustmentPayload payload = objectMapper.readValue(
+                    payloadJson, PolicyApprovalPort.PoolAdjustmentPayload.class);
+            applyPoolAdjustment(policyId, payload.newTotalAmount(), payload.reason());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new ConflictException("POOL_ADJUST_PAYLOAD_INVALID", "额度池调整申请数据损坏");
+        }
+        return toView(find(policyId));
+    }
+
+    private void applyPoolAdjustment(UUID policyId, BigDecimal newTotalAmount, String reason) {
+        PolicySubsidyPool pool = poolRepository.findByPolicyIdForUpdate(policyId)
+                .orElseThrow(() -> new NotFoundException("政策额度池", policyId));
+        try {
+            pool.adjustTotalAmount(newTotalAmount);
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ConflictException("POOL_ADJUST_INVALID", exception.getMessage());
+        }
+        poolRepository.save(pool);
+        String detail = reason == null || reason.isBlank() ? "额度池调整" : reason.trim();
+        poolUsageRepository.save(PolicySubsidyPoolUsage.create(pool.getId(), "ADJUST_TOTAL",
+                policyId, pool.getPolicyId().toString(), newTotalAmount));
+        events.publish(new EventEnvelope(UUID.randomUUID(), "PolicyPoolAdjusted", "PolicySubsidyPool", pool.getId(),
+                pool.getVersion(), null, UUID.randomUUID(), Instant.now(),
+                java.util.Map.of("policyId", policyId.toString(), "newTotalAmount", newTotalAmount, "reason", detail)));
+    }
+
     /** 订单选政策：一条政策生成一条预享受项，金额累加；额度池在此预占。 */
     @Transactional
     public List<PolicyApi.PreEntitlementView> apply(PolicyApi.ApplyPreEntitlementCommand command) {

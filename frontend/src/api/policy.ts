@@ -10,6 +10,8 @@ export const policyApi = {
   create: (body: Record<string, unknown>) => http.post<Policy>('/ivs/policies', body).then((r) => r.data),
   publish: (id: string) => http.post<Policy>(`/ivs/policies/${id}/publish`, {}).then((r) => r.data),
   submitPublish: (id: string) => http.post<Policy>(`/ivs/policies/${id}/submit-publish`, {}).then((r) => r.data),
+  adjustPool: (id: string, body: { newTotalAmount: number; reason?: string }) =>
+    http.post<Policy>(`/ivs/policies/${id}/adjust-pool`, body).then((r) => r.data),
   cancel: (id: string) => http.post<Policy>(`/ivs/policies/${id}/cancel`, {}).then((r) => r.data),
   markConditionMet: (id: string) => http.post<Policy>(`/ivs/policies/${id}/condition-met`, {}).then((r) => r.data),
 
@@ -50,6 +52,8 @@ export const policyApi = {
     http.get<FundOffset[]>('/ivs/rebate-fund-pool/offsets', { params }).then((r) => r.data),
   creditFund: (body: Record<string, unknown>) =>
     http.post<FundPool>('/ivs/rebate-fund-pool/credits', body).then((r) => r.data),
+  requestCreditFund: (body: Record<string, unknown>) =>
+    http.post<FundPool>('/ivs/rebate-fund-pool/credits/request', body).then((r) => r.data),
 
   reportAging: (params?: { supplierId?: string; periodCode?: string }) =>
     http.get<ReceivableAgingRow[]>('/ivs/policies/reports/receivable-aging', { params }).then((r) => r.data),

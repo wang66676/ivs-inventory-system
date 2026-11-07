@@ -31,19 +31,25 @@ public class RebateFundService {
     private final RebateFundTxnRepository txnRepository;
     private final RebateOffsetOrderRepository offsetRepository;
     private final RebateOffsetLineRepository offsetLineRepository;
+    private final FundPoolApprovalPort approval;
     private final CurrentActorProvider actors;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     public RebateFundService(RebateFundPoolRepository poolRepository,
                              RebateFundSupplierBalanceRepository supplierBalanceRepository,
                              RebateFundTxnRepository txnRepository,
                              RebateOffsetOrderRepository offsetRepository,
                              RebateOffsetLineRepository offsetLineRepository,
+                             FundPoolApprovalPort approval,
+                             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
                              CurrentActorProvider actors) {
         this.poolRepository = poolRepository;
         this.supplierBalanceRepository = supplierBalanceRepository;
         this.txnRepository = txnRepository;
         this.offsetRepository = offsetRepository;
         this.offsetLineRepository = offsetLineRepository;
+        this.approval = approval;
+        this.objectMapper = objectMapper;
         this.actors = actors;
     }
 
@@ -79,6 +85,46 @@ public class RebateFundService {
                 command.sourceType() == null ? "OTHER" : command.sourceType(),
                 command.sourceType(), command.sourceId(), command.sourceNo(), currentUserId(), command.remark()));
         return overview();
+    }
+
+    /** 人工调整入池申请：达到阈值时只生成待办，审批前不改余额。 */
+    @Transactional
+    public RebateFundApi.PoolView submitCredit(RebateFundApi.CreditCommand command) {
+        if (command.supplierId() == null) {
+            throw new ConflictException("SUPPLIER_REQUIRED", "请指定返利所属厂家");
+        }
+        BigDecimal amount = money(command.amount());
+        if (amount.signum() <= 0) {
+            throw new ConflictException("REBATE_CREDIT_AMOUNT_INVALID", "入池金额必须大于 0");
+        }
+        FundPoolApprovalPort.AdjustmentDecision decision = approval.evaluate(amount);
+        if (decision.required()) {
+            UUID requestId = UUID.randomUUID();
+            try {
+                String payload = objectMapper.writeValueAsString(new FundPoolApprovalPort.CreditPayload(
+                        command.supplierId(), amount, command.sourceType(), command.sourceNo(),
+                        command.sourceId(), command.remark()));
+                approval.syncPending(requestId, command.sourceNo() == null ? "FUND-ADJUST" : command.sourceNo(),
+                        amount, decision, payload);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+                throw new ConflictException("FUND_ADJUST_PAYLOAD_INVALID", "资金池调整申请数据无法保存");
+            }
+            return overview();
+        }
+        return credit(command);
+    }
+
+    /** 审批通过后执行人工入池，由 app 层调用。 */
+    @Transactional
+    public RebateFundApi.PoolView applyApprovedCredit(String payloadJson) {
+        try {
+            FundPoolApprovalPort.CreditPayload payload = objectMapper.readValue(
+                    payloadJson, FundPoolApprovalPort.CreditPayload.class);
+            return credit(new RebateFundApi.CreditCommand(payload.supplierId(), payload.amount(),
+                    payload.sourceType(), payload.sourceNo(), payload.sourceId(), payload.remark()));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new ConflictException("FUND_ADJUST_PAYLOAD_INVALID", "资金池调整申请数据损坏");
+        }
     }
 
     /** 抵扣预览：本次可抵 = min(该厂家可用余额, 本单金额)。 */

@@ -71,13 +71,13 @@ public class ApprovalTaskService {
             String taskNo = "AP-%06d".formatted(repository.nextTaskSequence());
             task = ApprovalTask.create(taskNo, command.taskType(), command.businessType(), command.businessId(),
                     command.businessNo(), command.title(), command.summary(), command.amount(),
-                    command.approvalPermission(), user.userId(), user.displayName());
+                    command.approvalPermission(), user.userId(), user.displayName(), command.payloadJson());
             repository.save(task);
             notifications.notifyPermission("APPROVAL", "新的审批待办", command.title() + "，请及时处理",
                     command.businessType(), command.businessId(), command.approvalPermission());
         } else {
             pending.refresh(command.businessNo(), command.title(), command.summary(), command.amount(),
-                    command.approvalPermission());
+                    command.approvalPermission(), command.payloadJson());
             task = repository.save(pending);
         }
         return TaskView.from(task, canDecide(task, user));
@@ -152,19 +152,26 @@ public class ApprovalTaskService {
 
     public record CreateCommand(String taskType, String businessType, UUID businessId, String businessNo,
                                 String title, String summary, BigDecimal amount, String approvalPermission,
-                                boolean required) {
+                                boolean required, String payloadJson) {
+        public CreateCommand(String taskType, String businessType, UUID businessId, String businessNo,
+                             String title, String summary, BigDecimal amount, String approvalPermission,
+                             boolean required) {
+            this(taskType, businessType, businessId, businessNo, title, summary, amount,
+                    approvalPermission, required, null);
+        }
     }
 
     public record TaskView(UUID id, String taskNo, String taskType, String businessType, UUID businessId,
                            String businessNo, String title, String summary, BigDecimal amount,
                            String approvalPermission, ApprovalTaskStatus status, String applicantName,
                            String decisionByName, String decisionReason, Instant decidedAt,
-                           Instant createdAt, boolean canDecide) {
+                           Instant createdAt, boolean canDecide, String payloadJson) {
         static TaskView from(ApprovalTask task, boolean canDecide) {
             return new TaskView(task.getId(), task.getTaskNo(), task.getTaskType(), task.getBusinessType(),
                     task.getBusinessId(), task.getBusinessNo(), task.getTitle(), task.getSummary(), task.getAmount(),
                     task.getApprovalPermission(), task.getStatus(), task.getApplicantName(), task.getDecisionByName(),
-                    task.getDecisionReason(), task.getDecidedAt(), task.getCreatedAt(), canDecide);
+                    task.getDecisionReason(), task.getDecidedAt(), task.getCreatedAt(), canDecide,
+                    task.getPayloadJson());
         }
     }
 }

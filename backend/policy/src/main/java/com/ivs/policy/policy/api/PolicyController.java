@@ -92,6 +92,17 @@ public class PolicyController {
         return service.markConditionMet(id);
     }
 
+    /** 提交额度池总额调整；达到阈值时审批通过后才生效。 */
+    @PostMapping("/policies/{id}/adjust-pool")
+    @PreAuthorize("hasAuthority('IVS_POLICY_WRITE')")
+    public PolicyApi.PolicyView adjustPool(@PathVariable("id") UUID id,
+                                           @RequestBody AdjustPoolCommand command) {
+        return service.submitPoolAdjustment(id, command.newTotalAmount(), command.reason());
+    }
+
+    public record AdjustPoolCommand(java.math.BigDecimal newTotalAmount, String reason) {
+    }
+
     @GetMapping("/pre-entitlements")
     @PreAuthorize("hasAuthority('IVS_READ')")
     public List<PolicyApi.PreEntitlementView> listPre(@RequestParam(required = false) UUID orderId) {

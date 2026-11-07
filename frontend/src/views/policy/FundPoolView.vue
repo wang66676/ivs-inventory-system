@@ -143,11 +143,11 @@ async function credit() {
   }
   saving.value = true
   try {
-    await policyApi.creditFund({
+    await policyApi.requestCreditFund({
       supplierId: creditForm.supplierId, amount: creditForm.amount, sourceType: 'ADJUST_IN',
       sourceNo: creditForm.sourceNo || null, sourceId: null, remark: creditForm.remark.trim(),
     })
-    message.success('已登记入池')
+    message.success('资金池调整已处理；达到阈值时将进入审批，通过后入池')
     creditOpen.value = false
     await reload()
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }

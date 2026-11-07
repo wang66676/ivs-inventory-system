@@ -150,6 +150,32 @@ class RebateFundIntegrationTest {
                 .findFirst().orElseThrow().remainingAmount()).isEqualByComparingTo("30000.00");
     }
 
+    @Test
+    void 大额人工调整资金池需审批通过后入池() {
+        UUID supplierId = createSupplier("审批测试整车厂", SupplierType.OEM);
+        RebateFundApi.PoolView requested = post("/api/ivs/rebate-fund-pool/credits/request", Map.of(
+                "supplierId", supplierId.toString(), "amount", 15000,
+                "sourceType", "ADJUST_IN", "sourceNo", "ADJ-001", "remark", "厂家到账补充"),
+                RebateFundApi.PoolView.class);
+        assertThat(requested.balanceAmount()).isEqualByComparingTo("0.00");
+
+        com.ivs.platform.approval.ApprovalTaskService.TaskView[] pending = restTemplate.getForEntity(
+                "/api/ivs/approval-tasks?status=PENDING",
+                com.ivs.platform.approval.ApprovalTaskService.TaskView[].class).getBody();
+        var task = java.util.Arrays.stream(pending).filter(item -> item.taskType().equals("FUND_POOL_CREDIT"))
+                .findFirst().orElseThrow();
+        assertThat(task.amount()).isEqualByComparingTo("15000.00");
+        post("/api/ivs/approval-actions/" + task.id() + "/approve", Map.of(),
+                com.ivs.platform.approval.ApprovalTaskService.TaskView.class);
+
+        assertThat(factoryBalance(supplierId)).isEqualByComparingTo("15000.00");
+        assertThat(txns(supplierId)).anySatisfy(txn -> {
+            assertThat(txn.direction().name()).isEqualTo("IN");
+            assertThat(txn.sourceNo()).isEqualTo("ADJ-001");
+            assertThat(txn.amount()).isEqualByComparingTo("15000.00");
+        });
+    }
+
     /* ===================== 辅助方法 ===================== */
 
     private RebateFundApi.PoolView credit(UUID supplierId, BigDecimal amount, String sourceType, String sourceNo) {

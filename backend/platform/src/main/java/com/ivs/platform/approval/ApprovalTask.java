@@ -32,6 +32,8 @@ public class ApprovalTask {
     private String title;
     @Column(length = 1000)
     private String summary;
+    @Column(name = "payload_json", columnDefinition = "text")
+    private String payloadJson;
     @Column(precision = 18, scale = 2)
     private BigDecimal amount;
     @Column(name = "approval_permission", nullable = false, length = 80)
@@ -65,6 +67,14 @@ public class ApprovalTask {
     public static ApprovalTask create(String taskNo, String taskType, String businessType, UUID businessId,
                                       String businessNo, String title, String summary, BigDecimal amount,
                                       String approvalPermission, UUID applicantId, String applicantName) {
+        return create(taskNo, taskType, businessType, businessId, businessNo, title, summary, amount,
+                approvalPermission, applicantId, applicantName, null);
+    }
+
+    public static ApprovalTask create(String taskNo, String taskType, String businessType, UUID businessId,
+                                      String businessNo, String title, String summary, BigDecimal amount,
+                                      String approvalPermission, UUID applicantId, String applicantName,
+                                      String payloadJson) {
         ApprovalTask task = new ApprovalTask();
         task.id = UUID.randomUUID();
         task.taskNo = taskNo;
@@ -74,6 +84,7 @@ public class ApprovalTask {
         task.businessNo = businessNo;
         task.title = title;
         task.summary = summary;
+        task.payloadJson = payloadJson;
         task.amount = amount;
         task.approvalPermission = approvalPermission;
         task.status = ApprovalTaskStatus.PENDING;
@@ -85,11 +96,12 @@ public class ApprovalTask {
     }
 
     public void refresh(String businessNo, String title, String summary, BigDecimal amount,
-                        String approvalPermission) {
+                        String approvalPermission, String payloadJson) {
         if (status != ApprovalTaskStatus.PENDING) return;
         this.businessNo = businessNo;
         this.title = title;
         this.summary = summary;
+        this.payloadJson = payloadJson;
         this.amount = amount;
         this.approvalPermission = approvalPermission;
         this.updatedAt = Instant.now();
@@ -121,6 +133,7 @@ public class ApprovalTask {
     public String getBusinessNo() { return businessNo; }
     public String getTitle() { return title; }
     public String getSummary() { return summary; }
+    public String getPayloadJson() { return payloadJson; }
     public BigDecimal getAmount() { return amount; }
     public String getApprovalPermission() { return approvalPermission; }
     public ApprovalTaskStatus getStatus() { return status; }

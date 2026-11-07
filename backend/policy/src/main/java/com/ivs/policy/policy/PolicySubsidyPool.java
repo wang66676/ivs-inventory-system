@@ -118,6 +118,24 @@ public class PolicySubsidyPool {
         this.conditionMet = true;
     }
 
+    /** 审批通过后调整额度池总额，剩余额度按已用金额重新计算。 */
+    public void adjustTotalAmount(BigDecimal newTotalAmount) {
+        if (!amountLimited()) {
+            throw new IllegalStateException("只有金额类额度池可以调整总额");
+        }
+        BigDecimal target = money(newTotalAmount);
+        if (target == null || target.signum() < 0) {
+            throw new IllegalArgumentException("额度池总额不能小于 0");
+        }
+        BigDecimal used = usedAmount == null ? BigDecimal.ZERO : usedAmount;
+        if (target.compareTo(used) < 0) {
+            throw new IllegalArgumentException("额度池总额不能小于已使用金额");
+        }
+        this.totalAmount = target;
+        this.remainingAmount = money(target.subtract(used));
+        this.status = this.remainingAmount.signum() == 0 ? "EXHAUSTED" : "ACTIVE";
+    }
+
     public boolean amountLimited() {
         return limitType == LimitType.AMOUNT || limitType == LimitType.AMOUNT_AND_CONDITION;
     }

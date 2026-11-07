@@ -59,6 +59,13 @@ public class RebateFundController {
         return service.credit(command);
     }
 
+    /** 人工调整入池申请：达到阈值时审批通过后才入池。 */
+    @PostMapping("/credits/request")
+    @PreAuthorize("hasAuthority('IVS_FUND_POOL_VIEW')")
+    public RebateFundApi.PoolView requestCredit(@Valid @RequestBody RebateFundApi.CreditCommand command) {
+        return service.submitCredit(command);
+    }
+
     /** 抵扣车款（无需审批；通常由入库单确认时调用）。 */
     @PostMapping("/offsets")
     @PreAuthorize("hasAuthority('IVS_FUND_OFFSET')")

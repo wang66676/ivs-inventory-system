@@ -69,7 +69,7 @@ const modulePages: MenuPage[] = [
 
   // 政策与返利
   { path: '/policy/policies', name: 'policy', component: () => import('../views/policy/PolicyView.vue'), title: '政策管理', description: '政策手工录入：名目、车型多选、金额或比例、生效与失效日期、限制维度（时间/金额/条件）、参考时间、周期与截止日。', permission: 'IVS_POLICY_WRITE' },
-  { path: '/policy/subsidy-pools', name: 'subsidy-pool', component: () => import('../views/policy/SubsidyPoolView.vue'), title: '政策额度池', description: '每条政策一个额度池：时间/金额/条件限制，逐台原子扣减，返完为止。', permission: 'IVS_SUBSIDY_POOL_MANAGE' },
+  { path: '/policy/subsidy-pools', name: 'subsidy-pool', component: () => import('../views/policy/SubsidyPoolView.vue'), title: '政策额度池', description: '每条政策一个额度池：时间/金额/条件限制，逐台原子扣减，返完为止。', permission: 'IVS_POLICY_WRITE' },
   { path: '/policy/pre-entitlements', name: 'pre-entitlement', component: () => import('../views/policy/PreEntitlementView.vue'), title: '预享受项', description: '采购单选择返利政策后自动同步：待实销 → 可申请 → 已申请 → 已兑现。', permission: 'IVS_PRE_ENTITLEMENT_MANAGE' },
   { path: '/policy/applications', name: 'entitlement-apply', component: () => import('../views/policy/EntitlementView.vue'), title: '兑现申请', description: '实销后申请兑现（可批量），按政策周期归集到申报单。', permission: 'IVS_ENTITLEMENT_APPLY' },
   { path: '/policy/entitlements', name: 'entitlement', component: () => import('../views/policy/EntitlementView.vue'), title: '权益台账', description: '实销后生成的正式权益：面值、申报额、确认额、已兑现额。', permission: 'IVS_READ', hideable: true },
