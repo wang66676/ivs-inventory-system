@@ -71,7 +71,7 @@ public final class PermissionCatalog {
                 new Item(PermissionCodes.PROCESS_READ, "业务流程与经营看板")
         ));
         GROUPS.put("二期能力", List.of(
-                new Item(PermissionCodes.LEASE_MANAGE, "电池租赁、换电与资产（二期）")
+                new Item(PermissionCodes.LEASE_MANAGE, "电池租赁资产、合同与月租（二期）")
         ));
         GROUPS.put("系统管理", List.of(
                 new Item(PermissionCodes.USER_MANAGE, "用户、角色权限、组织与审计日志")

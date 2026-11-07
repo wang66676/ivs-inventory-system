@@ -14,7 +14,5 @@ public enum StockMoveType {
     EXCHANGE_OUT,
     SCRAP,
     LEASE_OUT,
-    LEASE_RETURN,
-    SWAP_OUT,
-    SWAP_IN
+    LEASE_RETURN
 }

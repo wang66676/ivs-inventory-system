@@ -112,8 +112,6 @@ export const MOVE_TYPE_LABELS: Record<string, string> = {
   SCRAP: '报废',
   LEASE_OUT: '租赁出库',
   LEASE_RETURN: '租赁归还',
-  SWAP_OUT: '换电换出',
-  SWAP_IN: '换电换入',
 }
 
 export const LOCK_STATUS_LABELS: Record<StockLockStatus, string> = {

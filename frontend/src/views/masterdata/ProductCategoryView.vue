@@ -135,7 +135,7 @@ const columns = [
 const trackingOptions = Object.entries(TRACKING_MODE_LABELS).map(([value, label]) => ({ value, label }))
 const templateOptions = [
   { value: 'VEHICLE', label: '整车流程（在途→到店→在库→锁定→已售→已交付，可退回/维修/报废）' },
-  { value: 'BATTERY', label: '电池流程（同整车，二期扩展换电与退役）' },
+  { value: 'BATTERY', label: '电池流程（同整车，支持租赁与退役）' },
   { value: 'SIMPLE', label: '简单流程（建档→在库→已售→已交付）' },
 ]
 const attrTypeOptions = ['STRING', 'NUMBER', 'DATE', 'BOOL', 'SELECT'].map((value) => ({ value, label: value }))

@@ -53,7 +53,7 @@ public final class PermissionCodes {
 
     /** 应收应付与返利报表 */
     public static final String FINANCE_READ = "IVS_FINANCE_READ";
-    /** 二期：电池租赁与换电 */
+    /** 二期：电池租赁 */
     public static final String LEASE_MANAGE = "IVS_LEASE_MANAGE";
 
     public static final String PROCESS_READ = "PROCESS_READ";

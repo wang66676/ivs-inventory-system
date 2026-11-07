@@ -12,9 +12,6 @@ public enum SerialStatus {
     RETURNED,
     REPAIRING,
     IN_LEASE,
-    AT_STATION,
-    IN_USE,
-    CHARGING,
     RETIRED,
     SCRAPPED
 }

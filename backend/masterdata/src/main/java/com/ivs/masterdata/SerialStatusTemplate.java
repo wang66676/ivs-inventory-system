@@ -17,7 +17,7 @@ public enum SerialStatusTemplate {
     /** 整车：采购在途 → 到店 → 在库 → 锁定 → 已售 → 已交付，可退回/维修/报废。 */
     VEHICLE(vehicleTransitions()),
 
-    /** 动力电池：与整车同构（二期扩展在站充电、客户在用、退役）。 */
+    /** 动力电池：与整车同构，二期扩展租赁与退役。 */
     BATTERY(batteryTransitions()),
 
     /** 简单序列号商品：建档 → 在库 → 已售 → 已交付。 */
@@ -122,14 +122,9 @@ public enum SerialStatusTemplate {
         map.put(SerialStatus.SOLD, EnumSet.of(SerialStatus.DELIVERED));
         map.put(SerialStatus.DELIVERED, EnumSet.of(SerialStatus.RETURNED));
         map.put(SerialStatus.RETURNED, EnumSet.of(SerialStatus.REPAIRING, SerialStatus.IN_STOCK, SerialStatus.SCRAPPED));
-        map.put(SerialStatus.REPAIRING, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.AT_STATION, SerialStatus.RETIRED));
-        map.put(SerialStatus.IN_LEASE, EnumSet.of(SerialStatus.AT_STATION, SerialStatus.IN_USE,
-                SerialStatus.REPAIRING, SerialStatus.RETIRED, SerialStatus.IN_STOCK));
-        map.put(SerialStatus.AT_STATION, EnumSet.of(SerialStatus.IN_USE, SerialStatus.CHARGING,
-                SerialStatus.REPAIRING, SerialStatus.RETIRED));
-        map.put(SerialStatus.IN_USE, EnumSet.of(SerialStatus.AT_STATION, SerialStatus.REPAIRING, SerialStatus.RETIRED));
-        map.put(SerialStatus.CHARGING, EnumSet.of(SerialStatus.AT_STATION, SerialStatus.IN_USE,
-                SerialStatus.REPAIRING, SerialStatus.RETIRED));
+        map.put(SerialStatus.REPAIRING, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.RETIRED));
+        map.put(SerialStatus.IN_LEASE, EnumSet.of(SerialStatus.REPAIRING, SerialStatus.RETIRED,
+                SerialStatus.IN_STOCK));
         map.put(SerialStatus.RETIRED, EnumSet.of(SerialStatus.SCRAPPED));
         map.put(SerialStatus.SCRAPPED, EnumSet.noneOf(SerialStatus.class));
         return map;
