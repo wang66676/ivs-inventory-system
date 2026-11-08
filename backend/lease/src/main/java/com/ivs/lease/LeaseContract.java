@@ -34,6 +34,8 @@ public class LeaseContract {
     private LocalDate endDate;
     @Column(name = "monthly_fee", nullable = false, precision = 18, scale = 2)
     private BigDecimal monthlyFee;
+    @Column(name = "purchase_cost", nullable = false, precision = 18, scale = 2)
+    private BigDecimal purchaseCost;
     @Column(nullable = false, precision = 18, scale = 2)
     private BigDecimal deposit;
     @Enumerated(EnumType.STRING)
@@ -57,7 +59,8 @@ public class LeaseContract {
 
     public static LeaseContract create(String contractNo, UUID customerId, UUID serialId, UUID warehouseId,
                                        LocalDate startDate, LocalDate endDate, BigDecimal monthlyFee,
-                                       BigDecimal deposit, LeaseOwnershipAtEnd ownershipAtEnd, String remark) {
+                                       BigDecimal purchaseCost, BigDecimal deposit,
+                                       LeaseOwnershipAtEnd ownershipAtEnd, String remark) {
         LeaseContract value = new LeaseContract();
         if (customerId == null || serialId == null || warehouseId == null) {
             throw new IllegalArgumentException("客户、电池序列号和仓库不能为空");
@@ -74,6 +77,8 @@ public class LeaseContract {
         value.endDate = endDate;
         value.monthlyFee = money(monthlyFee);
         if (value.monthlyFee.signum() <= 0) throw new IllegalArgumentException("月租必须大于 0");
+        value.purchaseCost = money(purchaseCost);
+        if (value.purchaseCost.signum() < 0) throw new IllegalArgumentException("采购成本不能小于 0");
         value.deposit = money(deposit);
         if (value.deposit.signum() < 0) throw new IllegalArgumentException("押金不能小于 0");
         value.ownershipAtEnd = ownershipAtEnd == null ? LeaseOwnershipAtEnd.RETURN : ownershipAtEnd;
@@ -87,6 +92,18 @@ public class LeaseContract {
     public void end() {
         if (status != LeaseStatus.ACTIVE) throw new IllegalStateException("只有生效中的租赁合同可以结束");
         status = LeaseStatus.ENDED;
+        updatedAt = Instant.now();
+    }
+
+    public void renew(LocalDate newEndDate, BigDecimal newMonthlyFee) {
+        if (status != LeaseStatus.ACTIVE) throw new IllegalStateException("只有生效中的租赁合同可以续租");
+        if (newEndDate == null || !newEndDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("续租后的结束日期必须晚于当前结束日期");
+        }
+        BigDecimal fee = money(newMonthlyFee);
+        if (fee.signum() <= 0) throw new IllegalArgumentException("续租月租必须大于 0");
+        endDate = newEndDate;
+        monthlyFee = fee;
         updatedAt = Instant.now();
     }
 
@@ -106,6 +123,7 @@ public class LeaseContract {
     public LocalDate getStartDate() { return startDate; }
     public LocalDate getEndDate() { return endDate; }
     public BigDecimal getMonthlyFee() { return monthlyFee; }
+    public BigDecimal getPurchaseCost() { return purchaseCost; }
     public BigDecimal getDeposit() { return deposit; }
     public LeaseOwnershipAtEnd getOwnershipAtEnd() { return ownershipAtEnd; }
     public LeaseStatus getStatus() { return status; }

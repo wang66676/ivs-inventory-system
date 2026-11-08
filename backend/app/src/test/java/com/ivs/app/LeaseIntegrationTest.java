@@ -313,6 +313,47 @@ class LeaseIntegrationTest {
         assertThat(row.outstandingRent()).isEqualByComparingTo("14000.00");
     }
 
+    @Test
+    void 租赁资产按月折旧并支持续租追加月租计划() {
+        AssetFixture fixture = inStockAsset("RENEW", false);
+        LocalDate start = LocalDate.of(2025, 12, 1);
+        LeaseApi.LeaseContractView contract = createContract(fixture, start, start.plusMonths(6),
+                new BigDecimal("12000.00"), LeaseOwnershipAtEnd.RETURN);
+
+        assertThat(contract.purchaseCost()).isEqualByComparingTo("300000.00");
+        assertThat(contract.monthlyDepreciation()).isEqualByComparingTo("5000.00");
+        assertThat(contract.accumulatedDepreciation()).isEqualByComparingTo("55000.00");
+        assertThat(contract.netValue()).isEqualByComparingTo("245000.00");
+        assertThat(contract.depreciationMonths()).isEqualTo(60);
+        assertThat(contract.schedules()).hasSize(6);
+
+        LeaseApi.LeaseContractView renewed = post(
+                "/api/ivs/lease-contracts/" + contract.id() + "/renew", Map.of(
+                        "newEndDate", "2027-06-01", "newMonthlyFee", 15000,
+                        "reason", "客户续租一年"), LeaseApi.LeaseContractView.class);
+        assertThat(renewed.endDate()).isEqualTo(LocalDate.of(2027, 6, 1));
+        assertThat(renewed.monthlyFee()).isEqualByComparingTo("15000.00");
+        assertThat(renewed.schedules()).hasSize(18);
+        assertThat(renewed.schedules().get(renewed.schedules().size() - 1).amount())
+                .isEqualByComparingTo("15000.00");
+        assertThat(renewed.changes()).hasSize(1);
+        assertThat(renewed.changes().get(0).type()).isEqualTo("RENEW");
+        assertThat(renewed.changes().get(0).oldEndDate()).isEqualTo(start.plusMonths(6));
+        assertThat(renewed.changes().get(0).newEndDate()).isEqualTo(LocalDate.of(2027, 6, 1));
+        assertThat(renewed.accumulatedDepreciation()).isEqualByComparingTo("55000.00");
+        assertThat(renewed.netValue()).isEqualByComparingTo("245000.00");
+
+        LeaseApi.LeaseAssetReportView report = restTemplate.getForEntity(
+                "/api/ivs/lease-assets/report", LeaseApi.LeaseAssetReportView.class).getBody();
+        assertThat(report).isNotNull();
+        assertThat(report.summary().purchaseCost()).isEqualByComparingTo("300000.00");
+        assertThat(report.summary().accumulatedDepreciation()).isEqualByComparingTo("55000.00");
+        assertThat(report.summary().netValue()).isEqualByComparingTo("245000.00");
+        assertThat(report.rows()).hasSize(1);
+        assertThat(report.rows().get(0).monthlyDepreciation()).isEqualByComparingTo("5000.00");
+        assertThat(report.rows().get(0).netValue()).isEqualByComparingTo("245000.00");
+    }
+
     private LeaseApi.LeaseContractView createContract(AssetFixture fixture, LocalDate start, LocalDate end,
                                                        BigDecimal monthlyFee, LeaseOwnershipAtEnd ownershipAtEnd) {
         return post("/api/ivs/lease-contracts", contractBody(fixture, start, end, monthlyFee, ownershipAtEnd),

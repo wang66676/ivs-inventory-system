@@ -47,6 +47,11 @@ export interface LeaseContract {
   startDate: string
   endDate: string
   monthlyFee: number
+  purchaseCost: number
+  monthlyDepreciation: number
+  accumulatedDepreciation: number
+  netValue: number
+  depreciationMonths: number
   deposit: number
   depositReceived: number
   depositApplied: number
@@ -59,6 +64,18 @@ export interface LeaseContract {
   schedules: LeaseSchedule[]
   depositTransactions: LeaseDepositTransaction[]
   settlement?: LeaseSettlement
+  changes: LeaseContractChange[]
+}
+
+export interface LeaseContractChange {
+  id: string
+  type: 'RENEW'
+  oldEndDate: string
+  newEndDate: string
+  oldMonthlyFee: number
+  newMonthlyFee: number
+  reason?: string
+  createdAt: string
 }
 
 export interface LeaseDepositCommand {
@@ -71,6 +88,12 @@ export interface LeaseDepositCommand {
 export interface LeaseEndCommand {
   settlementDate: string
   applyDeposit: boolean
+  reason?: string
+}
+
+export interface LeaseRenewCommand {
+  newEndDate: string
+  newMonthlyFee: number
   reason?: string
 }
 
@@ -107,6 +130,9 @@ export interface LeaseAssetReportSummary {
   receivedRent: number
   outstandingRent: number
   depositAvailable: number
+  purchaseCost: number
+  accumulatedDepreciation: number
+  netValue: number
 }
 
 export interface LeaseAssetReportRow {
@@ -120,6 +146,11 @@ export interface LeaseAssetReportRow {
   endDate: string
   monthlyFee: number
   settlementDate?: string
+  purchaseCost: number
+  monthlyDepreciation: number
+  accumulatedDepreciation: number
+  netValue: number
+  depreciationMonths: number
   generatedRent: number
   receivedRent: number
   outstandingRent: number

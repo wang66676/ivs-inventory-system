@@ -18,16 +18,20 @@ public class LeaseBillingScheduler {
     private static final Logger log = LoggerFactory.getLogger(LeaseBillingScheduler.class);
 
     private final LeaseApplicationService service;
+    private final LeaseDepreciationService depreciationService;
     private final int reminderDays;
 
     public LeaseBillingScheduler(LeaseApplicationService service,
+                                 LeaseDepreciationService depreciationService,
                                  @Value("${ivs.lease.billing-automation.reminder-days:7}") int reminderDays) {
         this.service = service;
+        this.depreciationService = depreciationService;
         this.reminderDays = reminderDays;
     }
 
     @Scheduled(fixedDelayString = "${ivs.lease.billing-automation.interval-ms:3600000}")
     public void run() {
+        depreciationService.ensureAll();
         LeaseApi.AutomationResult result = service.runAutomation(LocalDate.now(), reminderDays);
         if (result.generatedReceivables() > 0 || result.dueSoonReminders() > 0 || result.overdueReminders() > 0) {
             log.info("租赁月租自动化完成：生成应收 {} 笔，即将到期提醒 {} 条，逾期提醒 {} 条",

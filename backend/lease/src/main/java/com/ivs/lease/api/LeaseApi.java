@@ -1,6 +1,7 @@
 package com.ivs.lease.api;
 
 import com.ivs.lease.LeaseContract;
+import com.ivs.lease.LeaseContractChange;
 import com.ivs.lease.LeaseBatteryHealth;
 import com.ivs.lease.LeaseDepositTransaction;
 import com.ivs.lease.LeaseMasterDataPort;
@@ -38,6 +39,19 @@ public final class LeaseApi {
     public record EndLeaseCommand(LocalDate settlementDate, boolean applyDeposit, String reason) {
     }
 
+    public record RenewLeaseCommand(LocalDate newEndDate, BigDecimal newMonthlyFee, String reason) {
+    }
+
+    public record ContractChangeView(UUID id, String type, LocalDate oldEndDate, LocalDate newEndDate,
+                                     BigDecimal oldMonthlyFee, BigDecimal newMonthlyFee, String reason,
+                                     Instant createdAt) {
+        public static ContractChangeView from(LeaseContractChange change) {
+            return new ContractChangeView(change.getId(), change.getChangeType(), change.getOldEndDate(),
+                    change.getNewEndDate(), change.getOldMonthlyFee(), change.getNewMonthlyFee(),
+                    change.getReason(), change.getCreatedAt());
+        }
+    }
+
     public record HealthRecordCommand(LocalDate recordDate, BigDecimal sohPercent, Integer cycleCount,
                                       BigDecimal mileageKm, String inspectionResult, String inspector, String remark) {
     }
@@ -55,12 +69,15 @@ public final class LeaseApi {
     public record LeaseAssetReportSummary(int totalContracts, int activeContracts, int attentionAssets,
                                           BigDecimal activeMonthlyRent, BigDecimal generatedRent,
                                           BigDecimal receivedRent, BigDecimal outstandingRent,
-                                          BigDecimal depositAvailable) {
+                                          BigDecimal depositAvailable, BigDecimal purchaseCost,
+                                          BigDecimal accumulatedDepreciation, BigDecimal netValue) {
     }
 
     public record LeaseAssetReportRow(UUID contractId, String contractNo, String customerName, String serialNo,
                                       String productName, LeaseStatus status, LocalDate startDate,
                                       LocalDate endDate, BigDecimal monthlyFee, LocalDate settlementDate,
+                                      BigDecimal purchaseCost, BigDecimal monthlyDepreciation,
+                                      BigDecimal accumulatedDepreciation, BigDecimal netValue, int depreciationMonths,
                                       BigDecimal generatedRent, BigDecimal receivedRent, BigDecimal outstandingRent,
                                       BigDecimal depositExpected, BigDecimal depositReceived,
                                       BigDecimal depositApplied, BigDecimal depositRefunded,
@@ -113,24 +130,32 @@ public final class LeaseApi {
 
     public record LeaseContractView(UUID id, String contractNo, UUID customerId, String customerName,
                                     UUID serialId, String serialNo, String productName, UUID warehouseId,
-                                    LocalDate startDate, LocalDate endDate, BigDecimal monthlyFee, BigDecimal deposit,
+                                    LocalDate startDate, LocalDate endDate, BigDecimal monthlyFee,
+                                    BigDecimal purchaseCost, BigDecimal monthlyDepreciation,
+                                    BigDecimal accumulatedDepreciation, BigDecimal netValue, int depreciationMonths,
+                                    BigDecimal deposit,
                                     BigDecimal depositReceived, BigDecimal depositApplied,
                                     BigDecimal depositRefunded, BigDecimal depositAvailable,
                                     LeaseOwnershipAtEnd ownershipAtEnd, LeaseStatus status, String remark,
                                     Instant createdAt, List<LeaseScheduleView> schedules,
-                                    List<DepositTransactionView> depositTransactions, SettlementView settlement) {
+                                    List<DepositTransactionView> depositTransactions, SettlementView settlement,
+                                    List<ContractChangeView> changes) {
         public static LeaseContractView from(LeaseContract contract, String customerName,
                                              LeaseMasterDataPort.SerialInfo serial,
                                              List<LeaseScheduleView> schedules, DepositSummary depositSummary,
                                              List<DepositTransactionView> depositTransactions,
-                                             SettlementView settlement) {
+                                             SettlementView settlement,
+                                             com.ivs.lease.LeaseDepreciationService.Summary depreciation,
+                                             List<ContractChangeView> changes) {
             return new LeaseContractView(contract.getId(), contract.getContractNo(), contract.getCustomerId(),
                     customerName, contract.getSerialId(), serial.serialNo(), serial.productName(),
                     contract.getWarehouseId(), contract.getStartDate(), contract.getEndDate(),
-                    contract.getMonthlyFee(), contract.getDeposit(), depositSummary.received(),
-                    depositSummary.applied(), depositSummary.refunded(), depositSummary.available(),
+                    contract.getMonthlyFee(), depreciation.purchaseCost(), depreciation.monthlyDepreciation(),
+                    depreciation.accumulatedDepreciation(), depreciation.netValue(), depreciation.depreciationMonths(),
+                    contract.getDeposit(), depositSummary.received(), depositSummary.applied(),
+                    depositSummary.refunded(), depositSummary.available(),
                     contract.getOwnershipAtEnd(), contract.getStatus(), contract.getRemark(), contract.getCreatedAt(),
-                    schedules, depositTransactions, settlement);
+                    schedules, depositTransactions, settlement, changes);
         }
     }
 }

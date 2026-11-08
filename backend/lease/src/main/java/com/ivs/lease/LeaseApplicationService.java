@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /** 电池租赁：合同、资产转租赁池和月租应收。 */
@@ -24,6 +26,8 @@ public class LeaseApplicationService {
     private final LeaseReminderLogRepository reminderLogRepository;
     private final LeaseDepositTransactionRepository depositTransactionRepository;
     private final LeaseSettlementRepository settlementRepository;
+    private final LeaseContractChangeRepository contractChangeRepository;
+    private final LeaseDepreciationService depreciationService;
     private final LeaseMasterDataPort masterData;
     private final LeaseReceivablePort receivables;
     private final LeaseNotificationPort notifications;
@@ -33,6 +37,8 @@ public class LeaseApplicationService {
                                    LeaseReminderLogRepository reminderLogRepository,
                                    LeaseDepositTransactionRepository depositTransactionRepository,
                                    LeaseSettlementRepository settlementRepository,
+                                   LeaseContractChangeRepository contractChangeRepository,
+                                   LeaseDepreciationService depreciationService,
                                    LeaseMasterDataPort masterData,
                                    LeaseReceivablePort receivables,
                                    LeaseNotificationPort notifications) {
@@ -41,6 +47,8 @@ public class LeaseApplicationService {
         this.reminderLogRepository = reminderLogRepository;
         this.depositTransactionRepository = depositTransactionRepository;
         this.settlementRepository = settlementRepository;
+        this.contractChangeRepository = contractChangeRepository;
+        this.depreciationService = depreciationService;
         this.masterData = masterData;
         this.receivables = receivables;
         this.notifications = notifications;
@@ -76,13 +84,15 @@ public class LeaseApplicationService {
         try {
             contract = LeaseContract.create("LEASE-%06d".formatted(contractRepository.nextContractSequence()),
                     customer.id(), serial.id(), serial.warehouseId(), command.startDate(), command.endDate(),
-                    command.monthlyFee(), command.deposit(), command.ownershipAtEnd(), command.remark());
+                    command.monthlyFee(), serial.purchasePrice(), command.deposit(),
+                    command.ownershipAtEnd(), command.remark());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("LEASE_CONTRACT_INVALID", exception.getMessage());
         }
         LeaseContract saved = contractRepository.save(contract);
         masterData.activateAsset(serial, saved.getId(), saved.getContractNo(), saved.getStartDate());
         generateSchedules(saved);
+        depreciationService.ensureSchedule(saved);
         return toView(saved);
     }
 
@@ -193,6 +203,25 @@ public class LeaseApplicationService {
     }
 
     @Transactional
+    public LeaseApi.LeaseContractView renew(UUID contractId, LeaseApi.RenewLeaseCommand command) {
+        LeaseContract contract = find(contractId);
+        if (command == null || command.newEndDate() == null) {
+            throw new ConflictException("LEASE_RENEW_INVALID", "请填写续租后的结束日期");
+        }
+        java.time.LocalDate oldEndDate = contract.getEndDate();
+        BigDecimal oldMonthlyFee = contract.getMonthlyFee();
+        try {
+            contract.renew(command.newEndDate(), command.newMonthlyFee() == null ? oldMonthlyFee : command.newMonthlyFee());
+        } catch (IllegalStateException | IllegalArgumentException exception) {
+            throw new ConflictException("LEASE_RENEW_INVALID", exception.getMessage());
+        }
+        extendSchedules(contract);
+        contractChangeRepository.save(LeaseContractChange.renew(contractId, oldEndDate, contract.getEndDate(),
+                oldMonthlyFee, contract.getMonthlyFee(), command.reason()));
+        return toView(contractRepository.save(contract));
+    }
+
+    @Transactional
     public LeaseApi.LeaseContractView end(UUID contractId, LeaseApi.EndLeaseCommand command) {
         LeaseContract contract = find(contractId);
         if (contract.getStatus() != LeaseStatus.ACTIVE) {
@@ -239,15 +268,24 @@ public class LeaseApplicationService {
     }
 
     private void generateSchedules(LeaseContract contract) {
+        extendSchedules(contract);
+    }
+
+    private void extendSchedules(LeaseContract contract) {
         long months = ChronoUnit.MONTHS.between(contract.getStartDate(), contract.getEndDate());
         if (months <= 0) months = 1;
         BigDecimal amount = contract.getMonthlyFee().setScale(2, RoundingMode.HALF_UP);
+        Set<Integer> existingPeriods = new HashSet<>();
+        for (LeaseSchedule schedule : scheduleRepository.findByContractIdOrderByPeriodNoAsc(contract.getId())) {
+            existingPeriods.add(schedule.getPeriodNo());
+        }
         List<LeaseSchedule> schedules = new ArrayList<>();
         for (int period = 1; period <= months; period++) {
+            if (existingPeriods.contains(period)) continue;
             schedules.add(LeaseSchedule.create(contract.getId(), period,
                     contract.getStartDate().plusMonths(period), amount));
         }
-        scheduleRepository.saveAll(schedules);
+        if (!schedules.isEmpty()) scheduleRepository.saveAll(schedules);
     }
 
     private int generateDueForContract(LeaseContract contract, LocalDate cutoff) {
@@ -351,8 +389,13 @@ public class LeaseApplicationService {
         LeaseApi.DepositSummary depositSummary = depositSummary(contract, depositTransactions);
         LeaseApi.SettlementView settlement = settlementRepository.findByContractId(contract.getId())
                 .map(LeaseApi.SettlementView::from).orElse(null);
+        LeaseDepreciationService.Summary depreciation = depreciationService.summary(contract);
+        List<LeaseApi.ContractChangeView> changes = contractChangeRepository
+                .findByContractIdOrderByCreatedAtAsc(contract.getId()).stream()
+                .map(LeaseApi.ContractChangeView::from).toList();
         return LeaseApi.LeaseContractView.from(contract, customer.name(), serial, schedules, depositSummary,
-                depositTransactions.stream().map(LeaseApi.DepositTransactionView::from).toList(), settlement);
+                depositTransactions.stream().map(LeaseApi.DepositTransactionView::from).toList(), settlement,
+                depreciation, changes);
     }
 
     private boolean isBattery(String code, String name) {

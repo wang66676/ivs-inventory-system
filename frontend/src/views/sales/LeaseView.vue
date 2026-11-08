@@ -28,6 +28,7 @@
               <a-button size="small" @click="openDeposit(record)">押金台账</a-button>
               <a-button size="small" @click="openHealth(record)">健康档案</a-button>
               <a-button v-if="canManage && record.status === 'ACTIVE'" size="small" type="primary" @click="generateDue(record)">生成到期应收</a-button>
+              <a-button v-if="canManage && record.status === 'ACTIVE'" size="small" @click="openRenew(record)">续租</a-button>
               <a-button v-if="canManage && record.status === 'ACTIVE' && record.ownershipAtEnd === 'RETURN'" size="small" danger @click="openEnd(record)">提前归还/结算</a-button>
             </a-space>
           </template>
@@ -48,6 +49,23 @@
           <a-col :span="12"><a-form-item label="到期处理"><a-select v-model:value="form.ownershipAtEnd" :options="endModeOptions" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
         </a-row>
+      </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="renewOpen" title="租赁合同续租" :confirm-loading="renewSaving"
+             ok-text="确认续租" cancel-text="取消" width="620px" @ok="confirmRenew">
+      <a-alert type="info" show-icon style="margin-bottom:14px"
+               message="续租会延长合同结束日期，并按新签订月租生成尚未创建的后续月租计划；历史计划金额不变。" />
+      <a-form layout="vertical">
+        <a-form-item label="续租后结束日期" required>
+          <a-date-picker v-model:value="renewForm.newEndDate" style="width:100%" />
+        </a-form-item>
+        <a-form-item label="续租月租" required>
+          <MoneyInput v-model:value="renewForm.newMonthlyFee" :min="0.01" :precision="2" style="width:100%" />
+        </a-form-item>
+        <a-form-item label="续租说明">
+          <a-textarea v-model:value="renewForm.reason" :rows="3" placeholder="例如：客户续租一年" />
+        </a-form-item>
       </a-form>
     </a-modal>
 
@@ -139,6 +157,10 @@
         <a-descriptions-item label="押金可退">{{ money(current?.depositAvailable) }}</a-descriptions-item>
         <a-descriptions-item label="结算日期">{{ current?.settlement?.settlementDate || '-' }}</a-descriptions-item>
         <a-descriptions-item label="结算未收">{{ money(current?.settlement?.outstandingAfter) }}</a-descriptions-item>
+        <a-descriptions-item label="采购成本">{{ money(current?.purchaseCost) }}</a-descriptions-item>
+        <a-descriptions-item label="月折旧">{{ money(current?.monthlyDepreciation) }}</a-descriptions-item>
+        <a-descriptions-item label="累计折旧">{{ money(current?.accumulatedDepreciation) }}</a-descriptions-item>
+        <a-descriptions-item label="资产净值">{{ money(current?.netValue) }}</a-descriptions-item>
       </a-descriptions>
       <a-table :data-source="current?.schedules || []" row-key="id" size="small" :pagination="false">
         <a-table-column title="期次" data-index="periodNo" :width="80" align="center" />
@@ -148,6 +170,17 @@
         <a-table-column title="状态" :width="120"><template #default="{ record }">{{ receivableStatus(record.receivableStatus) }}</template></a-table-column>
         <a-table-column title="未收" :width="130" align="right"><template #default="{ record }">{{ money(record.outstanding) }}</template></a-table-column>
       </a-table>
+      <template v-if="current?.changes?.length">
+        <a-divider>合同变更记录</a-divider>
+        <a-table :data-source="current.changes" row-key="id" size="small" :pagination="false">
+          <a-table-column title="类型" :width="80"><template #default>续租</template></a-table-column>
+          <a-table-column title="原结束日期" data-index="oldEndDate" :width="120" />
+          <a-table-column title="新结束日期" data-index="newEndDate" :width="120" />
+          <a-table-column title="原月租" :width="110" align="right"><template #default="{ record }">{{ money(record.oldMonthlyFee) }}</template></a-table-column>
+          <a-table-column title="新月租" :width="110" align="right"><template #default="{ record }">{{ money(record.newMonthlyFee) }}</template></a-table-column>
+          <a-table-column title="说明" data-index="reason" />
+        </a-table>
+      </template>
     </a-modal>
   </div>
 </template>
@@ -173,19 +206,23 @@ const formOpen = ref(false)
 const detailOpen = ref(false)
 const depositOpen = ref(false)
 const endOpen = ref(false)
+const renewOpen = ref(false)
 const healthOpen = ref(false)
 const saving = ref(false)
 const depositSaving = ref(false)
 const endSaving = ref(false)
+const renewSaving = ref(false)
 const healthSaving = ref(false)
 const current = ref<LeaseContract>()
 const depositCurrent = ref<LeaseContract>()
 const endCurrent = ref<LeaseContract>()
+const renewCurrent = ref<LeaseContract>()
 const healthCurrent = ref<LeaseContract>()
 const healthRecords = ref<LeaseHealthRecord[]>([])
 const form = reactive<Record<string, any>>({})
 const depositForm = reactive<Record<string, any>>({})
 const endForm = reactive<Record<string, any>>({})
+const renewForm = reactive<Record<string, any>>({})
 const healthForm = reactive<Record<string, any>>({})
 const endModeOptions = [
   { value: 'RETURN', label: '到期归还' },
@@ -361,6 +398,32 @@ function openEnd(record: LeaseContract) {
     reason: '客户提前归还电池',
   })
   endOpen.value = true
+}
+function openRenew(record: LeaseContract) {
+  renewCurrent.value = record
+  Object.assign(renewForm, {
+    newEndDate: dayjs(record.endDate).add(12, 'month'),
+    newMonthlyFee: record.monthlyFee,
+    reason: '客户续租',
+  })
+  renewOpen.value = true
+}
+async function confirmRenew() {
+  if (!renewCurrent.value || !renewForm.newEndDate || !renewForm.newMonthlyFee) {
+    message.warning('请填写续租后的结束日期和月租'); return
+  }
+  renewSaving.value = true
+  try {
+    const updated = await leaseApi.renew(renewCurrent.value.id, {
+      newEndDate: (renewForm.newEndDate as Dayjs).format('YYYY-MM-DD'),
+      newMonthlyFee: Number(renewForm.newMonthlyFee),
+      reason: renewForm.reason,
+    })
+    syncUpdatedContract(updated)
+    current.value = updated
+    renewOpen.value = false
+    message.success('续租成功，后续月租计划已生成')
+  } catch (error) { message.error((error as Error).message) } finally { renewSaving.value = false }
 }
 async function confirmEnd() {
   if (!endCurrent.value || !endForm.settlementDate) { message.warning('请选择结算日期'); return }

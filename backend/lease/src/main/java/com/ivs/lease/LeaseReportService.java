@@ -18,6 +18,7 @@ public class LeaseReportService {
     private final LeaseDepositTransactionRepository depositRepository;
     private final LeaseSettlementRepository settlementRepository;
     private final LeaseBatteryHealthRepository healthRepository;
+    private final LeaseDepreciationService depreciationService;
     private final LeaseMasterDataPort masterData;
     private final LeaseReceivablePort receivables;
 
@@ -26,6 +27,7 @@ public class LeaseReportService {
                               LeaseDepositTransactionRepository depositRepository,
                               LeaseSettlementRepository settlementRepository,
                               LeaseBatteryHealthRepository healthRepository,
+                              LeaseDepreciationService depreciationService,
                               LeaseMasterDataPort masterData,
                               LeaseReceivablePort receivables) {
         this.contractRepository = contractRepository;
@@ -33,12 +35,14 @@ public class LeaseReportService {
         this.depositRepository = depositRepository;
         this.settlementRepository = settlementRepository;
         this.healthRepository = healthRepository;
+        this.depreciationService = depreciationService;
         this.masterData = masterData;
         this.receivables = receivables;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LeaseApi.LeaseAssetReportView report() {
+        depreciationService.ensureAll();
         List<LeaseContract> contracts = contractRepository.findAllByOrderByCreatedAtDesc();
         List<LeaseApi.LeaseAssetReportRow> rows = new ArrayList<>();
         int active = 0;
@@ -48,6 +52,9 @@ public class LeaseReportService {
         BigDecimal receivedRent = BigDecimal.ZERO;
         BigDecimal outstandingRent = BigDecimal.ZERO;
         BigDecimal depositAvailable = BigDecimal.ZERO;
+        BigDecimal totalPurchaseCost = BigDecimal.ZERO;
+        BigDecimal totalAccumulatedDepreciation = BigDecimal.ZERO;
+        BigDecimal totalNetValue = BigDecimal.ZERO;
 
         for (LeaseContract contract : contracts) {
             LeaseMasterDataPort.CustomerInfo customer = masterData.requireCustomer(contract.getCustomerId());
@@ -77,6 +84,7 @@ public class LeaseReportService {
             BigDecimal available = depositReceived.subtract(depositApplied).subtract(depositRefunded);
             LeaseBatteryHealth latest = healthRepository
                     .findFirstByContractIdOrderByRecordDateDescCreatedAtDesc(contract.getId()).orElse(null);
+            LeaseDepreciationService.Summary depreciation = depreciationService.summary(contract);
             boolean needsAttention = latest != null && latest.getInspectionResult() != LeaseInspectionResult.NORMAL;
             if (needsAttention) attention++;
             if (contract.getStatus() == LeaseStatus.ACTIVE) {
@@ -87,11 +95,16 @@ public class LeaseReportService {
             receivedRent = receivedRent.add(received);
             outstandingRent = outstandingRent.add(outstanding);
             depositAvailable = depositAvailable.add(available);
+            totalPurchaseCost = totalPurchaseCost.add(depreciation.purchaseCost());
+            totalAccumulatedDepreciation = totalAccumulatedDepreciation.add(depreciation.accumulatedDepreciation());
+            totalNetValue = totalNetValue.add(depreciation.netValue());
             rows.add(new LeaseApi.LeaseAssetReportRow(contract.getId(), contract.getContractNo(), customer.name(),
                     serial.serialNo(), serial.productName(), contract.getStatus(), contract.getStartDate(),
                     contract.getEndDate(), contract.getMonthlyFee(),
                     settlementRepository.findByContractId(contract.getId())
                             .map(LeaseSettlement::getSettlementDate).orElse(null),
+                    depreciation.purchaseCost(), depreciation.monthlyDepreciation(),
+                    depreciation.accumulatedDepreciation(), depreciation.netValue(), depreciation.depreciationMonths(),
                     money(generated), money(received), money(outstanding), contract.getDeposit(),
                     money(depositReceived), money(depositApplied), money(depositRefunded), money(available),
                     latest == null ? null : latest.getSohPercent(),
@@ -102,7 +115,8 @@ public class LeaseReportService {
         }
         LeaseApi.LeaseAssetReportSummary summary = new LeaseApi.LeaseAssetReportSummary(contracts.size(), active,
                 attention, money(activeMonthlyRent), money(generatedRent), money(receivedRent),
-                money(outstandingRent), money(depositAvailable));
+                money(outstandingRent), money(depositAvailable), money(totalPurchaseCost),
+                money(totalAccumulatedDepreciation), money(totalNetValue));
         return new LeaseApi.LeaseAssetReportView(Instant.now(), summary, rows);
     }
 

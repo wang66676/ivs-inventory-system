@@ -89,6 +89,13 @@ public class LeaseController {
         return service.refundDeposit(id, command);
     }
 
+    @PostMapping("/{id}/renew")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
+    public LeaseApi.LeaseContractView renew(@PathVariable UUID id,
+                                            @Valid @RequestBody LeaseApi.RenewLeaseCommand command) {
+        return service.renew(id, command);
+    }
+
     @GetMapping("/{id}/health-records")
     @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE') or hasAuthority('IVS_FINANCE_READ')")
     public List<LeaseApi.HealthRecordView> listHealthRecords(@PathVariable UUID id) {
