@@ -38,7 +38,7 @@ function scan(root: ParentNode) {
   root.querySelectorAll<HTMLElement>(HELP_SELECTORS).forEach(markHelpTip)
 }
 
-/** 全站说明文字统一折叠为 ❓，悬停时通过自定义浮层显示原文。 */
+/** 全站说明文字统一折叠为 ❗，悬停时通过自定义浮层显示原文。 */
 export function installGlobalHelpTips() {
   scan(document.body)
   const observer = new MutationObserver((mutations) => {

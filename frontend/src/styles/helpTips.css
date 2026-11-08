@@ -1,4 +1,4 @@
-/* 全站说明文字折叠：默认只显示 ❓，悬停后展开原文。 */
+/* 全站说明文字折叠：默认只显示 ❗，悬停后展开原文。 */
 .ivs-help-tip {
   position: relative;
   display: inline-flex !important;
@@ -23,7 +23,7 @@
 }
 
 .ivs-help-tip::before {
-  content: '❓';
+  content: '❗';
   display: inline-grid;
   width: 18px;
   height: 18px;
