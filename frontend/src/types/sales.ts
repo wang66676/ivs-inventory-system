@@ -1,7 +1,7 @@
 export type SalesOrderStatus = 'DRAFT' | 'CONFIRMED' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'CLOSED' | 'CANCELLED'
 export type PaymentMode = 'CASH' | 'INSTALLMENT'
 export type ReceivableStatus = 'OPEN' | 'PARTIALLY_SETTLED' | 'SETTLED' | 'OVERDUE'
-export type PaymentMethod = 'BANK_TRANSFER' | 'CASH' | 'ACCEPTANCE_BILL' | 'OTHER'
+export type PaymentMethod = 'BANK_TRANSFER' | 'CASH' | 'ACCEPTANCE_BILL' | 'DEPOSIT_OFFSET' | 'OTHER'
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'VOID' | 'RED_FLUSHED'
 export type InvoiceType = 'BLUE' | 'RED'
 
@@ -218,6 +218,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   BANK_TRANSFER: '银行转账',
   CASH: '现金',
   ACCEPTANCE_BILL: '承兑汇票',
+  DEPOSIT_OFFSET: '租赁押金抵扣',
   OTHER: '其他',
 }
 

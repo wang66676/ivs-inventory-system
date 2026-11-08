@@ -67,7 +67,22 @@ public class LeaseController {
 
     @PostMapping("/{id}/end")
     @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
-    public LeaseApi.LeaseContractView end(@PathVariable UUID id) {
-        return service.end(id);
+    public LeaseApi.LeaseContractView end(@PathVariable UUID id,
+                                          @RequestBody(required = false) LeaseApi.EndLeaseCommand command) {
+        return service.end(id, command);
+    }
+
+    @PostMapping("/{id}/deposits/collect")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
+    public LeaseApi.LeaseContractView collectDeposit(@PathVariable UUID id,
+                                                     @Valid @RequestBody LeaseApi.DepositCommand command) {
+        return service.collectDeposit(id, command);
+    }
+
+    @PostMapping("/{id}/deposits/refund")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
+    public LeaseApi.LeaseContractView refundDeposit(@PathVariable UUID id,
+                                                    @Valid @RequestBody LeaseApi.DepositCommand command) {
+        return service.refundDeposit(id, command);
     }
 }

@@ -100,7 +100,9 @@ class LeaseIntegrationTest {
         assertThat(generatedAgain.schedules().stream().filter(item -> item.receivableId() != null)).hasSize(2);
 
         LeaseApi.LeaseContractView ended = post(
-                "/api/ivs/lease-contracts/" + contract.id() + "/end", Map.of(), LeaseApi.LeaseContractView.class);
+                "/api/ivs/lease-contracts/" + contract.id() + "/end", Map.of(
+                        "settlementDate", "2027-02-15", "applyDeposit", false,
+                        "reason", "测试到期归还"), LeaseApi.LeaseContractView.class);
         assertThat(ended.status()).isEqualTo(LeaseStatus.ENDED);
         assertThat(serialById(fixture.serial().id()).status()).isEqualTo(SerialStatus.IN_STOCK);
         assertThat(serialById(fixture.serial().id()).ownershipType()).isEqualTo(OwnershipType.OWNED);
@@ -170,6 +172,74 @@ class LeaseIntegrationTest {
         assertThat(second.dueSoonReminders()).isZero();
         assertThat(jdbcTemplate.queryForObject("select count(*) from ivs.lease_reminder_log", Integer.class))
                 .isEqualTo(3);
+    }
+
+    @Test
+    void 押金收取抵扣租金并在提前归还后退还余额() {
+        AssetFixture fixture = inStockAsset("DEPOSIT", false);
+        LocalDate start = LocalDate.of(2026, 12, 1);
+        LeaseApi.LeaseContractView contract = createContract(fixture, start, start.plusMonths(3),
+                new BigDecimal("12000.00"), LeaseOwnershipAtEnd.RETURN);
+
+        LeaseApi.LeaseContractView collected = post(
+                "/api/ivs/lease-contracts/" + contract.id() + "/deposits/collect", Map.of(
+                        "amount", 40000,
+                        "transactionDate", "2026-12-01",
+                        "method", "BANK_TRANSFER",
+                        "remark", "首期押金"), LeaseApi.LeaseContractView.class);
+        assertThat(collected.depositReceived()).isEqualByComparingTo("40000.00");
+        assertThat(collected.depositAvailable()).isEqualByComparingTo("40000.00");
+        assertThat(collected.depositTransactions()).hasSize(1)
+                .allMatch(item -> "COLLECT".equals(item.type()));
+
+        ResponseEntity<Map> overCollect = restTemplate.postForEntity(
+                "/api/ivs/lease-contracts/" + contract.id() + "/deposits/collect", Map.of(
+                        "amount", 10000.01, "transactionDate", "2026-12-01", "method", "BANK_TRANSFER"),
+                Map.class);
+        assertThat(overCollect.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(overCollect.getBody()).containsEntry("code", "LEASE_DEPOSIT_EXCEEDS_EXPECTED");
+
+        LeaseApi.DueGenerationResult batch = post(
+                "/api/ivs/lease-contracts/generate-due-batch?throughDate=2027-02-15", Map.of(),
+                LeaseApi.DueGenerationResult.class);
+        assertThat(batch.generatedReceivables()).isEqualTo(2);
+
+        LeaseApi.LeaseContractView ended = post(
+                "/api/ivs/lease-contracts/" + contract.id() + "/end", Map.of(
+                        "settlementDate", "2027-02-15", "applyDeposit", true,
+                        "reason", "客户提前归还"), LeaseApi.LeaseContractView.class);
+        assertThat(ended.status()).isEqualTo(LeaseStatus.ENDED);
+        assertThat(ended.settlement()).isNotNull();
+        assertThat(ended.settlement().outstandingBefore()).isEqualByComparingTo("24000.00");
+        assertThat(ended.settlement().depositApplied()).isEqualByComparingTo("24000.00");
+        assertThat(ended.settlement().outstandingAfter()).isEqualByComparingTo("0.00");
+        assertThat(ended.settlement().depositRefundable()).isEqualByComparingTo("16000.00");
+        assertThat(ended.depositAvailable()).isEqualByComparingTo("16000.00");
+        assertThat(ended.schedules().stream().filter(item -> item.receivableId() != null))
+                .hasSize(2).allMatch(item -> "SETTLED".equals(item.receivableStatus()));
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.receipt where method = 'DEPOSIT_OFFSET'", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select sum(amount) from ivs.receipt where method = 'DEPOSIT_OFFSET'", BigDecimal.class))
+                .isEqualByComparingTo("24000.00");
+        assertThat(serialById(fixture.serial().id()).status()).isEqualTo(SerialStatus.IN_STOCK);
+
+        LeaseApi.LeaseContractView refunded = post(
+                "/api/ivs/lease-contracts/" + contract.id() + "/deposits/refund", Map.of(
+                        "amount", 16000, "transactionDate", "2027-02-16", "method", "BANK_TRANSFER",
+                        "remark", "退还剩余押金"), LeaseApi.LeaseContractView.class);
+        assertThat(refunded.depositRefunded()).isEqualByComparingTo("16000.00");
+        assertThat(refunded.depositAvailable()).isEqualByComparingTo("0.00");
+        assertThat(refunded.depositTransactions()).hasSize(3)
+                .extracting(LeaseApi.DepositTransactionView::type)
+                .containsExactly("COLLECT", "APPLY_RENT", "REFUND");
+
+        ResponseEntity<Map> overRefund = restTemplate.postForEntity(
+                "/api/ivs/lease-contracts/" + contract.id() + "/deposits/refund", Map.of(
+                        "amount", 0.01, "transactionDate", "2027-02-16", "method", "BANK_TRANSFER"),
+                Map.class);
+        assertThat(overRefund.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(overRefund.getBody()).containsEntry("code", "LEASE_DEPOSIT_INSUFFICIENT");
     }
 
     private LeaseApi.LeaseContractView createContract(AssetFixture fixture, LocalDate start, LocalDate end,

@@ -1,8 +1,11 @@
 package com.ivs.app.orchestration;
 
 import com.ivs.lease.LeaseReceivablePort;
+import com.ivs.sales.order.api.SalesApi;
 import com.ivs.sales.settlement.Receivable;
 import com.ivs.sales.settlement.ReceivableRepository;
+import com.ivs.sales.settlement.ReceiptApplicationService;
+import com.ivs.sales.settlement.PaymentMethod;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -13,9 +16,12 @@ import java.util.UUID;
 @Component
 public class LeaseReceivableAdapter implements LeaseReceivablePort {
     private final ReceivableRepository receivableRepository;
+    private final ReceiptApplicationService receipts;
 
-    public LeaseReceivableAdapter(ReceivableRepository receivableRepository) {
+    public LeaseReceivableAdapter(ReceivableRepository receivableRepository,
+                                  ReceiptApplicationService receipts) {
         this.receivableRepository = receivableRepository;
+        this.receipts = receipts;
     }
 
     @Override
@@ -39,5 +45,14 @@ public class LeaseReceivableAdapter implements LeaseReceivablePort {
         Receivable receivable = receivableRepository.findById(receivableId).orElseThrow();
         receivable.markOverdue(today);
         receivableRepository.save(receivable);
+    }
+
+    @Override
+    public DepositApplicationResult applyDeposit(UUID customerId, java.util.List<UUID> receivableIds,
+                                                 BigDecimal amount, String contractNo) {
+        SalesApi.ReceiptView receipt = receipts.createReceipt(new SalesApi.CreateReceiptCommand(
+                customerId, amount, PaymentMethod.DEPOSIT_OFFSET,
+                "租赁押金抵扣 " + contractNo, receivableIds));
+        return new DepositApplicationResult(receipt.receiptNo(), amount);
     }
 }

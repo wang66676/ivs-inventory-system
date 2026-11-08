@@ -22,6 +22,8 @@ public class LeaseApplicationService {
     private final LeaseContractRepository contractRepository;
     private final LeaseScheduleRepository scheduleRepository;
     private final LeaseReminderLogRepository reminderLogRepository;
+    private final LeaseDepositTransactionRepository depositTransactionRepository;
+    private final LeaseSettlementRepository settlementRepository;
     private final LeaseMasterDataPort masterData;
     private final LeaseReceivablePort receivables;
     private final LeaseNotificationPort notifications;
@@ -29,12 +31,16 @@ public class LeaseApplicationService {
     public LeaseApplicationService(LeaseContractRepository contractRepository,
                                    LeaseScheduleRepository scheduleRepository,
                                    LeaseReminderLogRepository reminderLogRepository,
+                                   LeaseDepositTransactionRepository depositTransactionRepository,
+                                   LeaseSettlementRepository settlementRepository,
                                    LeaseMasterDataPort masterData,
                                    LeaseReceivablePort receivables,
                                    LeaseNotificationPort notifications) {
         this.contractRepository = contractRepository;
         this.scheduleRepository = scheduleRepository;
         this.reminderLogRepository = reminderLogRepository;
+        this.depositTransactionRepository = depositTransactionRepository;
+        this.settlementRepository = settlementRepository;
         this.masterData = masterData;
         this.receivables = receivables;
         this.notifications = notifications;
@@ -154,11 +160,79 @@ public class LeaseApplicationService {
     }
 
     @Transactional
-    public LeaseApi.LeaseContractView end(UUID contractId) {
+    public LeaseApi.LeaseContractView collectDeposit(UUID contractId, LeaseApi.DepositCommand command) {
         LeaseContract contract = find(contractId);
+        if (contract.getStatus() != LeaseStatus.ACTIVE) {
+            throw new ConflictException("LEASE_STATUS_INVALID", "只有生效中的合同可以收取押金");
+        }
+        BigDecimal amount = positiveAmount(command == null ? null : command.amount(), "押金金额必须大于 0");
+        List<LeaseDepositTransaction> transactions = depositTransactions(contractId);
+        LeaseApi.DepositSummary summary = depositSummary(contract, transactions);
+        if (amount.compareTo(summary.expected().subtract(summary.received())) > 0) {
+            throw new ConflictException("LEASE_DEPOSIT_EXCEEDS_EXPECTED", "收取金额超过合同剩余应收押金");
+        }
+        depositTransactionRepository.save(LeaseDepositTransaction.create(contractId, LeaseDepositTxnType.COLLECT,
+                amount, command.transactionDate(), command.method(), null, command.remark()));
+        return toView(contractRepository.save(contract));
+    }
+
+    @Transactional
+    public LeaseApi.LeaseContractView refundDeposit(UUID contractId, LeaseApi.DepositCommand command) {
+        LeaseContract contract = find(contractId);
+        if (contract.getStatus() != LeaseStatus.ENDED) {
+            throw new ConflictException("LEASE_STATUS_INVALID", "合同结束后才能退还押金");
+        }
+        BigDecimal amount = positiveAmount(command == null ? null : command.amount(), "退还押金金额必须大于 0");
+        LeaseApi.DepositSummary summary = depositSummary(contract, depositTransactions(contractId));
+        if (amount.compareTo(summary.available()) > 0) {
+            throw new ConflictException("LEASE_DEPOSIT_INSUFFICIENT", "退还金额超过押金可用余额");
+        }
+        depositTransactionRepository.save(LeaseDepositTransaction.create(contractId, LeaseDepositTxnType.REFUND,
+                amount, command.transactionDate(), command.method(), null, command.remark()));
+        return toView(contractRepository.save(contract));
+    }
+
+    @Transactional
+    public LeaseApi.LeaseContractView end(UUID contractId, LeaseApi.EndLeaseCommand command) {
+        LeaseContract contract = find(contractId);
+        if (contract.getStatus() != LeaseStatus.ACTIVE) {
+            throw new ConflictException("LEASE_STATUS_INVALID", "只有生效中的租赁合同可以结束");
+        }
         if (contract.getOwnershipAtEnd() != LeaseOwnershipAtEnd.RETURN) {
             throw new ConflictException("LEASE_END_MODE_UNSUPPORTED", "续租和买断流程将在后续增量中实现");
         }
+        LocalDate settlementDate = command == null || command.settlementDate() == null
+                ? LocalDate.now() : command.settlementDate();
+        if (settlementDate.isBefore(contract.getStartDate())) {
+            throw new ConflictException("LEASE_SETTLEMENT_DATE_INVALID", "结算日期不能早于起租日期");
+        }
+
+        generateDueForContract(contract, settlementDate);
+        List<LeaseSchedule> schedules = scheduleRepository.findByContractIdOrderByPeriodNoAsc(contractId);
+        BigDecimal outstandingBefore = outstandingRent(schedules);
+        LeaseApi.DepositSummary depositBefore = depositSummary(contract, depositTransactions(contractId));
+        BigDecimal availableDeposit = depositBefore.available();
+        BigDecimal applied = BigDecimal.ZERO;
+        if (command != null && command.applyDeposit() && availableDeposit.signum() > 0) {
+            List<UUID> outstandingReceivableIds = schedules.stream()
+                    .filter(schedule -> schedule.getReceivableId() != null)
+                    .filter(schedule -> receivables.get(schedule.getReceivableId()).outstanding().signum() > 0)
+                    .map(LeaseSchedule::getReceivableId).toList();
+            BigDecimal amount = availableDeposit.min(outstandingBefore);
+            if (amount.signum() > 0) {
+                LeaseReceivablePort.DepositApplicationResult result = receivables.applyDeposit(
+                        contract.getCustomerId(), outstandingReceivableIds, amount, contract.getContractNo());
+                depositTransactionRepository.save(LeaseDepositTransaction.create(contractId,
+                        LeaseDepositTxnType.APPLY_RENT, amount, settlementDate, "DEPOSIT_OFFSET",
+                        result.receiptNo(), "押金抵扣未收月租"));
+                availableDeposit = availableDeposit.subtract(amount);
+                applied = applied.add(amount);
+            }
+        }
+        BigDecimal outstandingAfter = outstandingRent(schedules);
+        LeaseSettlement settlement = settlementRepository.save(LeaseSettlement.create(contractId, settlementDate,
+                outstandingBefore, applied, outstandingAfter, availableDeposit,
+                command == null ? null : command.reason()));
         masterData.endLeaseAsset(masterData.requireSerial(contract.getSerialId()), contract.getId(), contract.getContractNo());
         contract.end();
         return toView(contractRepository.save(contract));
@@ -187,6 +261,41 @@ public class LeaseApplicationService {
             generated++;
         }
         return generated;
+    }
+
+    private BigDecimal outstandingRent(List<LeaseSchedule> schedules) {
+        BigDecimal outstanding = BigDecimal.ZERO;
+        for (LeaseSchedule schedule : schedules) {
+            if (schedule.getReceivableId() == null) continue;
+            outstanding = outstanding.add(receivables.get(schedule.getReceivableId()).outstanding());
+        }
+        return outstanding.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private List<LeaseDepositTransaction> depositTransactions(UUID contractId) {
+        return depositTransactionRepository.findByContractIdOrderByTxnDateAscCreatedAtAsc(contractId);
+    }
+
+    private LeaseApi.DepositSummary depositSummary(LeaseContract contract,
+                                                   List<LeaseDepositTransaction> transactions) {
+        BigDecimal received = BigDecimal.ZERO;
+        BigDecimal applied = BigDecimal.ZERO;
+        BigDecimal refunded = BigDecimal.ZERO;
+        for (LeaseDepositTransaction transaction : transactions) {
+            switch (transaction.getTxnType()) {
+                case COLLECT -> received = received.add(transaction.getAmount());
+                case APPLY_RENT -> applied = applied.add(transaction.getAmount());
+                case REFUND -> refunded = refunded.add(transaction.getAmount());
+            }
+        }
+        return new LeaseApi.DepositSummary(contract.getDeposit(), received, applied, refunded,
+                received.subtract(applied).subtract(refunded));
+    }
+
+    private BigDecimal positiveAmount(BigDecimal amount, String message) {
+        BigDecimal value = amount == null ? BigDecimal.ZERO : amount.setScale(2, RoundingMode.HALF_UP);
+        if (value.signum() <= 0) throw new ConflictException("LEASE_AMOUNT_INVALID", message);
+        return value;
     }
 
     private LeaseReceivablePort.ReceivableInfo receivableOf(LeaseSchedule schedule) {
@@ -238,7 +347,12 @@ public class LeaseApplicationService {
                             : receivables.get(schedule.getReceivableId());
                     return LeaseApi.LeaseScheduleView.from(schedule, receivable);
                 }).toList();
-        return LeaseApi.LeaseContractView.from(contract, customer.name(), serial, schedules);
+        List<LeaseDepositTransaction> depositTransactions = depositTransactions(contract.getId());
+        LeaseApi.DepositSummary depositSummary = depositSummary(contract, depositTransactions);
+        LeaseApi.SettlementView settlement = settlementRepository.findByContractId(contract.getId())
+                .map(LeaseApi.SettlementView::from).orElse(null);
+        return LeaseApi.LeaseContractView.from(contract, customer.name(), serial, schedules, depositSummary,
+                depositTransactions.stream().map(LeaseApi.DepositTransactionView::from).toList(), settlement);
     }
 
     private boolean isBattery(String code, String name) {

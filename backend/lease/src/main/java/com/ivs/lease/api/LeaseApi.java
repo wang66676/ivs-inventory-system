@@ -1,10 +1,12 @@
 package com.ivs.lease.api;
 
 import com.ivs.lease.LeaseContract;
+import com.ivs.lease.LeaseDepositTransaction;
 import com.ivs.lease.LeaseMasterDataPort;
 import com.ivs.lease.LeaseOwnershipAtEnd;
 import com.ivs.lease.LeaseReceivablePort;
 import com.ivs.lease.LeaseSchedule;
+import com.ivs.lease.LeaseSettlement;
 import com.ivs.lease.LeaseStatus;
 
 import java.math.BigDecimal;
@@ -29,6 +31,37 @@ public final class LeaseApi {
                                    int generatedReceivables, int dueSoonReminders, int overdueReminders) {
     }
 
+    public record DepositCommand(BigDecimal amount, LocalDate transactionDate, String method, String remark) {
+    }
+
+    public record EndLeaseCommand(LocalDate settlementDate, boolean applyDeposit, String reason) {
+    }
+
+    public record DepositSummary(BigDecimal expected, BigDecimal received, BigDecimal applied,
+                                 BigDecimal refunded, BigDecimal available) {
+    }
+
+    public record DepositTransactionView(UUID id, String type, BigDecimal amount, LocalDate transactionDate,
+                                         String method, String referenceNo, String remark, Instant createdAt) {
+        public static DepositTransactionView from(LeaseDepositTransaction transaction) {
+            return new DepositTransactionView(transaction.getId(), transaction.getTxnType().name(),
+                    transaction.getAmount(), transaction.getTxnDate(), transaction.getMethod(),
+                    transaction.getReferenceNo(), transaction.getRemark(), transaction.getCreatedAt());
+        }
+    }
+
+    public record SettlementView(UUID id, LocalDate settlementDate, BigDecimal outstandingBefore,
+                                 BigDecimal depositApplied, BigDecimal outstandingAfter,
+                                 BigDecimal depositRefundable, String reason, Instant createdAt) {
+        public static SettlementView from(LeaseSettlement settlement) {
+            if (settlement == null) return null;
+            return new SettlementView(settlement.getId(), settlement.getSettlementDate(),
+                    settlement.getOutstandingBefore(), settlement.getDepositApplied(),
+                    settlement.getOutstandingAfter(), settlement.getDepositRefundable(),
+                    settlement.getReason(), settlement.getCreatedAt());
+        }
+    }
+
     public record LeaseScheduleView(UUID id, int periodNo, LocalDate dueDate, BigDecimal amount,
                                     UUID receivableId, String receivableNo, String receivableStatus,
                                     BigDecimal receivedAmount, BigDecimal outstanding) {
@@ -45,16 +78,23 @@ public final class LeaseApi {
     public record LeaseContractView(UUID id, String contractNo, UUID customerId, String customerName,
                                     UUID serialId, String serialNo, String productName, UUID warehouseId,
                                     LocalDate startDate, LocalDate endDate, BigDecimal monthlyFee, BigDecimal deposit,
+                                    BigDecimal depositReceived, BigDecimal depositApplied,
+                                    BigDecimal depositRefunded, BigDecimal depositAvailable,
                                     LeaseOwnershipAtEnd ownershipAtEnd, LeaseStatus status, String remark,
-                                    Instant createdAt, List<LeaseScheduleView> schedules) {
+                                    Instant createdAt, List<LeaseScheduleView> schedules,
+                                    List<DepositTransactionView> depositTransactions, SettlementView settlement) {
         public static LeaseContractView from(LeaseContract contract, String customerName,
                                              LeaseMasterDataPort.SerialInfo serial,
-                                             List<LeaseScheduleView> schedules) {
+                                             List<LeaseScheduleView> schedules, DepositSummary depositSummary,
+                                             List<DepositTransactionView> depositTransactions,
+                                             SettlementView settlement) {
             return new LeaseContractView(contract.getId(), contract.getContractNo(), contract.getCustomerId(),
                     customerName, contract.getSerialId(), serial.serialNo(), serial.productName(),
                     contract.getWarehouseId(), contract.getStartDate(), contract.getEndDate(),
-                    contract.getMonthlyFee(), contract.getDeposit(), contract.getOwnershipAtEnd(), contract.getStatus(),
-                    contract.getRemark(), contract.getCreatedAt(), schedules);
+                    contract.getMonthlyFee(), contract.getDeposit(), depositSummary.received(),
+                    depositSummary.applied(), depositSummary.refunded(), depositSummary.available(),
+                    contract.getOwnershipAtEnd(), contract.getStatus(), contract.getRemark(), contract.getCreatedAt(),
+                    schedules, depositTransactions, settlement);
         }
     }
 }

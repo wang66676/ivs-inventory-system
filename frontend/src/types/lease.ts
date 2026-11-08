@@ -13,6 +13,28 @@ export interface LeaseSchedule {
   outstanding: number
 }
 
+export interface LeaseDepositTransaction {
+  id: string
+  type: 'COLLECT' | 'APPLY_RENT' | 'REFUND'
+  amount: number
+  transactionDate: string
+  method?: string
+  referenceNo?: string
+  remark?: string
+  createdAt: string
+}
+
+export interface LeaseSettlement {
+  id: string
+  settlementDate: string
+  outstandingBefore: number
+  depositApplied: number
+  outstandingAfter: number
+  depositRefundable: number
+  reason?: string
+  createdAt: string
+}
+
 export interface LeaseContract {
   id: string
   contractNo: string
@@ -26,11 +48,30 @@ export interface LeaseContract {
   endDate: string
   monthlyFee: number
   deposit: number
+  depositReceived: number
+  depositApplied: number
+  depositRefunded: number
+  depositAvailable: number
   ownershipAtEnd: LeaseOwnershipAtEnd
   status: LeaseStatus
   remark?: string
   createdAt: string
   schedules: LeaseSchedule[]
+  depositTransactions: LeaseDepositTransaction[]
+  settlement?: LeaseSettlement
+}
+
+export interface LeaseDepositCommand {
+  amount: number
+  transactionDate: string
+  method?: string
+  remark?: string
+}
+
+export interface LeaseEndCommand {
+  settlementDate: string
+  applyDeposit: boolean
+  reason?: string
 }
 
 export interface LeaseDueGenerationResult {

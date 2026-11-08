@@ -1,5 +1,7 @@
 import { http } from './http'
-import type { LeaseAutomationResult, LeaseContract, LeaseDueGenerationResult } from '../types/lease'
+import type {
+  LeaseAutomationResult, LeaseContract, LeaseDepositCommand, LeaseDueGenerationResult, LeaseEndCommand,
+} from '../types/lease'
 
 export const leaseApi = {
   list: () => http.get<LeaseContract[]>('/ivs/lease-contracts').then((r) => r.data),
@@ -13,5 +15,10 @@ export const leaseApi = {
     http.post<LeaseAutomationResult>('/ivs/lease-contracts/run-automation', {}, {
       params: { asOfDate, reminderDays },
     }).then((r) => r.data),
-  end: (id: string) => http.post<LeaseContract>(`/ivs/lease-contracts/${id}/end`, {}).then((r) => r.data),
+  end: (id: string, body: LeaseEndCommand) =>
+    http.post<LeaseContract>(`/ivs/lease-contracts/${id}/end`, body).then((r) => r.data),
+  collectDeposit: (id: string, body: LeaseDepositCommand) =>
+    http.post<LeaseContract>(`/ivs/lease-contracts/${id}/deposits/collect`, body).then((r) => r.data),
+  refundDeposit: (id: string, body: LeaseDepositCommand) =>
+    http.post<LeaseContract>(`/ivs/lease-contracts/${id}/deposits/refund`, body).then((r) => r.data),
 }
