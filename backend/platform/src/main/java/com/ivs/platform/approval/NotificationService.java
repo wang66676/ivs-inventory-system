@@ -75,6 +75,18 @@ public class NotificationService {
         notifications.save(UserNotification.create(category, title, content, businessType, businessId, null, permission));
     }
 
+    /** 同一通知可投递给多个权限人群，权限码以竖线分隔存储。 */
+    @Transactional
+    public void notifyPermissions(String category, String title, String content, String businessType,
+                                  UUID businessId, Set<String> permissions) {
+        if (permissions == null || permissions.isEmpty()) return;
+        String audience = String.join("|", permissions.stream()
+                .filter(permission -> permission != null && !permission.isBlank())
+                .distinct().sorted().toList());
+        if (audience.isBlank()) return;
+        notifications.save(UserNotification.create(category, title, content, businessType, businessId, null, audience));
+    }
+
     @Transactional
     public void notifyUser(String category, String title, String content, String businessType,
                            UUID businessId, UUID userId) {
@@ -84,8 +96,15 @@ public class NotificationService {
 
     private boolean visible(UserNotification notification, AuthenticatedUser user) {
         return user.userId().equals(notification.getAudienceUserId())
-                || (notification.getAudiencePermission() != null
-                    && user.permissions().contains(notification.getAudiencePermission()));
+                || hasAudiencePermission(notification.getAudiencePermission(), user.permissions());
+    }
+
+    private boolean hasAudiencePermission(String audiencePermission, Set<String> userPermissions) {
+        if (audiencePermission == null || audiencePermission.isBlank()) return false;
+        for (String permission : audiencePermission.split("\\|")) {
+            if (userPermissions.contains(permission)) return true;
+        }
+        return false;
     }
 
     public record NotificationView(UUID id, String category, String title, String content,

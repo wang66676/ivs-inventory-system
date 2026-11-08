@@ -52,6 +52,19 @@ public class LeaseController {
         return service.generateDue(id, throughDate);
     }
 
+    @PostMapping("/generate-due-batch")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
+    public LeaseApi.DueGenerationResult generateDueBatch(@RequestParam(required = false) LocalDate throughDate) {
+        return service.generateDueBatch(throughDate);
+    }
+
+    @PostMapping("/run-automation")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
+    public LeaseApi.AutomationResult runAutomation(@RequestParam(required = false) LocalDate asOfDate,
+                                                   @RequestParam(required = false) Integer reminderDays) {
+        return service.runAutomation(asOfDate, reminderDays);
+    }
+
     @PostMapping("/{id}/end")
     @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
     public LeaseApi.LeaseContractView end(@PathVariable UUID id) {

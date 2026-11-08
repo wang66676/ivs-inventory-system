@@ -22,6 +22,13 @@ public final class LeaseApi {
                                      LeaseOwnershipAtEnd ownershipAtEnd, String remark) {
     }
 
+    public record DueGenerationResult(LocalDate throughDate, int activeContracts, int generatedReceivables) {
+    }
+
+    public record AutomationResult(LocalDate asOfDate, int reminderDays, int activeContracts,
+                                   int generatedReceivables, int dueSoonReminders, int overdueReminders) {
+    }
+
     public record LeaseScheduleView(UUID id, int periodNo, LocalDate dueDate, BigDecimal amount,
                                     UUID receivableId, String receivableNo, String receivableStatus,
                                     BigDecimal receivedAmount, BigDecimal outstanding) {

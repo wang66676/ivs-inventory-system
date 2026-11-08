@@ -6,10 +6,13 @@
       <a-row :gutter="12" style="margin-bottom:14px">
         <a-col :xs="12" :md="6"><a-card size="small"><a-statistic title="租赁合同" :value="rows.length" suffix="份" /></a-card></a-col>
         <a-col :xs="12" :md="6"><a-card size="small"><a-statistic title="在租电池" :value="activeCount" suffix="块" /></a-card></a-col>
-        <a-col :xs="24" :md="12"><a-card size="small"><a-statistic title="月租收入" :value="monthlyIncome" :precision="2" prefix="¥" /></a-card></a-col>
+        <a-col :xs="12" :md="6"><a-card size="small"><a-statistic title="在租月租" :value="monthlyIncome" :precision="2" prefix="¥" /></a-card></a-col>
+        <a-col :xs="12" :md="6"><a-card size="small"><a-statistic title="逾期未收" :value="overdueAmount" :precision="2" prefix="¥" /></a-card></a-col>
       </a-row>
       <a-space style="margin-bottom:12px">
         <a-button v-if="canManage" type="primary" @click="openCreate">新建租赁合同</a-button>
+        <a-button v-if="canManage" @click="generateDueBatch">批量生成到期应收</a-button>
+        <a-button v-if="canManage" @click="runAutomation">执行提醒</a-button>
         <a-button @click="reload">刷新</a-button>
       </a-space>
       <a-table v-resizable-columns :data-source="rows" :columns="columns" row-key="id" size="middle"
@@ -108,6 +111,9 @@ const columns = [
 const activeCount = computed(() => rows.value.filter((item) => item.status === 'ACTIVE').length)
 const monthlyIncome = computed(() => rows.value.filter((item) => item.status === 'ACTIVE')
   .reduce((sum, item) => sum + Number(item.monthlyFee || 0), 0))
+const overdueAmount = computed(() => rows.value.flatMap((item) => item.schedules || [])
+  .filter((item) => dayjs(item.dueDate).isBefore(dayjs().startOf('day')) && Number(item.outstanding || 0) > 0)
+  .reduce((sum, item) => sum + Number(item.outstanding || 0), 0))
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
 function statusLabel(value: LeaseStatus) { return value === 'ACTIVE' ? '租赁中' : value === 'ENDED' ? '已结束' : '已取消' }
 function endModeLabel(value: LeaseOwnershipAtEnd) { return value === 'RETURN' ? '归还' : value === 'BUYOUT' ? '买断' : '续租' }
@@ -137,6 +143,20 @@ async function generateDue(record: LeaseContract) {
     const result = await leaseApi.generateDue(record.id, dayjs().format('YYYY-MM-DD'))
     current.value = result
     message.success('到期月租应收已生成')
+    await reload()
+  } catch (error) { message.error((error as Error).message) }
+}
+async function generateDueBatch() {
+  try {
+    const result = await leaseApi.generateDueBatch(dayjs().format('YYYY-MM-DD'))
+    message.success(`已处理 ${result.activeContracts} 份合同，生成 ${result.generatedReceivables} 笔到期应收`)
+    await reload()
+  } catch (error) { message.error((error as Error).message) }
+}
+async function runAutomation() {
+  try {
+    const result = await leaseApi.runAutomation(dayjs().format('YYYY-MM-DD'))
+    message.success(`生成应收 ${result.generatedReceivables} 笔，即将到期提醒 ${result.dueSoonReminders} 条，逾期提醒 ${result.overdueReminders} 条`)
     await reload()
   } catch (error) { message.error((error as Error).message) }
 }

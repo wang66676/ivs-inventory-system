@@ -32,3 +32,18 @@ export interface LeaseContract {
   createdAt: string
   schedules: LeaseSchedule[]
 }
+
+export interface LeaseDueGenerationResult {
+  throughDate: string
+  activeContracts: number
+  generatedReceivables: number
+}
+
+export interface LeaseAutomationResult {
+  asOfDate: string
+  reminderDays: number
+  activeContracts: number
+  generatedReceivables: number
+  dueSoonReminders: number
+  overdueReminders: number
+}

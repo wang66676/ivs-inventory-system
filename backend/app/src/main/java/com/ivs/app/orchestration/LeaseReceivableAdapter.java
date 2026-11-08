@@ -33,4 +33,11 @@ public class LeaseReceivableAdapter implements LeaseReceivablePort {
         return new ReceivableInfo(receivable.getId(), receivable.getReceivableNo(), receivable.getStatus().name(),
                 receivable.getAmount(), receivable.getReceivedAmount(), receivable.outstanding());
     }
+
+    @Override
+    public void markOverdue(UUID receivableId, LocalDate today) {
+        Receivable receivable = receivableRepository.findById(receivableId).orElseThrow();
+        receivable.markOverdue(today);
+        receivableRepository.save(receivable);
+    }
 }

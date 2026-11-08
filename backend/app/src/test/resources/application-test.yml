@@ -21,3 +21,6 @@ ivs:
   outbox:
     dispatch-enabled: false
     dispatch-interval-ms: 60000
+  lease:
+    billing-automation:
+      enabled: false

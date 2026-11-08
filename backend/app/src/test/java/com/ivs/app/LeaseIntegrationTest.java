@@ -129,6 +129,49 @@ class LeaseIntegrationTest {
         assertThat(serialById(battery.serial().id()).status()).isEqualTo(SerialStatus.IN_LEASE);
     }
 
+    @Test
+    void 月租批量自动化生成应收并发送到期逾期提醒且按天去重() {
+        AssetFixture fixture = inStockAsset("AUTOMATION", false);
+        LocalDate start = LocalDate.of(2026, 12, 1);
+        LeaseApi.LeaseContractView contract = createContract(fixture, start, start.plusMonths(3),
+                new BigDecimal("12000.00"), LeaseOwnershipAtEnd.RETURN);
+
+        LeaseApi.DueGenerationResult batch = post(
+                "/api/ivs/lease-contracts/generate-due-batch?throughDate=2027-02-15", Map.of(),
+                LeaseApi.DueGenerationResult.class);
+        assertThat(batch.activeContracts()).isEqualTo(1);
+        assertThat(batch.generatedReceivables()).isEqualTo(2);
+
+        LeaseApi.AutomationResult first = post(
+                "/api/ivs/lease-contracts/run-automation?asOfDate=2027-02-15&reminderDays=14", Map.of(),
+                LeaseApi.AutomationResult.class);
+        assertThat(first.generatedReceivables()).isZero();
+        assertThat(first.overdueReminders()).isEqualTo(2);
+        assertThat(first.dueSoonReminders()).isEqualTo(1);
+
+        LeaseApi.LeaseContractView afterAutomation = getContract(contract.id());
+        assertThat(afterAutomation.schedules().stream().filter(item -> item.receivableId() != null))
+                .hasSize(2)
+                .allMatch(item -> "OVERDUE".equals(item.receivableStatus()));
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.user_notification where category = 'LEASE_RENT' and business_id = ?",
+                Integer.class, contract.id())).isEqualTo(3);
+        List<String> audiences = jdbcTemplate.queryForList(
+                "select audience_permission from ivs.user_notification where category = 'LEASE_RENT'",
+                String.class);
+        assertThat(audiences).isNotEmpty()
+                .allMatch(value -> value.contains("IVS_LEASE_MANAGE") && value.contains("IVS_FINANCE_READ"));
+
+        LeaseApi.AutomationResult second = post(
+                "/api/ivs/lease-contracts/run-automation?asOfDate=2027-02-15&reminderDays=14", Map.of(),
+                LeaseApi.AutomationResult.class);
+        assertThat(second.generatedReceivables()).isZero();
+        assertThat(second.overdueReminders()).isZero();
+        assertThat(second.dueSoonReminders()).isZero();
+        assertThat(jdbcTemplate.queryForObject("select count(*) from ivs.lease_reminder_log", Integer.class))
+                .isEqualTo(3);
+    }
+
     private LeaseApi.LeaseContractView createContract(AssetFixture fixture, LocalDate start, LocalDate end,
                                                        BigDecimal monthlyFee, LeaseOwnershipAtEnd ownershipAtEnd) {
         return post("/api/ivs/lease-contracts", contractBody(fixture, start, end, monthlyFee, ownershipAtEnd),

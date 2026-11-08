@@ -10,4 +10,6 @@ public interface LeaseScheduleRepository extends JpaRepository<LeaseSchedule, UU
     List<LeaseSchedule> findByContractIdOrderByPeriodNoAsc(UUID contractId);
     List<LeaseSchedule> findByContractIdAndDueDateLessThanEqualAndReceivableIdIsNullOrderByPeriodNoAsc(
             UUID contractId, LocalDate dueDate);
+    List<LeaseSchedule> findByDueDateBetweenOrderByDueDateAsc(LocalDate from, LocalDate to);
+    List<LeaseSchedule> findByDueDateBeforeAndReceivableIdIsNotNullOrderByDueDateAsc(LocalDate date);
 }

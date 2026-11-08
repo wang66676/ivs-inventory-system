@@ -13,4 +13,5 @@ public interface LeaseReceivablePort {
     UUID createLeaseReceivable(UUID customerId, BigDecimal amount, LocalDate dueDate,
                                UUID contractId, String contractNo, int periodNo);
     ReceivableInfo get(UUID receivableId);
+    void markOverdue(UUID receivableId, LocalDate today);
 }
