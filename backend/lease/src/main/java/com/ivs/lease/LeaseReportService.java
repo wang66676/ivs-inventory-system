@@ -99,7 +99,7 @@ public class LeaseReportService {
             totalAccumulatedDepreciation = totalAccumulatedDepreciation.add(depreciation.accumulatedDepreciation());
             totalNetValue = totalNetValue.add(depreciation.netValue());
             rows.add(new LeaseApi.LeaseAssetReportRow(contract.getId(), contract.getContractNo(), customer.name(),
-                    serial.serialNo(), serial.productName(), contract.getStatus(), contract.getStartDate(),
+                    serial.serialNo(), serial.productName(), serial.status(), contract.getStatus(), contract.getStartDate(),
                     contract.getEndDate(), contract.getMonthlyFee(),
                     settlementRepository.findByContractId(contract.getId())
                             .map(LeaseSettlement::getSettlementDate).orElse(null),

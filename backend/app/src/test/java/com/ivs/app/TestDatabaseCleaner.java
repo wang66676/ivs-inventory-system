@@ -47,6 +47,7 @@ final class TestDatabaseCleaner {
         jdbcTemplate.execute("delete from ivs.lease_battery_health");
         jdbcTemplate.execute("delete from ivs.lease_depreciation_schedule");
         jdbcTemplate.execute("delete from ivs.lease_contract_change");
+        jdbcTemplate.execute("delete from ivs.lease_asset_disposal");
         jdbcTemplate.execute("delete from ivs.lease_reminder_log");
         jdbcTemplate.execute("delete from ivs.lease_schedule");
         jdbcTemplate.execute("delete from ivs.lease_contract");

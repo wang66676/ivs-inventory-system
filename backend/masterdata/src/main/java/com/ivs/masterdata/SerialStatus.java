@@ -13,5 +13,6 @@ public enum SerialStatus {
     REPAIRING,
     IN_LEASE,
     RETIRED,
+    SECOND_LIFE,
     SCRAPPED
 }

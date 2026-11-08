@@ -18,4 +18,5 @@ public interface LeaseMasterDataPort {
     CustomerInfo requireCustomer(UUID customerId);
     void activateAsset(SerialInfo serial, UUID contractId, String contractNo, LocalDate startDate);
     void endLeaseAsset(SerialInfo serial, UUID contractId, String contractNo);
+    void retireAsset(SerialInfo serial, UUID disposalId, String disposalNo, boolean scrap, String reason);
 }

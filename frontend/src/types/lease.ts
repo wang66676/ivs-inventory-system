@@ -43,6 +43,7 @@ export interface LeaseContract {
   serialId: string
   serialNo: string
   productName: string
+  serialStatus: string
   warehouseId: string
   startDate: string
   endDate: string
@@ -141,6 +142,7 @@ export interface LeaseAssetReportRow {
   customerName: string
   serialNo: string
   productName: string
+  serialStatus: string
   status: LeaseStatus
   startDate: string
   endDate: string
@@ -170,6 +172,31 @@ export interface LeaseAssetReport {
   generatedAt: string
   summary: LeaseAssetReportSummary
   rows: LeaseAssetReportRow[]
+}
+
+export type LeaseDispositionType = 'SECOND_LIFE' | 'SCRAP'
+
+export interface LeaseAssetDisposal {
+  id: string
+  disposalNo: string
+  serialId: string
+  contractId?: string
+  dispositionType: LeaseDispositionType
+  disposalDate: string
+  sohPercent: number
+  destination?: string
+  reason: string
+  remark?: string
+  createdAt: string
+}
+
+export interface RetireAssetCommand {
+  sohPercent: number
+  dispositionType: LeaseDispositionType
+  disposalDate: string
+  destination?: string
+  reason: string
+  remark?: string
 }
 
 export interface LeaseDueGenerationResult {

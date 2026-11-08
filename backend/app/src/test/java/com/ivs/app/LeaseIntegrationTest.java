@@ -354,6 +354,60 @@ class LeaseIntegrationTest {
         assertThat(report.rows().get(0).netValue()).isEqualByComparingTo("245000.00");
     }
 
+    @Test
+    void 归还后的电池可办理梯次利用或报废处置并退出库存() {
+        AssetFixture secondLifeAsset = inStockAsset("LIFE1", false);
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        LeaseApi.LeaseContractView secondLifeContract = createContract(secondLifeAsset, start, start.plusMonths(3),
+                new BigDecimal("10000.00"), LeaseOwnershipAtEnd.RETURN);
+        post("/api/ivs/lease-contracts/" + secondLifeContract.id() + "/end", Map.of(
+                "settlementDate", "2026-02-15", "applyDeposit", false, "reason", "测试归还"),
+                LeaseApi.LeaseContractView.class);
+
+        LeaseApi.AssetDisposalView secondLife = post(
+                "/api/ivs/lease-assets/" + secondLifeAsset.serial().id() + "/retire", Map.of(
+                        "sohPercent", 72.5, "dispositionType", "SECOND_LIFE", "disposalDate", "2026-02-20",
+                        "destination", "储能梯次利用", "reason", "容量衰减不适合继续车载租赁"), LeaseApi.AssetDisposalView.class);
+        assertThat(secondLife.disposalNo()).startsWith("DSP-");
+        assertThat(secondLife.dispositionType()).isEqualTo("SECOND_LIFE");
+        assertThat(serialById(secondLifeAsset.serial().id()).status()).isEqualTo(SerialStatus.SECOND_LIFE);
+        assertThat(balanceOf(secondLifeAsset.serial()).onHandQty()).isEqualByComparingTo("0.000");
+
+        ResponseEntity<Map> duplicate = restTemplate.postForEntity(
+                "/api/ivs/lease-assets/" + secondLifeAsset.serial().id() + "/retire", Map.of(
+                        "sohPercent", 70, "dispositionType", "SCRAP", "disposalDate", "2026-02-21",
+                        "reason", "重复处置"), Map.class);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(duplicate.getBody()).containsEntry("code", "LEASE_DISPOSAL_STATUS_INVALID");
+
+        AssetFixture scrapAsset = inStockAsset("LIFE2", false);
+        LeaseApi.LeaseContractView scrapContract = createContract(scrapAsset, start, start.plusMonths(3),
+                new BigDecimal("10000.00"), LeaseOwnershipAtEnd.RETURN);
+        post("/api/ivs/lease-contracts/" + scrapContract.id() + "/end", Map.of(
+                "settlementDate", "2026-02-15", "applyDeposit", false, "reason", "测试归还"),
+                LeaseApi.LeaseContractView.class);
+        LeaseApi.AssetDisposalView scrap = post(
+                "/api/ivs/lease-assets/" + scrapAsset.serial().id() + "/retire", Map.of(
+                        "sohPercent", 45, "dispositionType", "SCRAP", "disposalDate", "2026-02-20",
+                        "reason", "无法继续使用"), LeaseApi.AssetDisposalView.class);
+        assertThat(scrap.dispositionType()).isEqualTo("SCRAP");
+        assertThat(serialById(scrapAsset.serial().id()).status()).isEqualTo(SerialStatus.SCRAPPED);
+        assertThat(balanceOf(scrapAsset.serial()).onHandQty()).isEqualByComparingTo("0.000");
+
+        LeaseApi.AssetDisposalView[] byContract = restTemplate.getForEntity(
+                "/api/ivs/lease-assets/disposals?contractId=" + secondLifeContract.id(),
+                LeaseApi.AssetDisposalView[].class).getBody();
+        assertThat(byContract).isNotNull().hasSize(1);
+        assertThat(byContract[0].serialId()).isEqualTo(secondLifeAsset.serial().id());
+
+        LeaseApi.LeaseAssetReportView report = restTemplate.getForEntity(
+                "/api/ivs/lease-assets/report", LeaseApi.LeaseAssetReportView.class).getBody();
+        assertThat(report).isNotNull();
+        assertThat(report.rows()).hasSize(2);
+        assertThat(report.rows().stream().map(LeaseApi.LeaseAssetReportRow::serialStatus))
+                .containsExactlyInAnyOrder("SECOND_LIFE", "SCRAPPED");
+    }
+
     private LeaseApi.LeaseContractView createContract(AssetFixture fixture, LocalDate start, LocalDate end,
                                                        BigDecimal monthlyFee, LeaseOwnershipAtEnd ownershipAtEnd) {
         return post("/api/ivs/lease-contracts", contractBody(fixture, start, end, monthlyFee, ownershipAtEnd),
@@ -375,7 +429,7 @@ class LeaseIntegrationTest {
 
     private AssetFixture inStockAsset(String prefix, boolean vehicle) {
         String template = vehicle ? "VEHICLE" : "BATTERY";
-        String categoryCode = vehicle ? "VEHICLE" : "BATTERY";
+        String categoryCode = vehicle ? "VEHICLE-" + prefix : "BATTERY-" + prefix;
         String categoryName = vehicle ? "整车" : "动力电池";
         MasterdataApi.CategoryView category = post("/api/ivs/product-categories", Map.of(
                 "code", categoryCode, "name", categoryName, "trackingMode", TrackingMode.SERIAL.name(),

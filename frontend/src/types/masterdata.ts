@@ -7,7 +7,7 @@ export type OwnershipType = 'OWNED' | 'LEASE_TO_OWN' | 'LEASED'
 export type SerialStatus =
   | 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'IN_STOCK' | 'LOCKED'
   | 'SOLD' | 'DELIVERED' | 'RETURNED' | 'REPAIRING'
-  | 'IN_LEASE' | 'RETIRED' | 'SCRAPPED'
+  | 'IN_LEASE' | 'RETIRED' | 'SECOND_LIFE' | 'SCRAPPED'
 
 export interface AttrDef {
   id: string
@@ -175,6 +175,7 @@ export const SERIAL_STATUS_LABELS: Record<SerialStatus, string> = {
   REPAIRING: '维修中',
   IN_LEASE: '租赁中',
   RETIRED: '已退役',
+  SECOND_LIFE: '梯次利用',
   SCRAPPED: '已报废',
 }
 

@@ -71,6 +71,14 @@ public class LeaseMasterDataAdapter implements LeaseMasterDataPort {
         serialRepository.save(entity);
     }
 
+    @Override
+    public void retireAsset(SerialInfo serial, UUID disposalId, String disposalNo, boolean scrap, String reason) {
+        StockMoveType moveType = scrap ? StockMoveType.SCRAP : StockMoveType.LEASE_RETIRE;
+        stockService.issue(serial.productId(), serial.id(), serial.warehouseId(), serial.batchNo(),
+                BigDecimal.ONE, moveType, "LEASE_DISPOSAL", disposalId, disposalNo, reason);
+        moveSerial(serial.id(), scrap ? SerialStatus.SCRAPPED : SerialStatus.SECOND_LIFE);
+    }
+
     private void moveSerial(UUID serialId, SerialStatus target) {
         for (SerialStatus step : serialService.statusPath(serialId, target)) {
             serialService.moveStatus(serialId, step);

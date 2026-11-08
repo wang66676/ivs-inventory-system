@@ -117,7 +117,7 @@ public enum SerialStatusTemplate {
         map.put(SerialStatus.IN_TRANSIT, EnumSet.of(SerialStatus.ARRIVED, SerialStatus.SCRAPPED));
         map.put(SerialStatus.ARRIVED, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.SCRAPPED));
         map.put(SerialStatus.IN_STOCK, EnumSet.of(SerialStatus.LOCKED, SerialStatus.IN_LEASE,
-                SerialStatus.RETURNED, SerialStatus.SCRAPPED));
+                SerialStatus.RETURNED, SerialStatus.RETIRED, SerialStatus.SCRAPPED));
         map.put(SerialStatus.LOCKED, EnumSet.of(SerialStatus.SOLD, SerialStatus.IN_STOCK, SerialStatus.IN_LEASE));
         map.put(SerialStatus.SOLD, EnumSet.of(SerialStatus.DELIVERED));
         map.put(SerialStatus.DELIVERED, EnumSet.of(SerialStatus.RETURNED));
@@ -125,7 +125,8 @@ public enum SerialStatusTemplate {
         map.put(SerialStatus.REPAIRING, EnumSet.of(SerialStatus.IN_STOCK, SerialStatus.RETIRED));
         map.put(SerialStatus.IN_LEASE, EnumSet.of(SerialStatus.REPAIRING, SerialStatus.RETIRED,
                 SerialStatus.IN_STOCK));
-        map.put(SerialStatus.RETIRED, EnumSet.of(SerialStatus.SCRAPPED));
+        map.put(SerialStatus.RETIRED, EnumSet.of(SerialStatus.SECOND_LIFE, SerialStatus.SCRAPPED));
+        map.put(SerialStatus.SECOND_LIFE, EnumSet.of(SerialStatus.SCRAPPED));
         map.put(SerialStatus.SCRAPPED, EnumSet.noneOf(SerialStatus.class));
         return map;
     }

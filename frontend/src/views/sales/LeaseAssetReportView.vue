@@ -24,6 +24,7 @@
                :scroll="{ x: 2100 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'"><a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag></template>
+          <template v-else-if="column.key === 'serialStatus'"><a-tag>{{ serialStatusLabel(record.serialStatus) }}</a-tag></template>
           <template v-else-if="column.key === 'period'">{{ record.startDate }} 至 {{ record.endDate }}</template>
           <template v-else-if="column.key === 'generatedRent'">{{ money(record.generatedRent) }}</template>
           <template v-else-if="column.key === 'receivedRent'">{{ money(record.receivedRent) }}</template>
@@ -51,6 +52,7 @@ import { message } from 'ant-design-vue'
 import { leaseApi } from '../../api/lease'
 import { exportCsv, exportTimestamp, type CsvColumn } from '../../utils/csvExport'
 import type { LeaseAssetReport, LeaseAssetReportRow, LeaseInspectionResult, LeaseStatus } from '../../types/lease'
+import { SERIAL_STATUS_LABELS } from '../../types/masterdata'
 
 const loading = ref(false)
 const report = ref<LeaseAssetReport>()
@@ -61,6 +63,7 @@ const columns = [
   { title: '客户', key: 'customerName', dataIndex: 'customerName', width: 160 },
   { title: '电池 SN', key: 'serialNo', dataIndex: 'serialNo', width: 170 },
   { title: '商品', key: 'productName', dataIndex: 'productName', width: 160 },
+  { title: '电池状态', key: 'serialStatus', width: 110, align: 'center' },
   { title: '状态', key: 'status', width: 90, align: 'center' },
   { title: '租期', key: 'period', width: 210 },
   { title: '月租', key: 'monthlyFee', dataIndex: 'monthlyFee', width: 120, align: 'right' },
@@ -82,6 +85,9 @@ const columns = [
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
 function statusLabel(value: LeaseStatus) { return value === 'ACTIVE' ? '租赁中' : value === 'ENDED' ? '已结束' : '已取消' }
 function statusColor(value: LeaseStatus) { return value === 'ACTIVE' ? 'green' : value === 'ENDED' ? 'blue' : 'default' }
+function serialStatusLabel(value?: string) {
+  return SERIAL_STATUS_LABELS[value as keyof typeof SERIAL_STATUS_LABELS] || value || '-'
+}
 function inspectionLabel(value?: LeaseInspectionResult) {
   return ({ NORMAL: '正常', ATTENTION: '需关注', ABNORMAL: '异常' } as Record<string, string>)[value || ''] || '未检测'
 }
@@ -102,6 +108,7 @@ function exportReport() {
     { title: '客户', value: (row) => row.customerName },
     { title: '电池SN', value: (row) => row.serialNo },
     { title: '商品', value: (row) => row.productName },
+    { title: '电池状态', value: (row) => serialStatusLabel(row.serialStatus) },
     { title: '状态', value: (row) => statusLabel(row.status) },
     { title: '起租日期', value: (row) => row.startDate },
     { title: '结束日期', value: (row) => row.endDate },

@@ -20,6 +20,7 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'amount'">{{ money(record.monthlyFee) }}</template>
           <template v-else-if="column.key === 'deposit'">{{ money(record.depositAvailable) }}</template>
+          <template v-else-if="column.key === 'serialStatus'"><a-tag>{{ serialStatusLabel(record.serialStatus) }}</a-tag></template>
           <template v-else-if="column.key === 'status'"><a-tag :color="record.status === 'ACTIVE' ? 'green' : 'default'">{{ statusLabel(record.status) }}</a-tag></template>
           <template v-else-if="column.key === 'endMode'">{{ endModeLabel(record.ownershipAtEnd) }}</template>
           <template v-else-if="column.key === 'actions'">
@@ -30,6 +31,8 @@
               <a-button v-if="canManage && record.status === 'ACTIVE'" size="small" type="primary" @click="generateDue(record)">生成到期应收</a-button>
               <a-button v-if="canManage && record.status === 'ACTIVE'" size="small" @click="openRenew(record)">续租</a-button>
               <a-button v-if="canManage && record.status === 'ACTIVE' && record.ownershipAtEnd === 'RETURN'" size="small" danger @click="openEnd(record)">提前归还/结算</a-button>
+              <a-button v-if="canManage && record.status === 'ENDED' && record.serialStatus === 'IN_STOCK'"
+                        size="small" danger @click="openDisposal(record)">退役处置</a-button>
             </a-space>
           </template>
         </template>
@@ -50,6 +53,31 @@
           <a-col :span="12"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
         </a-row>
       </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="disposalOpen" :title="`电池退役处置 · ${disposalCurrent?.serialNo || ''}`"
+             :confirm-loading="disposalSaving" ok-text="确认处置" cancel-text="取消" width="860px" @ok="submitDisposal">
+      <a-alert type="warning" show-icon style="margin-bottom:14px"
+               message="梯次利用或报废处置都会让电池退出可售库存；提交后不可重复处置，请在操作前核对检测数据。" />
+      <a-form layout="vertical">
+        <a-row :gutter="16">
+          <a-col :span="8"><a-form-item label="处置方式" required><a-select v-model:value="disposalForm.dispositionType" :options="dispositionOptions" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="处置日期" required><a-date-picker v-model:value="disposalForm.disposalDate" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="处置时 SOH" required><a-input-number v-model:value="disposalForm.sohPercent" :min="0" :max="100" :precision="2" addon-after="%" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="去向 / 用途"><a-input v-model:value="disposalForm.destination" placeholder="梯次利用时必填，例如储能项目" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="处置原因" required><a-input v-model:value="disposalForm.reason" placeholder="例如容量衰减、事故损坏" /></a-form-item></a-col>
+          <a-col :span="24"><a-form-item label="备注"><a-textarea v-model:value="disposalForm.remark" :rows="2" /></a-form-item></a-col>
+        </a-row>
+      </a-form>
+      <a-divider>历史处置记录</a-divider>
+      <a-table :data-source="disposalHistory" row-key="id" size="small" :pagination="false">
+        <a-table-column title="处置单号" data-index="disposalNo" :width="140" />
+        <a-table-column title="日期" data-index="disposalDate" :width="110" />
+        <a-table-column title="方式" :width="100"><template #default="{ record }">{{ dispositionLabel(record.dispositionType) }}</template></a-table-column>
+        <a-table-column title="SOH" :width="90"><template #default="{ record }">{{ record.sohPercent }}%</template></a-table-column>
+        <a-table-column title="去向" data-index="destination" :width="150" />
+        <a-table-column title="原因" data-index="reason" />
+      </a-table>
     </a-modal>
 
     <a-modal v-model:open="renewOpen" title="租赁合同续租" :confirm-loading="renewSaving"
@@ -193,9 +221,10 @@ import { leaseApi } from '../../api/lease'
 import { customerApi, serialApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
 import type {
-  LeaseContract, LeaseHealthRecord, LeaseInspectionResult, LeaseOwnershipAtEnd, LeaseStatus,
+  LeaseAssetDisposal, LeaseContract, LeaseDispositionType, LeaseHealthRecord, LeaseInspectionResult,
+  LeaseOwnershipAtEnd, LeaseStatus,
 } from '../../types/lease'
-import type { ProductSerial } from '../../types/masterdata'
+import { SERIAL_STATUS_LABELS, type ProductSerial } from '../../types/masterdata'
 
 const auth = useAuthStore()
 const canManage = auth.can('IVS_LEASE_MANAGE')
@@ -208,22 +237,27 @@ const depositOpen = ref(false)
 const endOpen = ref(false)
 const renewOpen = ref(false)
 const healthOpen = ref(false)
+const disposalOpen = ref(false)
 const saving = ref(false)
 const depositSaving = ref(false)
 const endSaving = ref(false)
 const renewSaving = ref(false)
 const healthSaving = ref(false)
+const disposalSaving = ref(false)
 const current = ref<LeaseContract>()
 const depositCurrent = ref<LeaseContract>()
 const endCurrent = ref<LeaseContract>()
 const renewCurrent = ref<LeaseContract>()
 const healthCurrent = ref<LeaseContract>()
 const healthRecords = ref<LeaseHealthRecord[]>([])
+const disposalCurrent = ref<LeaseContract>()
+const disposalHistory = ref<LeaseAssetDisposal[]>([])
 const form = reactive<Record<string, any>>({})
 const depositForm = reactive<Record<string, any>>({})
 const endForm = reactive<Record<string, any>>({})
 const renewForm = reactive<Record<string, any>>({})
 const healthForm = reactive<Record<string, any>>({})
+const disposalForm = reactive<Record<string, any>>({})
 const endModeOptions = [
   { value: 'RETURN', label: '到期归还' },
   { value: 'BUYOUT', label: '到期买断（后续版本）', disabled: true },
@@ -240,6 +274,10 @@ const inspectionOptions = [
   { value: 'ATTENTION', label: '需关注' },
   { value: 'ABNORMAL', label: '异常' },
 ]
+const dispositionOptions = [
+  { value: 'SECOND_LIFE', label: '梯次利用' },
+  { value: 'SCRAP', label: '报废' },
+]
 const latestHealth = computed(() => healthRecords.value[0])
 const batteryOptions = computed(() => serials.value
   .filter((item) => item.status === 'IN_STOCK' && (item.categoryCode?.toUpperCase().startsWith('BATTERY')
@@ -250,6 +288,7 @@ const columns = [
   { title: '客户', key: 'customerName', dataIndex: 'customerName', width: 180 },
   { title: '电池 SN', key: 'serialNo', dataIndex: 'serialNo', width: 180 },
   { title: '商品', key: 'productName', dataIndex: 'productName', width: 180 },
+  { title: '电池状态', key: 'serialStatus', width: 110, align: 'center' },
   { title: '租期', key: 'period', width: 210 },
   { title: '月租', key: 'amount', width: 130, align: 'right' },
   { title: '押金余额', key: 'deposit', width: 130, align: 'right' },
@@ -276,6 +315,12 @@ function healthResultLabel(value?: LeaseInspectionResult) {
 }
 function healthResultColor(value?: LeaseInspectionResult) {
   return value === 'NORMAL' ? 'green' : value === 'ATTENTION' ? 'orange' : value === 'ABNORMAL' ? 'red' : 'default'
+}
+function dispositionLabel(value?: LeaseDispositionType) {
+  return ({ SECOND_LIFE: '梯次利用', SCRAP: '报废' } as Record<string, string>)[value || ''] || value || '-'
+}
+function serialStatusLabel(value?: string) {
+  return SERIAL_STATUS_LABELS[value as keyof typeof SERIAL_STATUS_LABELS] || value || '-'
 }
 function openCreate() {
   Object.keys(form).forEach((key) => delete form[key])
@@ -330,6 +375,49 @@ async function saveHealth() {
     Object.assign(healthForm, { cycleCount: 0, mileageKm: 0, inspectionResult: 'NORMAL', remark: '' })
     message.success('健康检测已登记')
   } catch (error) { message.error((error as Error).message) } finally { healthSaving.value = false }
+}
+async function openDisposal(record: LeaseContract) {
+  disposalCurrent.value = record
+  disposalHistory.value = []
+  Object.assign(disposalForm, {
+    dispositionType: 'SCRAP', disposalDate: dayjs(), sohPercent: 100,
+    destination: '', reason: '', remark: '',
+  })
+  disposalOpen.value = true
+  try {
+    const [history, health] = await Promise.all([
+      leaseApi.disposals(record.id),
+      leaseApi.healthRecords(record.id),
+    ])
+    disposalHistory.value = history
+    if (health.length) disposalForm.sohPercent = health[0].sohPercent
+  } catch (error) { message.error((error as Error).message) }
+}
+async function submitDisposal() {
+  if (!disposalCurrent.value || !disposalForm.disposalDate || disposalForm.sohPercent == null
+      || !disposalForm.reason) {
+    message.warning('请填写处置日期、SOH 和处置原因'); return
+  }
+  if (disposalForm.dispositionType === 'SECOND_LIFE' && !disposalForm.destination) {
+    message.warning('梯次利用请填写去向或用途'); return
+  }
+  disposalSaving.value = true
+  try {
+    await leaseApi.retireAsset(disposalCurrent.value.serialId, {
+      sohPercent: Number(disposalForm.sohPercent),
+      dispositionType: disposalForm.dispositionType as LeaseDispositionType,
+      disposalDate: (disposalForm.disposalDate as Dayjs).format('YYYY-MM-DD'),
+      destination: disposalForm.destination,
+      reason: disposalForm.reason,
+      remark: disposalForm.remark,
+    })
+    await reload()
+    const updated = rows.value.find((item) => item.id === disposalCurrent.value?.id)
+    if (updated) { disposalCurrent.value = updated; current.value = updated }
+    disposalHistory.value = await leaseApi.disposals(disposalCurrent.value!.id)
+    disposalOpen.value = false
+    message.success('电池退役处置已完成，资产已退出可售库存')
+  } catch (error) { message.error((error as Error).message) } finally { disposalSaving.value = false }
 }
 function syncUpdatedContract(updated: LeaseContract) {
   const index = rows.value.findIndex((item) => item.id === updated.id)
