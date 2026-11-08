@@ -9,13 +9,22 @@
           <div class="brand-subtitle">整车 · 动力电池 · 其他产品</div>
         </div>
       </div>
+      <div class="scope-switcher">
+        <div class="scope-title">业务视图</div>
+        <a-segmented v-model:value="businessView" :options="businessViewOptions" block
+                     @change="handleBusinessViewChange" />
+        <div class="scope-hint">仅筛选采购、库存和销售菜单</div>
+      </div>
       <a-menu :open-keys="openKeys" theme="dark" mode="inline" :selected-keys="selectedKeys"
               @click="handleMenuClick" @openChange="handleMenuOpenChange">
         <a-menu-item key="/dashboard"><template #icon><DashboardOutlined /></template>工作台</a-menu-item>
         <a-sub-menu v-for="group in visibleGroups" :key="group.key">
           <template #icon><component :is="groupIcons[group.key]" /></template>
           <template #title>{{ group.title }}</template>
-          <a-menu-item v-for="item in group.items" :key="item.path">{{ item.title }}</a-menu-item>
+          <a-menu-item-group v-for="section in group.sections" :key="`${group.key}-${section.key}`"
+                             :title="section.title">
+            <a-menu-item v-for="item in section.items" :key="item.path">{{ item.title }}</a-menu-item>
+          </a-menu-item-group>
         </a-sub-menu>
         <a-sub-menu v-if="auth.can('USER_MANAGE') || auth.can('IVS_READ')" key="system">
           <template #icon><SettingOutlined /></template>
@@ -44,7 +53,7 @@
           <a-badge :count="unreadNotificationCount" :overflow-count="99">
             <a-button type="text" title="站内通知" @click="openNotifications"><BellOutlined /></a-button>
           </a-badge>
-          <a-tag color="blue">M5 完整性与上线</a-tag>
+          <a-tag color="blue">{{ businessViewLabel }}</a-tag>
           <a-dropdown>
             <a-button type="text"><template #icon><UserOutlined /></template>{{ auth.user?.displayName || auth.user?.username }}</a-button>
             <template #overlay>
@@ -128,10 +137,21 @@ import { authApi } from './api/auth'
 import { notificationApi } from './api/approval'
 import { hideablePages, menuGroups, pageTitles } from './router'
 import type { NotificationItem } from './types/approval'
+import type { BusinessScope } from './utils/businessScope'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+type BusinessView = BusinessScope | 'ALL'
+const businessView = ref<BusinessView>('ALL')
+const businessViewOptions = [
+  { label: '整车', value: 'VEHICLE' },
+  { label: '动力电池', value: 'BATTERY' },
+  { label: '全部', value: 'ALL' },
+]
+const scopeAwareGroupKeys = new Set(['procurement', 'inventory', 'sales'])
+const allMenuItems = menuGroups.flatMap((group) => group.sections.flatMap((section) =>
+  section.items.map((item) => ({ ...item, groupKey: group.key }))))
 
 const groupIcons: Record<string, unknown> = {
   masterdata: AppstoreOutlined,
@@ -148,16 +168,56 @@ const isLogin = computed(() => route.path === '/login')
 const hiddenMenuPaths = ref<string[]>([])
 const moduleSettingsOpen = ref(false)
 const hiddenMenuStorageKey = computed(() => `ivs.hidden-menus.${auth.user?.username || 'anonymous'}`)
+const businessViewStorageKey = computed(() => `ivs.business-view.${auth.user?.username || 'anonymous'}`)
+const businessViewLabel = computed(() => ({
+  VEHICLE: '业务视图：整车', BATTERY: '业务视图：动力电池', ALL: '业务视图：全部功能',
+} as Record<BusinessView, string>)[businessView.value])
 const visibleHideablePages = computed(() => hideablePages.filter((page) =>
   !page.permission || auth.can(page.permission)))
 
+function matchesBusinessView(groupKey: string, scope?: BusinessScope) {
+  return !scopeAwareGroupKeys.has(groupKey)
+    || businessView.value === 'ALL'
+    || !scope
+    || scope === businessView.value
+}
+
+function loadBusinessView() {
+  if (typeof localStorage === 'undefined') return
+  const stored = localStorage.getItem(businessViewStorageKey.value)
+  businessView.value = stored === 'VEHICLE' || stored === 'BATTERY' || stored === 'ALL' ? stored : 'ALL'
+}
+
 const visibleGroups = computed(() => menuGroups
-  .map((group) => ({
-    ...group,
-    items: group.items.filter((item) => (!item.permission || auth.can(item.permission))
-      && !hiddenMenuPaths.value.includes(item.path)),
-  }))
-  .filter((group) => group.items.length > 0))
+  .map((group) => {
+    const sections = group.sections.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => (!item.permission || auth.can(item.permission))
+        && !hiddenMenuPaths.value.includes(item.path)
+        && matchesBusinessView(group.key, item.scope)),
+    })).filter((section) => section.items.length > 0)
+    return { ...group, sections }
+  })
+  .filter((group) => group.sections.length > 0))
+
+function firstVisiblePath(groupKey: string, view: BusinessView) {
+  const group = menuGroups.find((item) => item.key === groupKey)
+  if (!group || view === 'ALL') return undefined
+  for (const section of group.sections) {
+    const target = section.items.find((item) => (!item.scope || item.scope === view)
+      && (!item.permission || auth.can(item.permission)) && !hiddenMenuPaths.value.includes(item.path))
+    if (target) return target.path
+  }
+  return undefined
+}
+
+function handleBusinessViewChange(value: string | number) {
+  const next = String(value) as BusinessView
+  const current = allMenuItems.find((item) => route.path === item.path || route.path.startsWith(item.path + '/'))
+  if (!current?.scope || !scopeAwareGroupKeys.has(current.groupKey) || current.scope === next || next === 'ALL') return
+  const target = firstVisiblePath(current.groupKey, next)
+  if (target) router.push(target)
+}
 
 function loadHiddenMenus() {
   if (typeof localStorage === 'undefined') return
@@ -243,6 +303,10 @@ function formatNotificationTime(value: string) {
 }
 
 watch(hiddenMenuStorageKey, loadHiddenMenus, { immediate: true })
+watch(businessViewStorageKey, loadBusinessView, { immediate: true })
+watch(businessView, (value) => {
+  if (typeof localStorage !== 'undefined') localStorage.setItem(businessViewStorageKey.value, value)
+})
 onMounted(() => {
   loadHiddenMenus()
   loadNotifications()
@@ -259,10 +323,20 @@ function handleMenuOpenChange(keys: (string | number)[]) {
   openKeys.value = newlyOpened.length ? [newlyOpened[newlyOpened.length - 1]] : []
 }
 
+watch(() => route.path, (path) => {
+  const current = allMenuItems.find((item) => path === item.path || path.startsWith(item.path + '/'))
+  if (current?.scope && businessView.value !== 'ALL' && current.scope !== businessView.value) {
+    businessView.value = current.scope
+  }
+  const group = menuGroups.find((item) => item.sections.some((section) =>
+    section.items.some((page) => path === page.path || path.startsWith(page.path + '/'))))
+  if (group) openKeys.value = [group.key]
+}, { immediate: true })
+
 const selectedKeys = computed(() => {
   const path = route.path
   if (path.startsWith('/system/')) return [path]
-  const allPaths = menuGroups.flatMap((group) => group.items.map((item) => item.path))
+  const allPaths = allMenuItems.map((item) => item.path)
   const matched = allPaths
     .filter((item) => path === item || path.startsWith(item + '/'))
     .sort((a, b) => b.length - a.length)[0]
@@ -327,6 +401,13 @@ async function submitChangePassword() {
 .brand-mark { display: grid; width: 44px; height: 40px; place-items: center; border-radius: 12px; background: #1677ff; font-weight: 700; font-size: 13px; }
 .brand-title { font-size: 16px; font-weight: 700; }
 .brand-subtitle { margin-top: 3px; color: rgba(255, 255, 255, 0.55); font-size: 12px; }
+.scope-switcher { margin: 0 14px 12px; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); }
+.scope-title { margin-bottom: 8px; color: rgba(255, 255, 255, 0.65); font-size: 11px; letter-spacing: 0.08em; }
+.scope-hint { margin-top: 7px; color: rgba(255, 255, 255, 0.42); font-size: 11px; line-height: 1.4; }
+.scope-switcher :deep(.ant-segmented) { padding: 2px; background: rgba(0, 0, 0, 0.22); }
+.scope-switcher :deep(.ant-segmented-item) { color: rgba(255, 255, 255, 0.72); font-size: 12px; }
+.scope-switcher :deep(.ant-segmented-item-selected) { color: #1677ff; font-weight: 600; }
+.app-sider :deep(.ant-menu-item-group-title) { padding-top: 10px; padding-bottom: 2px; color: rgba(255, 255, 255, 0.38); font-size: 11px; }
 .app-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; padding: 0 28px; background: #fff; border-bottom: 1px solid #eef2f7; line-height: normal; }
 .app-header > :first-child { flex: 1; min-width: 0; }
 .app-header > .ant-space { flex-shrink: 0; }

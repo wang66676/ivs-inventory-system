@@ -57,9 +57,9 @@ const modulePages: MenuPage[] = [
   { path: '/sales/battery-deliveries', name: 'sales-delivery-battery', component: () => import('../views/sales/SalesDeliveryView.vue'), title: '电池出库发货', scope: 'BATTERY', description: '动力电池出库单：指定电池 SN、结转成本、生成应收。', permission: 'IVS_READ' },
   { path: '/sales/returns', name: 'sales-return', component: () => import('../views/sales/SalesReturnView.vue'), title: '整车销售退货', scope: 'VEHICLE', description: '整车退货回库、恢复可售或转维修。', permission: 'IVS_READ' },
   { path: '/sales/battery-returns', name: 'sales-return-battery', component: () => import('../views/sales/SalesReturnView.vue'), title: '电池销售退货', scope: 'BATTERY', description: '动力电池退货回库与应收冲减。', permission: 'IVS_READ' },
-  { path: '/sales/installments', name: 'installment-plan', component: () => import('../views/sales/InstallmentPlanView.vue'), title: '分期收款', description: '以租代售的分期计划、首付、期次、逾期与所有权转移。', permission: 'IVS_FINANCE_READ' },
-  { path: '/sales/leases', name: 'battery-lease', component: () => import('../views/sales/LeaseView.vue'), title: '电池租赁', description: '二期：电池租赁资产池、租赁合同与月租应收。', permission: 'IVS_LEASE_MANAGE' },
-  { path: '/sales/lease-assets', name: 'lease-asset-report', component: () => import('../views/sales/LeaseAssetReportView.vue'), title: '租赁资产报表', description: '纯电池租赁的租金、押金和电池健康经营报表。', permission: 'IVS_LEASE_MANAGE' },
+  { path: '/sales/installments', name: 'installment-plan', component: () => import('../views/sales/InstallmentPlanView.vue'), title: '分期收款', scope: 'VEHICLE', description: '以租代售的分期计划、首付、期次、逾期与所有权转移。', permission: 'IVS_FINANCE_READ' },
+  { path: '/sales/leases', name: 'battery-lease', component: () => import('../views/sales/LeaseView.vue'), title: '电池租赁', scope: 'BATTERY', description: '二期：电池租赁资产池、租赁合同与月租应收。', permission: 'IVS_LEASE_MANAGE' },
+  { path: '/sales/lease-assets', name: 'lease-asset-report', component: () => import('../views/sales/LeaseAssetReportView.vue'), title: '租赁资产报表', scope: 'BATTERY', description: '纯电池租赁的租金、押金和电池健康经营报表。', permission: 'IVS_LEASE_MANAGE' },
   { path: '/sales/receivables', name: 'receivable', component: () => import('../views/sales/ReceivableView.vue'), title: '应收管理', description: '应收台账、账龄与到期管理。', permission: 'IVS_FINANCE_READ' },
   { path: '/sales/receipts', name: 'receipt', component: () => import('../views/sales/ReceiptView.vue'), title: '收款管理', description: '收款登记与核销（一收多单、一单多收）。', permission: 'IVS_FINANCE_READ' },
 
@@ -93,15 +93,38 @@ const modulePages: MenuPage[] = [
   { path: '/reports/stock-funds', name: 'report-stock-funds', component: () => import('../views/reports/StockFundsView.vue'), title: '库存资金占用', description: '库存资金占用与周转分析。', permission: 'IVS_FINANCE_READ' },
 ]
 
+const pagesFor = (prefix: string) => modulePages.filter((page) => page.path.startsWith(prefix))
+
+const scopeSections = (prefix: string, vehicleTitle: string, batteryTitle: string, sharedTitle: string) => {
+  const pages = pagesFor(prefix)
+  return [
+    { key: 'vehicle', title: vehicleTitle, items: pages.filter((page) => page.scope === 'VEHICLE') },
+    { key: 'battery', title: batteryTitle, items: pages.filter((page) => page.scope === 'BATTERY') },
+    { key: 'shared', title: sharedTitle, items: pages.filter((page) => !page.scope) },
+  ].filter((section) => section.items.length > 0)
+}
+
 export const menuGroups = [
-  { key: 'masterdata', title: '主数据', items: modulePages.filter((p) => p.path.startsWith('/masterdata/')) },
-  { key: 'procurement', title: '采购', items: modulePages.filter((p) => p.path.startsWith('/procurement/')) },
-  { key: 'inventory', title: '库存', items: modulePages.filter((p) => p.path.startsWith('/inventory/')) },
-  { key: 'sales', title: '销售', items: modulePages.filter((p) => p.path.startsWith('/sales/')) },
-  { key: 'retail', title: '实销', items: modulePages.filter((p) => p.path.startsWith('/retail/')) },
-  { key: 'policy', title: '政策与返利', items: modulePages.filter((p) => p.path.startsWith('/policy/')) },
-  { key: 'billing', title: '票据资金', items: modulePages.filter((p) => p.path.startsWith('/billing/')) },
-  { key: 'reports', title: '报表', items: modulePages.filter((p) => p.path.startsWith('/reports/')) },
+  {
+    key: 'masterdata', title: '主数据',
+    sections: [{ key: 'all', title: '基础档案', items: pagesFor('/masterdata/') }],
+  },
+  {
+    key: 'procurement', title: '采购',
+    sections: scopeSections('/procurement/', '整车业务', '动力电池业务', '采购协同'),
+  },
+  {
+    key: 'inventory', title: '库存',
+    sections: scopeSections('/inventory/', '整车库存', '动力电池库存', '库存总览与作业'),
+  },
+  {
+    key: 'sales', title: '销售',
+    sections: scopeSections('/sales/', '整车销售', '动力电池销售', '财务结算'),
+  },
+  { key: 'retail', title: '实销', sections: [{ key: 'all', title: '实销业务', items: pagesFor('/retail/') }] },
+  { key: 'policy', title: '政策与返利', sections: [{ key: 'all', title: '政策与兑现', items: pagesFor('/policy/') }] },
+  { key: 'billing', title: '票据资金', sections: [{ key: 'all', title: '票据与资金', items: pagesFor('/billing/') }] },
+  { key: 'reports', title: '报表', sections: [{ key: 'all', title: '经营报表', items: pagesFor('/reports/') }] },
 ]
 
 export const hideablePages = modulePages.filter((page) => page.hideable)
