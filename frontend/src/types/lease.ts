@@ -74,6 +74,73 @@ export interface LeaseEndCommand {
   reason?: string
 }
 
+export type LeaseInspectionResult = 'NORMAL' | 'ATTENTION' | 'ABNORMAL'
+
+export interface LeaseHealthRecord {
+  id: string
+  recordDate: string
+  sohPercent: number
+  cycleCount: number
+  mileageKm: number
+  inspectionResult: LeaseInspectionResult
+  inspector?: string
+  remark?: string
+  createdAt: string
+}
+
+export interface LeaseHealthCommand {
+  recordDate: string
+  sohPercent: number
+  cycleCount: number
+  mileageKm: number
+  inspectionResult: LeaseInspectionResult
+  inspector?: string
+  remark?: string
+}
+
+export interface LeaseAssetReportSummary {
+  totalContracts: number
+  activeContracts: number
+  attentionAssets: number
+  activeMonthlyRent: number
+  generatedRent: number
+  receivedRent: number
+  outstandingRent: number
+  depositAvailable: number
+}
+
+export interface LeaseAssetReportRow {
+  contractId: string
+  contractNo: string
+  customerName: string
+  serialNo: string
+  productName: string
+  status: LeaseStatus
+  startDate: string
+  endDate: string
+  monthlyFee: number
+  settlementDate?: string
+  generatedRent: number
+  receivedRent: number
+  outstandingRent: number
+  depositExpected: number
+  depositReceived: number
+  depositApplied: number
+  depositRefunded: number
+  depositAvailable: number
+  latestSohPercent?: number
+  latestCycleCount?: number
+  latestMileageKm?: number
+  latestInspectionResult?: LeaseInspectionResult
+  latestInspectionDate?: string
+}
+
+export interface LeaseAssetReport {
+  generatedAt: string
+  summary: LeaseAssetReportSummary
+  rows: LeaseAssetReportRow[]
+}
+
 export interface LeaseDueGenerationResult {
   throughDate: string
   activeContracts: number

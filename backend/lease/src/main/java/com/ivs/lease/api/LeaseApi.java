@@ -1,6 +1,7 @@
 package com.ivs.lease.api;
 
 import com.ivs.lease.LeaseContract;
+import com.ivs.lease.LeaseBatteryHealth;
 import com.ivs.lease.LeaseDepositTransaction;
 import com.ivs.lease.LeaseMasterDataPort;
 import com.ivs.lease.LeaseOwnershipAtEnd;
@@ -35,6 +36,41 @@ public final class LeaseApi {
     }
 
     public record EndLeaseCommand(LocalDate settlementDate, boolean applyDeposit, String reason) {
+    }
+
+    public record HealthRecordCommand(LocalDate recordDate, BigDecimal sohPercent, Integer cycleCount,
+                                      BigDecimal mileageKm, String inspectionResult, String inspector, String remark) {
+    }
+
+    public record HealthRecordView(UUID id, LocalDate recordDate, BigDecimal sohPercent, int cycleCount,
+                                   BigDecimal mileageKm, String inspectionResult, String inspector,
+                                   String remark, Instant createdAt) {
+        public static HealthRecordView from(LeaseBatteryHealth record) {
+            return new HealthRecordView(record.getId(), record.getRecordDate(), record.getSohPercent(),
+                    record.getCycleCount(), record.getMileageKm(), record.getInspectionResult().name(),
+                    record.getInspector(), record.getRemark(), record.getCreatedAt());
+        }
+    }
+
+    public record LeaseAssetReportSummary(int totalContracts, int activeContracts, int attentionAssets,
+                                          BigDecimal activeMonthlyRent, BigDecimal generatedRent,
+                                          BigDecimal receivedRent, BigDecimal outstandingRent,
+                                          BigDecimal depositAvailable) {
+    }
+
+    public record LeaseAssetReportRow(UUID contractId, String contractNo, String customerName, String serialNo,
+                                      String productName, LeaseStatus status, LocalDate startDate,
+                                      LocalDate endDate, BigDecimal monthlyFee, LocalDate settlementDate,
+                                      BigDecimal generatedRent, BigDecimal receivedRent, BigDecimal outstandingRent,
+                                      BigDecimal depositExpected, BigDecimal depositReceived,
+                                      BigDecimal depositApplied, BigDecimal depositRefunded,
+                                      BigDecimal depositAvailable, BigDecimal latestSohPercent,
+                                      Integer latestCycleCount, BigDecimal latestMileageKm,
+                                      String latestInspectionResult, LocalDate latestInspectionDate) {
+    }
+
+    public record LeaseAssetReportView(Instant generatedAt, LeaseAssetReportSummary summary,
+                                       List<LeaseAssetReportRow> rows) {
     }
 
     public record DepositSummary(BigDecimal expected, BigDecimal received, BigDecimal applied,

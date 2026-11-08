@@ -26,6 +26,7 @@
             <a-space wrap>
               <a-button size="small" @click="openDetail(record)">月租计划</a-button>
               <a-button size="small" @click="openDeposit(record)">押金台账</a-button>
+              <a-button size="small" @click="openHealth(record)">健康档案</a-button>
               <a-button v-if="canManage && record.status === 'ACTIVE'" size="small" type="primary" @click="generateDue(record)">生成到期应收</a-button>
               <a-button v-if="canManage && record.status === 'ACTIVE' && record.ownershipAtEnd === 'RETURN'" size="small" danger @click="openEnd(record)">提前归还/结算</a-button>
             </a-space>
@@ -96,6 +97,40 @@
       </a-table>
     </a-modal>
 
+    <a-modal v-model:open="healthOpen" :title="`电池健康档案 · ${healthCurrent?.serialNo || ''}`"
+             footer="null" width="1040px">
+      <a-descriptions bordered :column="4" size="small" style="margin-bottom:14px">
+        <a-descriptions-item label="最新 SOH">{{ latestHealth ? `${latestHealth.sohPercent}%` : '-' }}</a-descriptions-item>
+        <a-descriptions-item label="循环次数">{{ latestHealth?.cycleCount ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="累计里程">{{ latestHealth ? `${latestHealth.mileageKm} km` : '-' }}</a-descriptions-item>
+        <a-descriptions-item label="检测结论">
+          <a-tag :color="healthResultColor(latestHealth?.inspectionResult)">{{ healthResultLabel(latestHealth?.inspectionResult) }}</a-tag>
+        </a-descriptions-item>
+      </a-descriptions>
+      <a-space wrap style="margin-bottom:14px">
+        <a-date-picker v-model:value="healthForm.recordDate" style="width:140px" />
+        <a-input-number v-model:value="healthForm.sohPercent" :min="0" :max="100" :precision="2"
+                        addon-after="%" placeholder="SOH" style="width:130px" />
+        <a-input-number v-model:value="healthForm.cycleCount" :min="0" :precision="0"
+                        placeholder="循环次数" style="width:120px" />
+        <a-input-number v-model:value="healthForm.mileageKm" :min="0" :precision="2"
+                        addon-after="km" placeholder="累计里程" style="width:150px" />
+        <a-select v-model:value="healthForm.inspectionResult" :options="inspectionOptions" style="width:120px" />
+        <a-input v-model:value="healthForm.inspector" placeholder="检测人" style="width:120px" />
+        <a-input v-model:value="healthForm.remark" placeholder="检测备注" style="width:180px" />
+        <a-button type="primary" :loading="healthSaving" @click="saveHealth">登记检测</a-button>
+      </a-space>
+      <a-table :data-source="healthRecords" row-key="id" size="small" :pagination="false">
+        <a-table-column title="检测日期" data-index="recordDate" :width="120" />
+        <a-table-column title="SOH" :width="100"><template #default="{ record }">{{ record.sohPercent }}%</template></a-table-column>
+        <a-table-column title="循环次数" data-index="cycleCount" :width="100" align="right" />
+        <a-table-column title="累计里程" :width="130" align="right"><template #default="{ record }">{{ record.mileageKm }} km</template></a-table-column>
+        <a-table-column title="结论" :width="100"><template #default="{ record }"><a-tag :color="healthResultColor(record.inspectionResult)">{{ healthResultLabel(record.inspectionResult) }}</a-tag></template></a-table-column>
+        <a-table-column title="检测人" data-index="inspector" :width="100" />
+        <a-table-column title="备注" data-index="remark" />
+      </a-table>
+    </a-modal>
+
     <a-modal v-model:open="detailOpen" :title="`月租计划 · ${current?.contractNo || ''}`" footer="null" width="980px">
       <a-descriptions bordered :column="3" size="small" style="margin-bottom:14px">
         <a-descriptions-item label="客户">{{ current?.customerName }}</a-descriptions-item>
@@ -124,7 +159,9 @@ import { message } from 'ant-design-vue'
 import { leaseApi } from '../../api/lease'
 import { customerApi, serialApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
-import type { LeaseContract, LeaseOwnershipAtEnd, LeaseStatus } from '../../types/lease'
+import type {
+  LeaseContract, LeaseHealthRecord, LeaseInspectionResult, LeaseOwnershipAtEnd, LeaseStatus,
+} from '../../types/lease'
 import type { ProductSerial } from '../../types/masterdata'
 
 const auth = useAuthStore()
@@ -136,15 +173,20 @@ const formOpen = ref(false)
 const detailOpen = ref(false)
 const depositOpen = ref(false)
 const endOpen = ref(false)
+const healthOpen = ref(false)
 const saving = ref(false)
 const depositSaving = ref(false)
 const endSaving = ref(false)
+const healthSaving = ref(false)
 const current = ref<LeaseContract>()
 const depositCurrent = ref<LeaseContract>()
 const endCurrent = ref<LeaseContract>()
+const healthCurrent = ref<LeaseContract>()
+const healthRecords = ref<LeaseHealthRecord[]>([])
 const form = reactive<Record<string, any>>({})
 const depositForm = reactive<Record<string, any>>({})
 const endForm = reactive<Record<string, any>>({})
+const healthForm = reactive<Record<string, any>>({})
 const endModeOptions = [
   { value: 'RETURN', label: '到期归还' },
   { value: 'BUYOUT', label: '到期买断（后续版本）', disabled: true },
@@ -156,6 +198,12 @@ const depositMethodOptions = [
   { value: 'ACCEPTANCE_BILL', label: '承兑汇票' },
   { value: 'OTHER', label: '其他' },
 ]
+const inspectionOptions = [
+  { value: 'NORMAL', label: '正常' },
+  { value: 'ATTENTION', label: '需关注' },
+  { value: 'ABNORMAL', label: '异常' },
+]
+const latestHealth = computed(() => healthRecords.value[0])
 const batteryOptions = computed(() => serials.value
   .filter((item) => item.status === 'IN_STOCK' && (item.categoryCode?.toUpperCase().startsWith('BATTERY')
     || item.categoryName?.includes('电池')))
@@ -186,6 +234,12 @@ function depositTypeLabel(value: string) { return ({ COLLECT: '收取', APPLY_RE
 function depositMethodLabel(value?: string) {
   return ({ BANK_TRANSFER: '银行转账', CASH: '现金', ACCEPTANCE_BILL: '承兑汇票', DEPOSIT_OFFSET: '押金抵扣', OTHER: '其他' } as Record<string, string>)[value || ''] || value || '-'
 }
+function healthResultLabel(value?: LeaseInspectionResult) {
+  return ({ NORMAL: '正常', ATTENTION: '需关注', ABNORMAL: '异常' } as Record<string, string>)[value || ''] || '-'
+}
+function healthResultColor(value?: LeaseInspectionResult) {
+  return value === 'NORMAL' ? 'green' : value === 'ATTENTION' ? 'orange' : value === 'ABNORMAL' ? 'red' : 'default'
+}
 function openCreate() {
   Object.keys(form).forEach((key) => delete form[key])
   Object.assign(form, { monthlyFee: 0, deposit: 0, ownershipAtEnd: 'RETURN', startDate: dayjs(), endDate: dayjs().add(12, 'month') })
@@ -210,6 +264,35 @@ function openDeposit(record: LeaseContract) {
   depositCurrent.value = record
   Object.assign(depositForm, { amount: 0, transactionDate: dayjs(), method: 'BANK_TRANSFER', remark: '' })
   depositOpen.value = true
+}
+async function openHealth(record: LeaseContract) {
+  healthCurrent.value = record
+  healthRecords.value = []
+  Object.assign(healthForm, {
+    recordDate: dayjs(), sohPercent: 100, cycleCount: 0, mileageKm: 0,
+    inspectionResult: 'NORMAL', inspector: '', remark: '',
+  })
+  healthOpen.value = true
+  try { healthRecords.value = await leaseApi.healthRecords(record.id) }
+  catch (error) { message.error((error as Error).message) }
+}
+async function saveHealth() {
+  if (!healthCurrent.value || healthForm.sohPercent == null) { message.warning('请填写 SOH'); return }
+  healthSaving.value = true
+  try {
+    await leaseApi.createHealthRecord(healthCurrent.value.id, {
+      recordDate: (healthForm.recordDate as Dayjs).format('YYYY-MM-DD'),
+      sohPercent: Number(healthForm.sohPercent),
+      cycleCount: Number(healthForm.cycleCount || 0),
+      mileageKm: Number(healthForm.mileageKm || 0),
+      inspectionResult: healthForm.inspectionResult as LeaseInspectionResult,
+      inspector: healthForm.inspector,
+      remark: healthForm.remark,
+    })
+    healthRecords.value = await leaseApi.healthRecords(healthCurrent.value.id)
+    Object.assign(healthForm, { cycleCount: 0, mileageKm: 0, inspectionResult: 'NORMAL', remark: '' })
+    message.success('健康检测已登记')
+  } catch (error) { message.error((error as Error).message) } finally { healthSaving.value = false }
 }
 function syncUpdatedContract(updated: LeaseContract) {
   const index = rows.value.findIndex((item) => item.id === updated.id)

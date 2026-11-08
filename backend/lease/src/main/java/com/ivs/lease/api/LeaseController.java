@@ -1,6 +1,7 @@
 package com.ivs.lease.api;
 
 import com.ivs.lease.LeaseApplicationService;
+import com.ivs.lease.LeaseHealthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,9 +22,11 @@ import java.util.UUID;
 @RequestMapping("/api/ivs/lease-contracts")
 public class LeaseController {
     private final LeaseApplicationService service;
+    private final LeaseHealthService healthService;
 
-    public LeaseController(LeaseApplicationService service) {
+    public LeaseController(LeaseApplicationService service, LeaseHealthService healthService) {
         this.service = service;
+        this.healthService = healthService;
     }
 
     @GetMapping
@@ -84,5 +87,18 @@ public class LeaseController {
     public LeaseApi.LeaseContractView refundDeposit(@PathVariable UUID id,
                                                     @Valid @RequestBody LeaseApi.DepositCommand command) {
         return service.refundDeposit(id, command);
+    }
+
+    @GetMapping("/{id}/health-records")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE') or hasAuthority('IVS_FINANCE_READ')")
+    public List<LeaseApi.HealthRecordView> listHealthRecords(@PathVariable UUID id) {
+        return healthService.list(id);
+    }
+
+    @PostMapping("/{id}/health-records")
+    @PreAuthorize("hasAuthority('IVS_LEASE_MANAGE')")
+    public LeaseApi.HealthRecordView createHealthRecord(@PathVariable UUID id,
+                                                        @Valid @RequestBody LeaseApi.HealthRecordCommand command) {
+        return healthService.create(id, command);
     }
 }

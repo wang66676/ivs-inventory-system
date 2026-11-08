@@ -1,6 +1,7 @@
 import { http } from './http'
 import type {
-  LeaseAutomationResult, LeaseContract, LeaseDepositCommand, LeaseDueGenerationResult, LeaseEndCommand,
+  LeaseAssetReport, LeaseAutomationResult, LeaseContract, LeaseDepositCommand, LeaseDueGenerationResult,
+  LeaseEndCommand, LeaseHealthCommand, LeaseHealthRecord,
 } from '../types/lease'
 
 export const leaseApi = {
@@ -21,4 +22,9 @@ export const leaseApi = {
     http.post<LeaseContract>(`/ivs/lease-contracts/${id}/deposits/collect`, body).then((r) => r.data),
   refundDeposit: (id: string, body: LeaseDepositCommand) =>
     http.post<LeaseContract>(`/ivs/lease-contracts/${id}/deposits/refund`, body).then((r) => r.data),
+  healthRecords: (id: string) =>
+    http.get<LeaseHealthRecord[]>(`/ivs/lease-contracts/${id}/health-records`).then((r) => r.data),
+  createHealthRecord: (id: string, body: LeaseHealthCommand) =>
+    http.post<LeaseHealthRecord>(`/ivs/lease-contracts/${id}/health-records`, body).then((r) => r.data),
+  assetReport: () => http.get<LeaseAssetReport>('/ivs/lease-assets/report').then((r) => r.data),
 }

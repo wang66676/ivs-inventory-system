@@ -242,6 +242,77 @@ class LeaseIntegrationTest {
         assertThat(overRefund.getBody()).containsEntry("code", "LEASE_DEPOSIT_INSUFFICIENT");
     }
 
+    @Test
+    void 电池健康档案汇总到租赁资产经营报表() {
+        AssetFixture fixture = inStockAsset("HEALTH", false);
+        LocalDate start = LocalDate.of(2026, 12, 1);
+        LeaseApi.LeaseContractView contract = createContract(fixture, start, start.plusMonths(3),
+                new BigDecimal("12000.00"), LeaseOwnershipAtEnd.RETURN);
+
+        LeaseApi.HealthRecordView normal = post(
+                "/api/ivs/lease-contracts/" + contract.id() + "/health-records", Map.of(
+                        "recordDate", "2027-01-15", "sohPercent", 96.5, "cycleCount", 100,
+                        "mileageKm", 15000, "inspectionResult", "NORMAL", "inspector", "检测员甲",
+                        "remark", "状态正常"), LeaseApi.HealthRecordView.class);
+        assertThat(normal.sohPercent()).isEqualByComparingTo("96.50");
+
+        LeaseApi.HealthRecordView latest = post(
+                "/api/ivs/lease-contracts/" + contract.id() + "/health-records", Map.of(
+                        "recordDate", "2027-02-15", "sohPercent", 90.25, "cycleCount", 130,
+                        "mileageKm", 22000, "inspectionResult", "ATTENTION", "inspector", "检测员乙",
+                        "remark", "建议缩短检测周期"), LeaseApi.HealthRecordView.class);
+        assertThat(latest.inspectionResult()).isEqualTo("ATTENTION");
+
+        ResponseEntity<Map> invalid = restTemplate.postForEntity(
+                "/api/ivs/lease-contracts/" + contract.id() + "/health-records", Map.of(
+                        "recordDate", "2027-02-16", "sohPercent", 101, "cycleCount", 131,
+                        "mileageKm", 22500, "inspectionResult", "NORMAL"), Map.class);
+        assertThat(invalid.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(invalid.getBody()).containsEntry("code", "LEASE_HEALTH_INVALID");
+
+        LeaseApi.HealthRecordView[] records = restTemplate.getForEntity(
+                "/api/ivs/lease-contracts/" + contract.id() + "/health-records",
+                LeaseApi.HealthRecordView[].class).getBody();
+        assertThat(records).isNotNull().hasSize(2);
+        assertThat(records[0].recordDate()).isEqualTo(LocalDate.of(2027, 2, 15));
+
+        LeaseApi.DueGenerationResult batch = post(
+                "/api/ivs/lease-contracts/generate-due-batch?throughDate=2027-02-15", Map.of(),
+                LeaseApi.DueGenerationResult.class);
+        assertThat(batch.generatedReceivables()).isEqualTo(2);
+        List<String> receivableIds = getContract(contract.id()).schedules().stream()
+                .filter(item -> item.receivableId() != null).map(item -> item.receivableId().toString()).toList();
+        ResponseEntity<Map> receipt = restTemplate.postForEntity("/api/ivs/receipts", Map.of(
+                "customerId", fixture.customer().id().toString(), "amount", 10000,
+                "method", PaymentMethod.BANK_TRANSFER.name(), "receivableIds", receivableIds), Map.class);
+        assertThat(receipt.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        LeaseApi.LeaseAssetReportView report = restTemplate.getForEntity(
+                "/api/ivs/lease-assets/report", LeaseApi.LeaseAssetReportView.class).getBody();
+        assertThat(report).isNotNull();
+        assertThat(report.generatedAt()).isNotNull();
+        assertThat(report.summary().totalContracts()).isEqualTo(1);
+        assertThat(report.summary().activeContracts()).isEqualTo(1);
+        assertThat(report.summary().attentionAssets()).isEqualTo(1);
+        assertThat(report.summary().activeMonthlyRent()).isEqualByComparingTo("12000.00");
+        assertThat(report.summary().generatedRent()).isEqualByComparingTo("24000.00");
+        assertThat(report.summary().receivedRent()).isEqualByComparingTo("10000.00");
+        assertThat(report.summary().outstandingRent()).isEqualByComparingTo("14000.00");
+        assertThat(report.summary().depositAvailable()).isEqualByComparingTo("0.00");
+        assertThat(report.rows()).hasSize(1);
+        LeaseApi.LeaseAssetReportRow row = report.rows().get(0);
+        assertThat(row.contractNo()).isEqualTo(contract.contractNo());
+        assertThat(row.customerName()).isEqualTo(fixture.customer().name());
+        assertThat(row.serialNo()).isEqualTo(fixture.serial().serialNo());
+        assertThat(row.latestSohPercent()).isEqualByComparingTo("90.25");
+        assertThat(row.latestCycleCount()).isEqualTo(130);
+        assertThat(row.latestMileageKm()).isEqualByComparingTo("22000.00");
+        assertThat(row.latestInspectionResult()).isEqualTo("ATTENTION");
+        assertThat(row.latestInspectionDate()).isEqualTo(LocalDate.of(2027, 2, 15));
+        assertThat(row.receivedRent()).isEqualByComparingTo("10000.00");
+        assertThat(row.outstandingRent()).isEqualByComparingTo("14000.00");
+    }
+
     private LeaseApi.LeaseContractView createContract(AssetFixture fixture, LocalDate start, LocalDate end,
                                                        BigDecimal monthlyFee, LeaseOwnershipAtEnd ownershipAtEnd) {
         return post("/api/ivs/lease-contracts", contractBody(fixture, start, end, monthlyFee, ownershipAtEnd),
