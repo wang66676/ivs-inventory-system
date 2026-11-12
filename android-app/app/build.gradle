@@ -1,7 +1,7 @@
 plugins { id 'com.android.application' }
 
-def appVersionName = System.getenv('APP_VERSION') ?: '1.9.6'
-def appVersionCode = (System.getenv('APP_VERSION_CODE') ?: '10906') as Integer
+def appVersionName = System.getenv('APP_VERSION') ?: '1.9.7'
+def appVersionCode = (System.getenv('APP_VERSION_CODE') ?: '10907') as Integer
 def serverUrl = System.getenv('IVS_SERVER_URL') ?: 'https://radio-together-placed-facilitate.trycloudflare.com/'
 
 android {
