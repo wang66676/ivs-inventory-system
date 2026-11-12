@@ -11,7 +11,7 @@
 
       <a-descriptions bordered :column="3" size="small" style="margin-bottom:16px">
         <a-descriptions-item label="当前版本">{{ currentVersion }}</a-descriptions-item>
-        <a-descriptions-item label="最新版本">{{ latestVersion || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="线上最新版本">{{ latestVersion || '-' }}</a-descriptions-item>
         <a-descriptions-item label="检查状态">{{ checkMessage }}</a-descriptions-item>
       </a-descriptions>
 
@@ -26,10 +26,9 @@
         </a-result>
 
         <template v-else-if="release">
-          <a-alert :type="updateAvailable ? 'warning' : 'success'" show-icon style="margin-bottom:16px"
-                   :message="updateAvailable ? `发现新版本 ${latestVersion}，可手动更新` : '当前已经是最新版本'" />
+          <a-alert :type="statusAlertType" show-icon style="margin-bottom:16px" :message="statusMessage" />
           <a-descriptions bordered :column="2" size="small" style="margin-bottom:16px">
-            <a-descriptions-item label="发布日期">{{ releaseDate }}</a-descriptions-item>
+            <a-descriptions-item label="线上最新发布日期">{{ releaseDate }}</a-descriptions-item>
             <a-descriptions-item label="版本说明">
               <div class="release-note">{{ release.body || '本次更新未提供详细说明' }}</div>
             </a-descriptions-item>
@@ -97,8 +96,18 @@ const error = ref('')
 const release = ref<GitHubRelease>()
 
 const latestVersion = computed(() => release.value?.tag_name?.replace(/^v/i, '') || '')
-const updateAvailable = computed(() => compareVersion(latestVersion.value, currentVersion) > 0)
-const checkMessage = computed(() => error.value ? '检查失败' : updateAvailable.value ? '有新版本' : '已是最新')
+const versionComparison = computed(() => compareVersion(latestVersion.value, currentVersion))
+const updateAvailable = computed(() => versionComparison.value > 0)
+const localVersionAhead = computed(() => versionComparison.value < 0)
+const checkMessage = computed(() => error.value ? '检查失败'
+  : updateAvailable.value ? '有新版本'
+    : localVersionAhead.value ? '当前版本高于线上发布' : '已是最新')
+const statusAlertType = computed(() => updateAvailable.value ? 'warning' : localVersionAhead.value ? 'error' : 'success')
+const statusMessage = computed(() => updateAvailable.value
+  ? `发现新版本 ${latestVersion.value}，可手动更新`
+  : localVersionAhead.value
+    ? `当前版本 ${currentVersion} 高于线上最新 Release ${latestVersion.value}，说明线上发布尚未完成或发布版本落后。`
+    : '当前已经是最新版本')
 const releaseDate = computed(() => release.value?.published_at
   ? dayjs(release.value.published_at).format('YYYY-MM-DD HH:mm') : '-')
 const windowsAsset = computed(() => release.value?.assets.find((asset) => /\.exe$/i.test(asset.name)))
