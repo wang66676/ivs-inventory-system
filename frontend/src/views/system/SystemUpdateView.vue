@@ -108,7 +108,8 @@ async function check() {
   loading.value = true
   error.value = ''
   try {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { Accept: 'application/vnd.github+json' },
     })
     if (!response.ok) {
@@ -136,7 +137,9 @@ function compareVersion(left: string, right: string) {
 }
 
 function reloadWeb() {
-  window.location.reload()
+  const url = new URL(window.location.href)
+  url.searchParams.set('_refresh', Date.now().toString())
+  window.location.replace(url.toString())
 }
 
 onMounted(check)
