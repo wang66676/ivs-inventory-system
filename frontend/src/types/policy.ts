@@ -218,6 +218,7 @@ export interface FundOffsetPreview {
 
 export interface FundOffsetLine {
   fundTxnId: string
+  sourceType?: string
   sourceNo?: string
   amount: number
 }

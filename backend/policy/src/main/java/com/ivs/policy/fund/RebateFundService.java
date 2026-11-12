@@ -199,13 +199,38 @@ public class RebateFundService {
         return new RebateFundApi.OffsetResult(order.getId(), offsetNo, applied, balanceAfter);
     }
 
-    /** 取消抵扣：回补子余额与入池记录可用额，并留痕。 */
+    @Transactional(readOnly = true)
+    public RebateFundApi.OffsetView getOffset(UUID offsetId) {
+        return toView(offsetRepository.findById(offsetId)
+                .orElseThrow(() -> new NotFoundException("抵扣单", offsetId)));
+    }
+
+    /**
+     * 取消抵扣：回补子余额与入池记录可用额，并留痕。
+     *
+     * <p>采购收货发起的抵扣必须由 app 层先恢复采购收货与应付，再调用
+     * {@link #cancelOffsetAfterProcurementRestore(UUID)}，禁止直接取消造成业务账不一致。</p>
+     */
     @Transactional
     public RebateFundApi.OffsetView cancelOffset(UUID offsetId) {
+        return cancelOffsetInternal(offsetId, false);
+    }
+
+    /** app 层已恢复采购收货与应付后，取消资金池抵扣。 */
+    @Transactional
+    public RebateFundApi.OffsetView cancelOffsetAfterProcurementRestore(UUID offsetId) {
+        return cancelOffsetInternal(offsetId, true);
+    }
+
+    private RebateFundApi.OffsetView cancelOffsetInternal(UUID offsetId, boolean procurementRestored) {
         RebateOffsetOrder order = offsetRepository.findById(offsetId)
                 .orElseThrow(() -> new NotFoundException("抵扣单", offsetId));
         if (order.getStatus() == OffsetStatus.CANCELLED) {
             return toView(order);
+        }
+        if (!procurementRestored && order.getPurchaseReceiptId() != null) {
+            throw new ConflictException("REBATE_OFFSET_REVERSAL_REQUIRES_WORKSPACE",
+                    "该抵扣关联采购收货，请在返利抵扣工作台取消，以同步恢复采购应付");
         }
         RebateFundPool pool = poolRepository.findById(order.getPoolId())
                 .orElseThrow(() -> new NotFoundException("返利资金池", order.getPoolId()));
@@ -244,9 +269,10 @@ public class RebateFundService {
     private RebateFundApi.OffsetView toView(RebateOffsetOrder order) {
         List<RebateFundApi.OffsetLineView> lines = new ArrayList<>();
         for (RebateOffsetLine line : offsetLineRepository.findByOffsetId(order.getId())) {
-            String sourceNo = txnRepository.findById(line.getFundTxnId())
-                    .map(RebateFundTxn::getSourceNo).orElse(null);
-            lines.add(new RebateFundApi.OffsetLineView(line.getFundTxnId(), sourceNo, line.getAmount()));
+            RebateFundTxn source = txnRepository.findById(line.getFundTxnId()).orElse(null);
+            lines.add(new RebateFundApi.OffsetLineView(line.getFundTxnId(),
+                    source == null ? null : source.getSourceType(),
+                    source == null ? null : source.getSourceNo(), line.getAmount()));
         }
         return RebateFundApi.OffsetView.from(order, lines);
     }

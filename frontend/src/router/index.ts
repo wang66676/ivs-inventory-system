@@ -34,7 +34,7 @@ const modulePages: MenuPage[] = [
   { path: '/procurement/battery-returns', name: 'purchase-return-battery', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '电池采购退货', scope: 'BATTERY', description: '动力电池采购退货与应付冲减。', permission: 'IVS_READ' },
   { path: '/procurement/invoices', name: 'purchase-invoice', component: () => import('../views/procurement/PurchaseInvoiceView.vue'), title: '进项发票', description: '厂家进项蓝字与红字发票；蓝字自动匹配供应商应付。', permission: 'IVS_FINANCE_READ' },
   { path: '/procurement/payables', name: 'supplier-payable', component: () => import('../views/procurement/PayableView.vue'), title: '供应商应付', description: '按收货单生成应付，支持发票匹配与付款核销。', permission: 'IVS_FINANCE_READ' },
-  { path: '/procurement/offsets', name: 'rebate-offset', title: '返利抵扣', description: '入库单确认时的返利抵扣单：按厂家分账、余额分批使用、无需审批。', permission: 'IVS_FUND_OFFSET' },
+  { path: '/procurement/offsets', name: 'rebate-offset', component: () => import('../views/procurement/RebateOffsetView.vue'), title: '返利抵扣', description: '返利抵扣工作台：按厂家查询抵扣单、追溯返利来源、联动采购订单并安全取消抵扣。', permission: 'IVS_FUND_OFFSET' },
 
   // 库存
   { path: '/inventory/dashboard', name: 'inventory-dashboard', component: () => import('../views/inventory/InventoryDashboardView.vue'), title: '库存看板', description: '按产品大项/仓库/品牌/状态与库龄分档汇总，含超期未实销预警。', permission: 'IVS_READ' },
