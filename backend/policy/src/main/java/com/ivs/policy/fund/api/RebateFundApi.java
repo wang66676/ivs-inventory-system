@@ -74,7 +74,7 @@ public final class RebateFundApi {
     public record OffsetResult(UUID offsetId, String offsetNo, BigDecimal appliedAmount, BigDecimal balanceAfter) {
     }
 
-    public record OffsetLineView(UUID fundTxnId, String sourceNo, BigDecimal amount) {
+    public record OffsetLineView(UUID fundTxnId, String sourceType, String sourceNo, BigDecimal amount) {
     }
 
     public record OffsetView(

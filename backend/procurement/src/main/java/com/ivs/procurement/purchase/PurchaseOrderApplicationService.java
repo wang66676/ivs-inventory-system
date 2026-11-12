@@ -433,6 +433,33 @@ public class PurchaseOrderApplicationService {
         return toReceiptView(receipt);
     }
 
+    /**
+     * 取消返利抵扣前恢复采购侧数据：收回收货单抵扣额，并恢复对应应付金额。
+     * 该操作由 app 层返利抵扣工作台统一编排，policy 模块不直接依赖采购模块。
+     */
+    @Transactional
+    public void restoreRebateOffset(UUID receiptId, BigDecimal amount) {
+        PurchaseReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new NotFoundException("收货单", receiptId));
+        if (receipt.getStatus() != ReceiptStatus.POSTED) {
+            throw new ConflictException("REBATE_OFFSET_RECEIPT_NOT_POSTED", "收货单尚未入库，不能取消返利抵扣");
+        }
+        BigDecimal restore = (amount == null ? BigDecimal.ZERO : amount).setScale(2, RoundingMode.HALF_UP);
+        if (restore.signum() <= 0 || receipt.getOffsetAmount().compareTo(restore) != 0) {
+            throw new ConflictException("REBATE_OFFSET_REVERSAL_AMOUNT_MISMATCH",
+                    "抵扣金额与收货单当前抵扣额不一致，请刷新后重试");
+        }
+        PurchaseOrder order = orderRepository.findById(receipt.getOrderId())
+                .orElseThrow(() -> new NotFoundException("采购单", receipt.getOrderId()));
+        BigDecimal receivedQuantity = receiptLineRepository.findByReceiptId(receiptId).stream()
+                .map(PurchaseReceiptLine::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        payableService.restoreRebateOffset(receipt.getSupplierId(), receipt.getOrderId(), order.getOrderNo(),
+                receipt.getId(), receipt.getReceiptNo(), receivedQuantity, restore);
+        receipt.applyOffset(receipt.getOffsetAmount().subtract(restore));
+        receiptRepository.save(receipt);
+    }
+
     /** 单个 VIN 收货后临时调整仓库，并同步库存台账与序列号档案。 */
     @Transactional
     public ProcurementApi.PurchaseReceiptView updateReceiptWarehouse(UUID receiptId, UUID lineId, UUID warehouseId) {

@@ -34,6 +34,28 @@ public class PayableService {
                         LocalDate.now().plusDays(30))));
     }
 
+    /** 取消返利抵扣时恢复采购收货对应的应付。 */
+    @Transactional
+    public void restoreRebateOffset(UUID supplierId, UUID orderId, String orderNo, UUID receiptId,
+                                    String receiptNo, BigDecimal purchaseQuantity, BigDecimal offsetAmount) {
+        BigDecimal amount = offsetAmount == null ? BigDecimal.ZERO
+                : offsetAmount.setScale(2, java.math.RoundingMode.HALF_UP);
+        if (amount.signum() <= 0) {
+            throw new ConflictException("REBATE_OFFSET_REVERSAL_AMOUNT_INVALID", "恢复抵扣金额必须大于 0");
+        }
+        Payable payable = repository.findByPurchaseReceiptId(receiptId).orElse(null);
+        if (payable == null) {
+            createFromReceipt(supplierId, orderId, orderNo, receiptId, receiptNo, purchaseQuantity, amount);
+            return;
+        }
+        try {
+            payable.restoreRebateOffset(amount);
+        } catch (IllegalStateException | IllegalArgumentException exception) {
+            throw new ConflictException("REBATE_OFFSET_REVERSAL_BLOCKED", exception.getMessage());
+        }
+        repository.save(payable);
+    }
+
     @Transactional(readOnly = true)
     public List<PayableApi.PayableView> list(UUID supplierId, PayableStatus status) {
         List<Payable> rows = supplierId == null ? repository.findAllByOrderByCreatedAtDesc()

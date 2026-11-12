@@ -5,6 +5,7 @@ import com.ivs.masterdata.WarehouseType;
 import com.ivs.masterdata.api.MasterdataApi;
 import com.ivs.masterdata.product.TrackingMode;
 import com.ivs.policy.fund.api.RebateFundApi;
+import com.ivs.procurement.payable.api.PayableApi;
 import com.ivs.procurement.purchase.api.ProcurementApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -140,7 +141,7 @@ class RebateFundIntegrationTest {
         RebateFundApi.OffsetView offset = restTemplate.getForEntity(
                 "/api/ivs/rebate-fund-pool/offsets?supplierId=" + supplierA, RebateFundApi.OffsetView[].class)
                 .getBody()[0];
-        RebateFundApi.OffsetView cancelled = post("/api/ivs/rebate-fund-pool/offsets/" + offset.id() + "/cancel",
+        RebateFundApi.OffsetView cancelled = post("/api/ivs/rebate-offset-workspace/" + offset.id() + "/cancel",
                 Map.of(), RebateFundApi.OffsetView.class);
 
         assertThat(cancelled.status().name()).isEqualTo("CANCELLED");
@@ -148,6 +149,46 @@ class RebateFundIntegrationTest {
         assertThat(txns(supplierA).stream()
                 .filter(txn -> txn.direction().name().equals("IN") && txn.remainingAmount().signum() > 0)
                 .findFirst().orElseThrow().remainingAmount()).isEqualByComparingTo("30000.00");
+
+        ProcurementApi.PurchaseReceiptView restoredReceipt = restTemplate.getForEntity(
+                "/api/ivs/purchase-receipts/" + receipt.id(), ProcurementApi.PurchaseReceiptView.class).getBody();
+        assertThat(restoredReceipt).isNotNull();
+        assertThat(restoredReceipt.offsetAmount()).isEqualByComparingTo("0.00");
+        assertThat(restoredReceipt.netAmount()).isEqualByComparingTo("20000.00");
+
+        PayableApi.PayableView[] payables = restTemplate.getForEntity(
+                "/api/ivs/payables?supplierId=" + supplierA, PayableApi.PayableView[].class).getBody();
+        assertThat(payables).isNotNull().hasSize(1);
+        assertThat(payables[0].amount()).isEqualByComparingTo("20000.00");
+        assertThat(payables[0].outstanding()).isEqualByComparingTo("20000.00");
+    }
+
+    @Test
+    void 应付已付款时禁止取消返利抵扣() {
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
+        UUID warehouse = createWarehouse("WH-F5", "整车仓");
+        UUID product = createQuantityProduct("配件", warehouse);
+        credit(supplierA, new BigDecimal("10000"), "OEM_REBATE", "REB-2026-10-PAID");
+        UUID creditTxnId = txns(supplierA).get(0).id();
+
+        ProcurementApi.PurchaseReceiptView receipt = receive(supplierA, warehouse, product,
+                new BigDecimal("10"), new BigDecimal("2000"), List.of(creditTxnId));
+        PayableApi.PayableView payable = restTemplate.getForEntity(
+                "/api/ivs/payables?supplierId=" + supplierA, PayableApi.PayableView[].class).getBody()[0];
+        post("/api/ivs/payables/" + payable.id() + "/pay", Map.of("amount", 100), PayableApi.PayableView.class);
+
+        RebateFundApi.OffsetView offset = restTemplate.getForEntity(
+                "/api/ivs/rebate-fund-pool/offsets?supplierId=" + supplierA, RebateFundApi.OffsetView[].class)
+                .getBody()[0];
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                "/api/ivs/rebate-offset-workspace/" + offset.id() + "/cancel", Map.of(), Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code")).isEqualTo("REBATE_OFFSET_REVERSAL_BLOCKED");
+        assertThat(factoryBalance(supplierA)).isEqualByComparingTo("0.00");
+        ProcurementApi.PurchaseReceiptView unchanged = restTemplate.getForEntity(
+                "/api/ivs/purchase-receipts/" + receipt.id(), ProcurementApi.PurchaseReceiptView.class).getBody();
+        assertThat(unchanged.offsetAmount()).isEqualByComparingTo("10000.00");
     }
 
     @Test

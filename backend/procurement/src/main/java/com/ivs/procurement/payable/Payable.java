@@ -99,6 +99,22 @@ public class Payable {
         refreshStatus();
     }
 
+    /** 取消返利抵扣后恢复应付金额；已付款或已匹配进项发票时禁止直接回退。 */
+    public void restoreRebateOffset(BigDecimal value) {
+        BigDecimal offset = money(value);
+        if (offset.signum() <= 0) {
+            throw new IllegalArgumentException("恢复抵扣金额必须大于 0");
+        }
+        if (paidAmount.signum() > 0) {
+            throw new IllegalStateException("该应付已发生付款，不能取消返利抵扣");
+        }
+        if (invoiceMatchedAmount.signum() > 0) {
+            throw new IllegalStateException("该应付已匹配进项发票，不能取消返利抵扣");
+        }
+        this.amount = money(amount.add(offset));
+        refreshStatus();
+    }
+
     public void updateRemark(String value) {
         this.remark = value == null || value.isBlank() ? null : value.trim();
     }

@@ -39,7 +39,7 @@ public class RebateFundController {
     }
 
     @GetMapping("/offsets")
-    @PreAuthorize("hasAuthority('IVS_FUND_POOL_VIEW')")
+    @PreAuthorize("hasAnyAuthority('IVS_FUND_POOL_VIEW', 'IVS_FUND_OFFSET')")
     public List<RebateFundApi.OffsetView> offsets(@RequestParam(required = false) UUID supplierId) {
         return service.offsets(supplierId);
     }
@@ -74,6 +74,7 @@ public class RebateFundController {
                 request.receiptNo(), request.maxAmount(), request.fundTxnIds());
     }
 
+    /** 兼容独立抵扣；关联采购收货的抵扣必须走 app 层返利抵扣工作台。 */
     @PostMapping("/offsets/{offsetId}/cancel")
     @PreAuthorize("hasAuthority('IVS_FUND_OFFSET')")
     public RebateFundApi.OffsetView cancel(@PathVariable("offsetId") UUID offsetId) {
