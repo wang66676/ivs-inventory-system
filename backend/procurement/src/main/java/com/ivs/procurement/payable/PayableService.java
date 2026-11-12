@@ -26,19 +26,23 @@ public class PayableService {
 
     @Transactional
     public Payable createFromReceipt(UUID supplierId, UUID orderId, String orderNo, UUID receiptId,
-                                     String receiptNo, BigDecimal amount) {
+                                     String receiptNo, BigDecimal purchaseQuantity, BigDecimal amount) {
         if (amount == null || amount.signum() <= 0) return null;
         return repository.findByPurchaseReceiptId(receiptId).orElseGet(() -> repository.save(
                 Payable.fromReceipt("AP-%06d".formatted(repository.nextPayableSequence()), supplierId,
-                        orderId, receiptId, orderNo, receiptNo, amount, LocalDate.now().plusDays(30))));
+                        orderId, receiptId, orderNo, receiptNo, purchaseQuantity, amount,
+                        LocalDate.now().plusDays(30))));
     }
 
     @Transactional(readOnly = true)
-    public List<PayableApi.PayableView> list(UUID supplierId) {
+    public List<PayableApi.PayableView> list(UUID supplierId, PayableStatus status) {
         List<Payable> rows = supplierId == null ? repository.findAllByOrderByCreatedAtDesc()
                 : repository.findBySupplierIdOrderByDueDateAscCreatedAtAsc(supplierId);
-        return rows.stream().map(row -> PayableApi.PayableView.from(row,
-                masterData.requireSupplier(row.getSupplierId()).name())).toList();
+        return rows.stream()
+                .filter(row -> status == null || row.getStatus() == status)
+                .map(row -> PayableApi.PayableView.from(row,
+                        masterData.requireSupplier(row.getSupplierId()).name()))
+                .toList();
     }
 
     @Transactional

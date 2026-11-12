@@ -42,6 +42,8 @@ final class TestDatabaseCleaner {
         // 销售与结算（M3）
         jdbcTemplate.execute("delete from ivs.receipt_allocation");
         jdbcTemplate.execute("delete from ivs.receipt");
+        jdbcTemplate.execute("delete from ivs.installment_schedule");
+        jdbcTemplate.execute("delete from ivs.installment_plan");
         jdbcTemplate.execute("delete from ivs.lease_settlement");
         jdbcTemplate.execute("delete from ivs.lease_deposit_txn");
         jdbcTemplate.execute("delete from ivs.lease_battery_health");

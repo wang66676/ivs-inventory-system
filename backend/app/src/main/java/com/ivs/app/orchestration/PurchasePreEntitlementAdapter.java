@@ -31,6 +31,15 @@ public class PurchasePreEntitlementAdapter implements PurchasePreEntitlementPort
     }
 
     @Override
+    public void sync(UUID purchaseOrderId, List<PreEntitlementLine> lines) {
+        List<PolicyApi.SyncPreEntitlementLine> syncLines = lines.stream()
+                .map(line -> new PolicyApi.SyncPreEntitlementLine(line.orderLineId(), null, line.productId(),
+                        line.unitPrice(), line.policyIds()))
+                .toList();
+        policyService.syncFromPurchaseOrder(purchaseOrderId, syncLines);
+    }
+
+    @Override
     public void syncSerials(UUID purchaseOrderId, UUID orderLineId, UUID productId, java.math.BigDecimal unitPrice,
                             List<UUID> policyIds, List<String> serialNos) {
         java.util.List<PolicyApi.SyncPreEntitlementLine> lines = new ArrayList<>();

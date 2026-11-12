@@ -31,6 +31,14 @@ public class InventoryQueryController {
         return service.balances(warehouseId, keyword);
     }
 
+    @GetMapping("/vehicle-order-stock")
+    @PreAuthorize("hasAuthority('IVS_READ')")
+    public List<InventoryApi.VehicleOrderStockView> vehicleOrderStock(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String keyword) {
+        return service.vehicleOrderStock(warehouseId, keyword);
+    }
+
     @GetMapping("/ledger")
     @PreAuthorize("hasAuthority('IVS_READ')")
     public List<InventoryApi.LedgerView> ledger(@RequestParam(required = false) UUID productId,

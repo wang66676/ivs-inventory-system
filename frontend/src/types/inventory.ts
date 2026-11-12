@@ -40,6 +40,25 @@ export interface LedgerEntry {
   bizNo?: string
   occurredAt: string
   remark?: string
+  series?: string
+  purchaseOrderNo?: string
+}
+
+export interface VehicleOrderStock {
+  purchaseOrderId: string
+  purchaseOrderNo: string
+  productId: string
+  productNo: string
+  productName: string
+  categoryCode: string
+  warehouseId: string
+  warehouseName?: string
+  onHandQty: number
+  lockedQty: number
+  availableQty: number
+  unitCost: number
+  amount: number
+  updatedAt: string
 }
 
 export interface StockLock {

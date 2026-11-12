@@ -53,11 +53,11 @@ public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePo
     @Transactional(readOnly = true)
     public OrderReference describe(UUID orderId, UUID orderLineId, UUID serialId) {
         if (orderId == null) {
-            return new OrderReference(null, null, null, null);
+            return new OrderReference(null, null, null, null, null, null, null);
         }
         PurchaseOrder order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {
-            return new OrderReference(null, null, null, null);
+            return new OrderReference(null, null, null, null, null, null, null);
         }
         String orderNo = order.getExternalOrderNo() == null || order.getExternalOrderNo().isBlank()
                 ? order.getOrderNo() : order.getExternalOrderNo();
@@ -83,8 +83,17 @@ public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePo
                 .filter(value -> value != null)
                 .max(Comparator.naturalOrder())
                 .orElse(null);
+        LocalDate deliveryDate = retails.stream().map(RetailRecord::getDeliveryDate)
+                .filter(value -> value != null)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate registerDate = retails.stream().map(RetailRecord::getRegisterDate)
+                .filter(value -> value != null)
+                .max(LocalDate::compareTo)
+                .orElse(null);
         String serialText = serialNos.isEmpty() ? null : serialNos.stream().sorted().reduce((a, b) -> a + "、" + b).orElse(null);
-        return new OrderReference(serialText, orderNo, invoiceIssuedAt, retailDate);
+        return new OrderReference(serialText, orderNo, orderDate(orderNo), invoiceIssuedAt, retailDate,
+                deliveryDate, registerDate);
     }
 
     @Override
@@ -107,6 +116,24 @@ public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePo
             }
         }
         return rows;
+    }
+
+    /** 采购订单号中 CG 后的 6 位为 YYMMDD，例如 CG2611120001 → 2026-11-12。 */
+    private LocalDate orderDate(String orderNo) {
+        if (orderNo == null || orderNo.isBlank()) return null;
+        String normalized = orderNo.trim().toUpperCase();
+        int marker = normalized.indexOf("CG");
+        if (marker < 0 || marker + 8 > normalized.length()) return null;
+        String digits = normalized.substring(marker + 2, marker + 8);
+        if (!digits.matches("\\d{6}")) return null;
+        try {
+            int year = 2000 + Integer.parseInt(digits.substring(0, 2));
+            int month = Integer.parseInt(digits.substring(2, 4));
+            int day = Integer.parseInt(digits.substring(4, 6));
+            return LocalDate.of(year, month, day);
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     private List<String> parse(String json) {

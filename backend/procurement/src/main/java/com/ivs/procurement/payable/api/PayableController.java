@@ -16,8 +16,9 @@ public class PayableController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('IVS_FINANCE_READ')")
-    public List<PayableApi.PayableView> list(@RequestParam(required = false) UUID supplierId) {
-        return service.list(supplierId);
+    public List<PayableApi.PayableView> list(@RequestParam(required = false) UUID supplierId,
+                                             @RequestParam(required = false) com.ivs.procurement.payable.PayableStatus status) {
+        return service.list(supplierId, status);
     }
 
     @PostMapping("/{id}/pay")

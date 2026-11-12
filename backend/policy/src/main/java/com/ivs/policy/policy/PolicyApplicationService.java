@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -253,7 +254,13 @@ public class PolicyApplicationService {
         List<PromotionPolicy> candidates = new ArrayList<>();
         for (UUID policyId : command.policyIds()) {
             PromotionPolicy policy = find(policyId);
-            if (!policy.activeOn(today)) {
+            LocalDate policyCheckDate = today;
+            if ("ORDER_DATE".equals(policy.getReferenceDateType())) {
+                LocalDate orderDate = referencePort.describe(command.orderId(), command.orderLineId(),
+                        command.serialId()).orderDate();
+                if (orderDate != null) policyCheckDate = orderDate;
+            }
+            if (!policy.activeOn(policyCheckDate)) {
                 continue;
             }
             if (!matchesProduct(policy, command.productId())) {
@@ -327,11 +334,21 @@ public class PolicyApplicationService {
     /** 收货后按每个 VIN/SN 同步一次采购政策，确保同订单每台车都有独立预享受项。 */
     @Transactional
     public void syncReceivedSerials(UUID orderId, List<PolicyApi.SyncPreEntitlementLine> lines) {
-        if (lines == null) return;
+        if (lines == null || lines.isEmpty()) return;
+        List<PolicyPreEntitlement> existing = preRepository.findByOrderIdForUpdate(orderId);
+        UUID currentSerialId = lines.stream().map(PolicyApi.SyncPreEntitlementLine::serialId)
+                .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        reconcileLegacyPreEntitlements(orderId, currentSerialId, existing);
         for (PolicyApi.SyncPreEntitlementLine line : lines) {
             if (line.policyIds() == null || line.policyIds().isEmpty()) continue;
+            List<UUID> missingPolicyIds = line.policyIds().stream()
+                    .filter(policyId -> preRepository
+                            .findByOrderIdAndOrderLineIdAndSerialIdAndPolicyId(orderId, line.orderLineId(),
+                                    line.serialId(), policyId).isEmpty())
+                    .toList();
+            if (missingPolicyIds.isEmpty()) continue;
             apply(new PolicyApi.ApplyPreEntitlementCommand(orderId, line.orderLineId(), line.productId(),
-                    line.serialId(), line.orderLineAmount(), line.policyIds(), false,
+                    line.serialId(), line.orderLineAmount(), missingPolicyIds, false,
                     "采购收货按VIN同步返利政策"), true);
         }
     }
@@ -418,11 +435,15 @@ public class PolicyApplicationService {
         List<EntitlementApi> created = new ArrayList<>();
         for (PolicyPreEntitlement pre : pres) {
             PromotionPolicy policy = find(pre.getPolicyId());
+            PreEntitlementReferencePort.OrderReference reference = referencePort.describe(
+                    orderId, pre.getOrderLineId(), serialId);
+            LocalDate policyReferenceDate = referenceDate(policy.getReferenceDateType(), reference);
+            LocalDate entitlementPeriodDate = policyReferenceDate == null ? retailDate : policyReferenceDate;
             PolicyEntitlement entitlement = PolicyEntitlement.create(
                     "ENT-%06d".formatted(entitlementRepository.nextEntitlementSequence()), pre.getId(),
                     policy.getId(), policy.getSupplierId(), retailId, serialId, pre.getProductId(), orderId,
                     pre.getEstimateAmount(),
-                    periodCode(policy.getClaimCycle(), retailDate));
+                    periodCode(policy.getClaimCycle(), entitlementPeriodDate));
             PolicyEntitlement saved = entitlementRepository.save(entitlement);
             costAllocationRepository.save(PolicyCostAllocation.create(saved.getId(), orderId, retailId, serialId,
                     policy.getId(), policy.getCostBearer(), policy.getCostSubject(), saved.getFaceAmount(),
@@ -598,11 +619,36 @@ public class PolicyApplicationService {
     private PolicyApi.PreEntitlementView toPreView(PolicyPreEntitlement pre, PromotionPolicy policy) {
         PreEntitlementReferencePort.OrderReference reference = referencePort.describe(
                 pre.getOrderId(), pre.getOrderLineId(), pre.getSerialId());
+        LocalDate referenceDate = referenceDate(policy.getReferenceDateType(), reference);
+        PreEntitlementStatus effectiveStatus = effectivePreStatus(pre.getStatus(), referenceDate, policy);
         return new PolicyApi.PreEntitlementView(pre.getId(), pre.getPreNo(), pre.getOrderId(),
                 pre.getOrderLineId(), pre.getProductId(), pre.getSerialId(), pre.getPolicyId(),
-                policy.getName(), pre.getEstimateAmount(), pre.getStatus(), pre.isAddedAfterOrder(),
+                policy.getName(), pre.getEstimateAmount(), effectiveStatus, pre.isAddedAfterOrder(),
                 pre.getAddReason(), reference.serialNos(), reference.orderNo(), reference.invoiceIssuedAt(),
-                reference.retailDate(), pre.getCreatedAt());
+                reference.retailDate(), policy.getReferenceDateType(), referenceDate, pre.getCreatedAt());
+    }
+
+    private PreEntitlementStatus effectivePreStatus(PreEntitlementStatus persisted, LocalDate referenceDate,
+                                                     PromotionPolicy policy) {
+        if (persisted != PreEntitlementStatus.PENDING_RETAIL) return persisted;
+        if (referenceDate == null) return PreEntitlementStatus.PENDING_RETAIL;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        boolean referenceReached = !referenceDate.isAfter(today);
+        boolean withinPolicyPeriod = !referenceDate.isBefore(policy.getEffFrom())
+                && !referenceDate.isAfter(policy.getEffTo());
+        return referenceReached && withinPolicyPeriod
+                ? PreEntitlementStatus.READY : PreEntitlementStatus.PENDING_RETAIL;
+    }
+
+    private LocalDate referenceDate(String referenceDateType, PreEntitlementReferencePort.OrderReference reference) {
+        return switch (referenceDateType == null ? "RETAIL_DATE" : referenceDateType) {
+            case "ORDER_DATE" -> reference.orderDate();
+            case "INVOICE_DATE" -> reference.invoiceIssuedAt() == null ? null
+                    : reference.invoiceIssuedAt().atZone(ZoneId.of("Asia/Shanghai")).toLocalDate();
+            case "DELIVERY_DATE" -> reference.deliveryDate();
+            case "REGISTER_DATE" -> reference.registerDate();
+            default -> reference.retailDate();
+        };
     }
 
     private PolicySubsidyPool poolOf(UUID policyId) {

@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="采购单选择返利政策后自动同步预享受项，金额仅作预估。实销后按实销日期生成正式权益并申请兑现。" />
+               message="采购单选择返利政策后自动同步预享受项；当前是否可申请，按政策名目配置的参考时间判定。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button @click="reload">刷新</a-button>
         <a-input v-model:value="orderKeyword" placeholder="订单编号" allow-clear style="width:260px" />
@@ -17,8 +17,12 @@
           <template v-else-if="column.key === 'amount'">{{ money(record.estimateAmount) }}</template>
           <template v-else-if="column.key === 'invoiceIssuedAt'">{{ formatDateTime(record.invoiceIssuedAt) }}</template>
           <template v-else-if="column.key === 'retailDate'">{{ record.retailDate || '-' }}</template>
+          <template v-else-if="column.key === 'reference'">
+            <div>{{ referenceLabel(record.referenceDateType) }}</div>
+            <div class="sub">{{ record.referenceDate || '-' }}</div>
+          </template>
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="statusColor(record.status)">{{ PRE_STATUS_LABELS[record.status] }}</a-tag>
+            <a-tag :color="statusColor(record.status)">{{ statusLabel(record) }}</a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-button v-if="canManage && record.status !== 'SETTLED' && record.status !== 'CANCELLED'"
@@ -84,6 +88,7 @@ const columns = [
   { title: 'VIN/SN', key: 'serialNos', width: 220 },
   { title: '订单编号', key: 'orderNo', width: 160 },
   { title: '政策', key: 'policyName', dataIndex: 'policyName', width: 240 },
+  { title: '参考时间', key: 'reference', width: 170 },
   { title: '预计金额', key: 'amount', width: 140 },
   { title: '状态', key: 'status', width: 110 },
   { title: '终端开票日期', key: 'invoiceIssuedAt', width: 130 },
@@ -93,6 +98,21 @@ const columns = [
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
 function formatDateTime(value?: string) { return value ? new Date(value).toLocaleDateString('sv-SE') : '-' }
+function referenceLabel(type?: string) {
+  if (type === 'ORDER_DATE') return '采购订单时间'
+  if (type === 'INVOICE_DATE') return '终端开票时间'
+  if (type === 'DELIVERY_DATE') return '交付日期'
+  if (type === 'REGISTER_DATE') return '上牌日期'
+  return '实销日期'
+}
+function statusLabel(record: PreEntitlement) {
+  if (record.status !== 'PENDING_RETAIL') return PRE_STATUS_LABELS[record.status]
+  if (record.referenceDateType === 'ORDER_DATE') return '待采购订单时间'
+  if (record.referenceDateType === 'INVOICE_DATE') return '待终端开票'
+  if (record.referenceDateType === 'DELIVERY_DATE') return '待交付'
+  if (record.referenceDateType === 'REGISTER_DATE') return '待上牌'
+  return '待实销'
+}
 function statusColor(status: string) {
   if (status === 'READY') return 'blue'
   if (status === 'APPLIED') return 'orange'

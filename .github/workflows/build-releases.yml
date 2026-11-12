@@ -54,8 +54,15 @@ jobs:
           jpackage --type app-image --name IVS --app-version $env:APP_VERSION `
             --input build\jpackage-input --main-jar ivs-app.jar `
             --main-class org.springframework.boot.loader.launch.JarLauncher `
+            --icon "packaging\windows\IVS.ico" `
             --dest windows-app --java-options "-Dfile.encoding=UTF-8" `
             --java-options "-Divs.desktop.open-browser=true" --add-modules ALL-MODULE-PATH
+
+      - name: 构建桌面启动器
+        shell: pwsh
+        run: |
+          .\scripts\build-windows-launcher.ps1
+          Copy-Item packaging\windows\IVSLauncher.exe windows-app\IVS\IVSLauncher.exe -Force
 
       - name: Inno Setup 生成 Windows 安装包
         shell: pwsh

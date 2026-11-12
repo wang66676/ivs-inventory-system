@@ -354,6 +354,47 @@ class PurchaseOrderDetailIntegrationTest {
                 .containsExactly("后补返利");
     }
 
+    @Test
+    void 采购订单时间从CG订单号年月日解析并决定预享受可申请状态() {
+        var supplier = createSupplier("整车厂CG");
+        var warehouse = createWarehouse("WH-CG");
+        var product = createProduct("Q3 CG日期测试车");
+
+        Map<String, Object> policyBody = new HashMap<>();
+        policyBody.put("name", "订单时间返利");
+        policyBody.put("policyType", "PHASE_SUBSIDY");
+        policyBody.put("supplierId", supplier.id().toString());
+        policyBody.put("productIds", List.of(product.id().toString()));
+        policyBody.put("benefitType", "AMOUNT");
+        policyBody.put("benefitValue", new BigDecimal("3000"));
+        policyBody.put("effFrom", LocalDate.of(2026, 1, 1).toString());
+        policyBody.put("effTo", LocalDate.now().plusDays(30).toString());
+        policyBody.put("referenceDateType", "ORDER_DATE");
+        policyBody.put("claimCycle", "MONTHLY");
+        policyBody.put("claimCutoffDay", 5);
+        policyBody.put("stackingRule", "ADDITIVE");
+        policyBody.put("limitType", "TIME_ONLY");
+        var policy = publish(restTemplate.postForEntity("/api/ivs/policies", policyBody,
+                PolicyApi.PolicyView.class).getBody());
+
+        Map<String, Object> orderBody = new HashMap<>();
+        orderBody.put("supplierId", supplier.id().toString());
+        orderBody.put("externalOrderNo", "CG2601010001");
+        orderBody.put("warehouseId", warehouse.id().toString());
+        orderBody.put("lines", List.of(Map.of(
+                "productId", product.id().toString(), "quantity", 1, "unitPrice", 400000,
+                "policyIds", List.of(policy.id().toString()))));
+        ProcurementApi.PurchaseOrderView order = restTemplate.postForEntity(
+                "/api/ivs/purchase-orders", orderBody, ProcurementApi.PurchaseOrderView.class).getBody();
+        assertThat(order).isNotNull();
+
+        PolicyApi.PreEntitlementView[] pres = restTemplate.getForEntity(
+                "/api/ivs/pre-entitlements?orderId=" + order.id(), PolicyApi.PreEntitlementView[].class).getBody();
+        assertThat(pres).isNotNull().hasSize(1);
+        assertThat(pres[0].referenceDateType()).isEqualTo("ORDER_DATE");
+        assertThat(pres[0].referenceDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(pres[0].status().name()).isEqualTo("READY");
+    }
     private MasterdataApi.SupplierView createSupplier(String name) {
         return restTemplate.postForEntity("/api/ivs/suppliers", Map.of(
                 "name", name, "supplierType", SupplierType.OEM.name()

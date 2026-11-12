@@ -115,6 +115,7 @@ public class PurchaseOrderApplicationService {
         BigDecimal total = saveLines(order, command.supplierId(), command.lines());
         order.updateTotal(total);
         orderRepository.save(order);
+        syncPreEntitlements(order);
         return toView(order);
     }
 
@@ -154,7 +155,19 @@ public class PurchaseOrderApplicationService {
         order.updateTotal(total);
         ProcurementApi.PurchaseOrderView view = toView(orderRepository.saveAndFlush(order));
         preEntitlementPort.clear(view.id());
+        syncPreEntitlements(order);
         return view;
+    }
+
+    private void syncPreEntitlements(PurchaseOrder order) {
+        List<PurchasePreEntitlementPort.PreEntitlementLine> lines = lineRepository
+                .findByOrderIdOrderByLineNoAsc(order.getId()).stream()
+                .map(line -> new PurchasePreEntitlementPort.PreEntitlementLine(line.getId(), line.getProductId(),
+                        line.getUnitPrice(), linePolicyRepository.findByOrderLineIdOrderBySortNoAsc(line.getId())
+                        .stream().map(PurchaseOrderLinePolicy::getPolicyId).toList()))
+                .filter(line -> !line.policyIds().isEmpty())
+                .toList();
+        preEntitlementPort.sync(order.getId(), lines);
     }
 
     private BigDecimal saveLines(PurchaseOrder order, UUID supplierId,
@@ -355,8 +368,10 @@ public class PurchaseOrderApplicationService {
         }
         receipt.markPosted();
         receiptRepository.save(receipt);
+        BigDecimal receivedQuantity = prepared.stream().map(Prepared::quantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         payableService.createFromReceipt(order.getSupplierId(), order.getId(), order.getOrderNo(),
-                receipt.getId(), receiptNo, receipt.netAmount());
+                receipt.getId(), receiptNo, receivedQuantity, receipt.netAmount());
 
         publishReceived(receipt, order, postingLines.size());
         return toReceiptView(receipt);

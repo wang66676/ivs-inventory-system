@@ -1,6 +1,6 @@
 {
   "repo": "ivs-inventory-system",
-  "visibility": "private",
+  "visibility": "public",
   "type": "other",
   "entry": "backend/app/target/ivs-app-0.1.0-SNAPSHOT.jar",
   "port": 8090,

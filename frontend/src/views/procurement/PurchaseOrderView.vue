@@ -138,13 +138,59 @@
     </a-modal>
 
     <a-modal v-model:open="receiveOpen" :title="`收货 - ${current?.externalOrderNo || current?.orderNo || ''}`"
-             :confirm-loading="saving" ok-text="确认收货" cancel-text="取消" width="1180px" @ok="submitReceive">
+             :confirm-loading="saving" :ok-button-props="{ disabled: offsetSelectionBlocked }"
+             ok-text="确认收货" cancel-text="取消" width="1180px" @ok="submitReceive">
       <a-alert type="warning" show-icon style="margin-bottom:12px"
                :message="props.scope === 'BATTERY' ? '动力电池统一收货到天津容大仓库，无需填写仓库。按电池 SN 逐块录入。' : 'VIN 在收货时逐台录入，收货入库会按 VIN 生成独立明细并关联采购明细。仓库可按实际发运情况逐台指定。'" />
       <a-form layout="vertical">
         <a-form-item v-if="props.scope !== 'BATTERY'" label="默认收货仓库（可选）">
           <a-select v-model:value="receiveForm.warehouseId" :options="warehouseOptions" allow-clear />
         </a-form-item>
+        <template v-if="props.scope !== 'BATTERY' && canOffset">
+          <a-divider orientation="left" style="font-size:13px">返利抵扣</a-divider>
+          <a-spin :spinning="offsetLoading">
+            <a-descriptions bordered size="small" :column="4" style="margin-bottom:12px">
+              <a-descriptions-item label="本单金额">{{ money(receiveAmount) }}</a-descriptions-item>
+              <a-descriptions-item label="可用返利">{{ money(availableRebate) }}</a-descriptions-item>
+              <a-descriptions-item label="本次抵扣">{{ money(offsetAppliedAmount) }}</a-descriptions-item>
+              <a-descriptions-item label="抵扣后应付">{{ money(netPayable) }}</a-descriptions-item>
+            </a-descriptions>
+            <a-alert v-if="availableRebate <= 0" type="info" show-icon style="margin-bottom:10px"
+                     message="该供应商当前没有已到账返利，本次收货不抵扣。" />
+            <template v-else>
+              <div class="rebate-selection-head">
+                <a-checkbox :checked="allCreditsSelected" :indeterminate="someCreditsSelected" @change="toggleAllCredits">
+                  全选可用返利来源
+                </a-checkbox>
+                <span class="hint">已选返利可用金额：{{ money(selectedCreditAmount) }}</span>
+              </div>
+              <a-table :data-source="offsetPreview?.credits ?? []" row-key="txnId" size="small"
+                       :pagination="false" :scroll="{ x: 760 }" style="margin-bottom:12px">
+                <a-table-column title="选择" :width="70" align="center">
+                  <template #default="{ record }">
+                    <a-checkbox :checked="selectedOffsetTxnIds.includes(record.txnId)"
+                                @change="toggleOffsetCredit(record.txnId, $event.target.checked)" />
+                  </template>
+                </a-table-column>
+                <a-table-column title="返利来源类型" :width="150">
+                  <template #default="{ record }">{{ record.sourceType || '-' }}</template>
+                </a-table-column>
+                <a-table-column title="返利来源单号" :width="220">
+                  <template #default="{ record }">{{ record.sourceNo || '-' }}</template>
+                </a-table-column>
+                <a-table-column title="剩余可用金额" :width="160" align="right">
+                  <template #default="{ record }">{{ money(record.remainingAmount) }}</template>
+                </a-table-column>
+                <a-table-column title="入池时间" :width="180">
+                  <template #default="{ record }">{{ formatDateTime(record.occurredAt) }}</template>
+                </a-table-column>
+              </a-table>
+              <a-alert v-if="offsetSelectionBlocked" type="warning" show-icon style="margin-bottom:12px"
+                       message="所选返利来源的剩余金额不足，请继续勾选或取消本次抵扣。" />
+            </template>
+          </a-spin>
+        </template>
+        <a-divider orientation="left" style="font-size:13px">收货明细</a-divider>
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false"
                  :scroll="{ x: 1360 }" :locale="{ emptyText: '无明细' }">
           <a-table-column title="车系" :width="180"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
@@ -173,7 +219,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { purchaseApi } from '../../api/procurement'
 import { productApi, supplierApi, warehouseApi } from '../../api/masterdata'
@@ -181,7 +227,7 @@ import { policyApi } from '../../api/policy'
 import { useAuthStore } from '../../stores/auth'
 import { PURCHASE_STATUS_COLORS, PURCHASE_STATUS_LABELS } from '../../types/procurement'
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus } from '../../types/procurement'
-import type { Policy } from '../../types/policy'
+import type { FundOffsetPreview, Policy } from '../../types/policy'
 import type { BusinessScope } from '../../utils/businessScope'
 
 const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
@@ -196,6 +242,7 @@ const statusLabel = (status: string) => PURCHASE_STATUS_LABELS[status as Purchas
 const statusColor = (status: string) => PURCHASE_STATUS_COLORS[status as PurchaseOrderStatus]
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_WRITE')
+const canOffset = auth.can('IVS_FUND_OFFSET')
 const rows = ref<PurchaseOrder[]>([])
 const keyword = ref('')
 const filterStatus = ref<string | undefined>(undefined)
@@ -218,37 +265,86 @@ interface PurchaseListRow {
 const form = reactive<Record<string, any>>({ lines: [newLine()] })
 const receiveForm = reactive<Record<string, any>>({})
 const receiveInput = reactive<Record<string, { serialRows?: string; quantity?: number; warehouseId?: string }>>({})
+const offsetLoading = ref(false)
+const offsetPreview = ref<FundOffsetPreview>()
+const selectedOffsetTxnIds = ref<string[]>([])
+const receiveAmount = computed(() => {
+  let total = 0
+  for (const line of current.value?.lines ?? []) {
+    const input = receiveInput[line.id]
+    if (!input) continue
+    if (line.trackingMode === 'SERIAL') {
+      for (const row of String(input.serialRows ?? '').split('\n').map((item) => item.trim()).filter(Boolean)) {
+        const parts = row.split(/[,，\t]/).map((item) => item.trim())
+        if (!parts[0]) continue
+        const price = parts[1] ? Number(parts[1]) : Number(line.unitPrice)
+        if (Number.isFinite(price) && price >= 0) total += price
+      }
+    } else {
+      total += Number(input.quantity ?? 0) * Number(line.unitPrice ?? 0)
+    }
+  }
+  return roundMoney(total)
+})
+const availableRebate = computed(() => Number(offsetPreview.value?.availableBalance ?? 0))
+const selectedCreditAmount = computed(() => roundMoney((offsetPreview.value?.credits ?? [])
+  .filter((item) => selectedOffsetTxnIds.value.includes(item.txnId))
+  .reduce((sum, item) => sum + Number(item.remainingAmount ?? 0), 0)))
+const offsetTargetAmount = computed(() => selectedOffsetTxnIds.value.length
+  ? roundMoney(Math.min(availableRebate.value, receiveAmount.value))
+  : 0)
+const offsetSelectionReady = computed(() => selectedOffsetTxnIds.value.length === 0
+  || selectedCreditAmount.value >= offsetTargetAmount.value)
+const offsetAppliedAmount = computed(() => offsetSelectionReady.value ? offsetTargetAmount.value : 0)
+const netPayable = computed(() => roundMoney(receiveAmount.value - offsetAppliedAmount.value))
+const offsetSelectionBlocked = computed(() => offsetTargetAmount.value > 0 && !offsetSelectionReady.value)
+const allCreditsSelected = computed(() => {
+  const credits = offsetPreview.value?.credits ?? []
+  return credits.length > 0 && selectedOffsetTxnIds.value.length === credits.length
+})
+const someCreditsSelected = computed(() => selectedOffsetTxnIds.value.length > 0 && !allCreditsSelected.value)
 const purchaseRows = computed<PurchaseListRow[]>(() => rows.value.flatMap((order) => order.lines.map((line, index) => ({
   rowKey: `${order.id}-${line.id}`,
   order,
   line,
   isFirstLine: index === 0,
 }))))
+function compareText(left?: string | number | null, right?: string | number | null) {
+  return String(left ?? '').localeCompare(String(right ?? ''), 'zh-CN', { numeric: true })
+}
+function compareNumber(left?: number | null, right?: number | null) {
+  return Number(left ?? 0) - Number(right ?? 0)
+}
+const orderNoOf = (row: PurchaseListRow) => row.order.externalOrderNo || row.order.orderNo
+const seriesOfRow = (row: PurchaseListRow) => row.line.series || row.line.productName || ''
+const configOfRow = (row: PurchaseListRow) => row.line.configText || row.line.configCode || ''
+const warehouseOfRow = (row: PurchaseListRow) => row.line.warehouseName || row.order.warehouseName || ''
+const policiesOfRow = (row: PurchaseListRow) => (row.line.policies ?? []).map((policy) => policy.name).join('|')
 const vehicleColumns = [
-  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true },
-  { title: '车系', key: 'series', width: 120, ellipsis: true },
-  { title: '型号', key: 'model', width: 120, ellipsis: true },
-  { title: '配置', key: 'config', width: 140, ellipsis: true },
-  { title: '数量', key: 'quantity', width: 80, align: 'right' },
-  { title: '单价', key: 'unitPrice', width: 110, align: 'right' },
-  { title: '总计车款', key: 'amount', width: 140, align: 'right' },
-  { title: '返利政策', key: 'policies', width: 240 },
-  { title: '收货仓库', key: 'warehouse', width: 150, ellipsis: true },
+  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(orderNoOf(a), orderNoOf(b)) },
+  { title: '车系', key: 'series', width: 120, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(seriesOfRow(a), seriesOfRow(b)) },
+  { title: '型号', key: 'model', width: 120, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(modelOf(a.line.productId), modelOf(b.line.productId)) },
+  { title: '配置', key: 'config', width: 140, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(configOfRow(a), configOfRow(b)) },
+  { title: '数量', key: 'quantity', width: 80, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.quantity, b.line.quantity) },
+  { title: '单价', key: 'unitPrice', width: 110, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.unitPrice, b.line.unitPrice) },
+  { title: '总计车款', key: 'amount', width: 140, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.amount, b.line.amount) },
+  { title: '返利政策', key: 'policies', width: 240, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(policiesOfRow(a), policiesOfRow(b)) },
+  { title: '收货仓库', key: 'warehouse', width: 150, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(warehouseOfRow(a), warehouseOfRow(b)) },
   { title: '操作', key: 'actions', width: 300, fixed: 'right' },
 ]
 const batteryColumns = [
-  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true },
-  { title: '商品', key: 'series', width: 170, ellipsis: true },
-  { title: '到货时间', key: 'arrivalDate', width: 120, align: 'center' },
-  { title: '电池箱制造商', key: 'batteryBoxManufacturer', width: 160, ellipsis: true },
-  { title: '电池箱型号', key: 'batteryBoxModel', width: 130, ellipsis: true },
-  { title: '电池箱单价', key: 'batteryBoxUnitPrice', width: 120, align: 'right' },
-  { title: '电池包制造商', key: 'batteryPackManufacturer', width: 160, ellipsis: true },
-  { title: '能量（kWh）', key: 'batteryEnergyKwh', width: 110, align: 'right' },
-  { title: '电池包单价', key: 'batteryPackUnitPrice', width: 120, align: 'right' },
-  { title: '数量', key: 'quantity', width: 80, align: 'right' },
-  { title: '合计单价', key: 'unitPrice', width: 120, align: 'right' },
-  { title: '合计总价', key: 'amount', width: 140, align: 'right' },
+  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(orderNoOf(a), orderNoOf(b)) },
+  { title: '商品', key: 'series', width: 170, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(seriesOfRow(a), seriesOfRow(b)) },
+  { title: '到货时间', key: 'arrivalDate', width: 120, align: 'center', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(a.line.arrivalDate, b.line.arrivalDate) },
+  { title: '电池箱制造商', key: 'batteryBoxManufacturer', width: 160, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(a.line.batteryBoxManufacturer, b.line.batteryBoxManufacturer) },
+  { title: '电池箱型号', key: 'batteryBoxModel', width: 130, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(a.line.batteryBoxModel, b.line.batteryBoxModel) },
+  { title: '电池箱单价', key: 'batteryBoxUnitPrice', width: 120, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.batteryBoxUnitPrice, b.line.batteryBoxUnitPrice) },
+  { title: '电池包制造商', key: 'batteryPackManufacturer', width: 160, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(a.line.batteryPackManufacturer, b.line.batteryPackManufacturer) },
+  { title: '能量（kWh）', key: 'batteryEnergyKwh', width: 110, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.batteryEnergyKwh, b.line.batteryEnergyKwh) },
+  { title: '电池包单价', key: 'batteryPackUnitPrice', width: 120, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.batteryPackUnitPrice, b.line.batteryPackUnitPrice) },
+  { title: '数量', key: 'quantity', width: 80, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.quantity, b.line.quantity) },
+  { title: '合计单价', key: 'unitPrice', width: 120, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.unitPrice, b.line.unitPrice) },
+  { title: '合计总价', key: 'amount', width: 140, align: 'right', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareNumber(a.line.amount, b.line.amount) },
   { title: '操作', key: 'actions', width: 120, fixed: 'right' },
 ]
 const columns = computed(() => props.scope === 'BATTERY' ? batteryColumns : vehicleColumns)
@@ -307,6 +403,18 @@ function removeLine(key: string) {
 }
 function lineTotal(line: Record<string, any>) { return Number(line.quantity ?? 0) * unitPriceOf(line) }
 function money(value?: number | null) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+function roundMoney(value: number) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100 }
+function formatDateTime(value?: string) { return value ? value.replace('T', ' ').slice(0, 19) : '-' }
+function toggleOffsetCredit(txnId: string, checked: boolean) {
+  selectedOffsetTxnIds.value = checked
+    ? [...new Set([...selectedOffsetTxnIds.value, txnId])]
+    : selectedOffsetTxnIds.value.filter((id) => id !== txnId)
+}
+function toggleAllCredits(event: { target: { checked: boolean } }) {
+  selectedOffsetTxnIds.value = event.target.checked
+    ? (offsetPreview.value?.credits ?? []).map((item) => item.txnId)
+    : []
+}
 function seriesOf(productId?: string) { const item = productOptions.value.find((option) => option.value === productId); return item?.series || item?.name || '' }
 function warehouseLabel(id?: string) { return warehouseOptions.value.find((item) => item.value === id)?.name || '' }
 function batteryText(line: PurchaseOrderLine) {
@@ -539,7 +647,24 @@ async function submit() {
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }
 }
 async function approve(record: PurchaseOrder) { try { await purchaseApi.approve(record.id); message.success('已审核'); await reload() } catch (error) { message.error((error as Error).message) } }
-async function cancel(record: PurchaseOrder) { try { await purchaseApi.cancel(record.id); message.success('已取消'); await reload() } catch (error) { message.error((error as Error).message) } }
+function cancel(record: PurchaseOrder) {
+  Modal.confirm({
+    title: `取消采购订单 ${record.externalOrderNo || record.orderNo}？`,
+    content: '点击“返回上一步”将保留订单并回到当前列表；只有点击“确认取消订单”才会真正取消。',
+    okText: '确认取消订单',
+    okType: 'danger',
+    cancelText: '返回上一步',
+    onOk: async () => {
+      try {
+        await purchaseApi.cancel(record.id)
+        message.success('采购订单已取消')
+        await reload()
+      } catch (error) {
+        message.error((error as Error).message)
+      }
+    },
+  })
+}
 async function openReceive(record: PurchaseOrder) {
   try {
     const latest = await purchaseApi.get(record.id)
@@ -555,7 +680,21 @@ async function openReceive(record: PurchaseOrder) {
     Object.keys(receiveInput).forEach((key) => delete receiveInput[key])
     receiveForm.warehouseId = latest.warehouseId
     latest.lines.forEach((line) => { receiveInput[line.id] = { warehouseId: line.warehouseId, serialRows: '' } })
+    offsetPreview.value = undefined
+    selectedOffsetTxnIds.value = []
     receiveOpen.value = true
+    if (props.scope !== 'BATTERY' && canOffset) {
+      offsetLoading.value = true
+      try {
+        const preview = await policyApi.fundOffsetPreview({ supplierId: latest.supplierId })
+        offsetPreview.value = preview
+        selectedOffsetTxnIds.value = preview.credits.map((item) => item.txnId)
+      } catch (error) {
+        message.warning(`返利余额加载失败：${(error as Error).message}`)
+      } finally {
+        offsetLoading.value = false
+      }
+    }
   } catch (error) { message.error((error as Error).message) }
 }
 async function submitReceive() {
@@ -593,10 +732,19 @@ async function submitReceive() {
     }
   }
   if (!lines.length) { message.warning('请填写本次收货内容'); return }
+  if (offsetSelectionBlocked.value) { message.warning('所选返利来源剩余金额不足，请继续勾选或取消抵扣'); return }
+  const offsetTxnIds = offsetAppliedAmount.value > 0 ? selectedOffsetTxnIds.value : []
   saving.value = true
   try {
-    const receipt = await purchaseApi.receive(current.value.id, { warehouseId: batteryScope ? null : (receiveForm.warehouseId || null), remark: receiveForm.remark, lines })
-    message.success(`收货完成，金额 ${money(receipt.amount)}`); receiveOpen.value = false; await reload()
+    const receipt = await purchaseApi.receive(current.value.id, {
+      warehouseId: batteryScope ? null : (receiveForm.warehouseId || null),
+      remark: receiveForm.remark,
+      lines,
+      offsetTxnIds,
+    })
+    message.success(`收货完成，金额 ${money(receipt.amount)}，返利抵扣 ${money(receipt.offsetAmount || 0)}，应付 ${money(receipt.netAmount ?? receipt.amount)}`)
+    receiveOpen.value = false
+    await reload()
   } catch (error) {
     const text = (error as Error).message
     message.error(text)
@@ -619,6 +767,7 @@ onMounted(async () => {
 
 <style scoped>
 .hint { color: #8b96a8; font-size: 12px; }
+.rebate-selection-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
 :deep(.ant-table-expanded-row > td) { padding-left: 0 !important; padding-right: 0 !important; }
 :deep(.ant-table-expanded-row .ant-table-wrapper) { margin-left: 0 !important; margin-right: 0 !important; }
 </style>

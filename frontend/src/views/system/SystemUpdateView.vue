@@ -44,9 +44,9 @@
             </a-col>
             <a-col :xs="24" :md="8">
               <a-card title="电脑安装包版" size="small" class="update-card">
-                <p>下载最新完整安装包，覆盖安装后自动升级到最新版本。</p>
+                <p>下载最新完整安装包，运行后覆盖安装即可升级；本地业务数据会保留。</p>
                 <a-button type="primary" block :href="windowsAsset?.browser_download_url" target="_blank"
-                          :disabled="!windowsAsset">下载 Windows 安装包</a-button>
+                          :disabled="!windowsAsset">下载并安装最新电脑版</a-button>
               </a-card>
             </a-col>
             <a-col :xs="24" :md="8">

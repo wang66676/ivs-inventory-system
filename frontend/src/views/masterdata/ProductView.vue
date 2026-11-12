@@ -9,8 +9,8 @@
         <a-button @click="downloadTemplate">下载模板</a-button>
         <a-button @click="exportProducts">导出商品</a-button>
         <a-button @click="reload">刷新</a-button>
-        <a-select v-model:value="filterCategoryId" :options="categoryOptions" allow-clear
-                  placeholder="按商品筛选" style="width:200px" @change="reload" />
+        <a-select v-model:value="filterSeries" :options="seriesOptions" allow-clear show-search
+                  placeholder="按车系筛选" style="width:200px" @change="reload" />
         <a-input v-model:value="keyword" placeholder="商品编码 / 型号 / 车系" allow-clear
                  style="width:220px" @press-enter="reload" />
         <a-button @click="reload">查询</a-button>
@@ -113,7 +113,8 @@ const canWrite = auth.can('IVS_PRODUCT_MANAGE')
 const rows = ref<Product[]>([])
 const categories = ref<Category[]>([])
 const categoryOptions = ref<{ label: string; value: string }[]>([])
-const filterCategoryId = ref<string>()
+const seriesOptions = ref<{ label: string; value: string }[]>([])
+const filterSeries = ref<string>()
 const keyword = ref('')
 const modalOpen = ref(false)
 const saving = ref(false)
@@ -144,8 +145,21 @@ function optionsOf(def: AttrDef) {
 }
 
 async function reload() {
-  try { rows.value = await productApi.list({ categoryId: filterCategoryId.value, keyword: keyword.value || undefined }) }
-  catch (error) { message.error((error as Error).message) }
+  try {
+    const result = await productApi.list({ keyword: keyword.value || undefined })
+    rows.value = filterSeries.value
+      ? result.filter((item) => (item.series || item.name) === filterSeries.value)
+      : result
+  } catch (error) { message.error((error as Error).message) }
+}
+
+async function refreshSeriesOptions() {
+  try {
+    const products = await productApi.list()
+    const series = [...new Set(products.map((item) => item.series || item.name).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    seriesOptions.value = series.map((item) => ({ label: item, value: item }))
+  } catch (error) { message.error((error as Error).message) }
 }
 
 async function loadCategories() {
@@ -204,7 +218,7 @@ async function submit() {
     else await productApi.create(payload)
     message.success('已保存')
     modalOpen.value = false
-    await reload()
+    await Promise.all([reload(), refreshSeriesOptions()])
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }
 }
 
@@ -274,7 +288,7 @@ function downloadBlob(content: string, name: string, type: string) {
   URL.revokeObjectURL(link.href)
 }
 
-onMounted(async () => { await loadCategories(); await reload() })
+onMounted(async () => { await loadCategories(); await Promise.all([refreshSeriesOptions(), reload()]) })
 </script>
 
 <style scoped>

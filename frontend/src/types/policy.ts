@@ -58,6 +58,8 @@ export interface PreEntitlement {
   orderNo?: string
   invoiceIssuedAt?: string
   retailDate?: string
+  referenceDateType?: string
+  referenceDate?: string
   createdAt: string
 }
 
@@ -198,6 +200,20 @@ export interface FundTxn {
   purchaseReceiptId?: string
   occurredAt: string
   remark?: string
+}
+
+export interface FundCreditOption {
+  txnId: string
+  sourceType?: string
+  sourceNo?: string
+  remainingAmount: number
+  occurredAt: string
+}
+
+export interface FundOffsetPreview {
+  availableBalance: number
+  appliedAmount: number
+  credits: FundCreditOption[]
 }
 
 export interface FundOffsetLine {

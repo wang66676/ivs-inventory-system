@@ -126,10 +126,16 @@ public final class SalesApi {
     }
 
     public record CreateReceiptCommand(
-            UUID customerId, BigDecimal amount, PaymentMethod method, String remark, List<UUID> receivableIds
+            UUID customerId, BigDecimal amount, PaymentMethod method, String remark,
+            LocalDate receivedAt, List<UUID> receivableIds
     ) {
         public CreateReceiptCommand(UUID customerId, BigDecimal amount, PaymentMethod method, String remark) {
-            this(customerId, amount, method, remark, null);
+            this(customerId, amount, method, remark, null, null);
+        }
+
+        public CreateReceiptCommand(UUID customerId, BigDecimal amount, PaymentMethod method, String remark,
+                                    List<UUID> receivableIds) {
+            this(customerId, amount, method, remark, null, receivableIds);
         }
     }
 
@@ -147,7 +153,7 @@ public final class SalesApi {
     ) {
     }
 
-    public record ReceiptAllocationView(UUID receivableId, String receivableNo, BigDecimal amount) {
+    public record ReceiptAllocationView(UUID receivableId, String receivableNo, String orderNo, BigDecimal amount) {
     }
 
     public record ReceiptView(

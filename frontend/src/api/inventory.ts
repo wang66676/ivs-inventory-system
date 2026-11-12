@@ -1,11 +1,13 @@
 import { http } from './http'
-import type { AgeAnalysisItem, InventorySummary, LedgerEntry, StockBalance, StockLock } from '../types/inventory'
+import type { AgeAnalysisItem, InventorySummary, LedgerEntry, StockBalance, StockLock, VehicleOrderStock } from '../types/inventory'
 
 export const inventoryApi = {
   balances: (params?: { warehouseId?: string; keyword?: string }) =>
     http.get<StockBalance[]>('/ivs/inventory/balances', { params }).then((r) => r.data),
   ledger: (params?: { productId?: string; warehouseId?: string; moveType?: string; limit?: number }) =>
     http.get<LedgerEntry[]>('/ivs/inventory/ledger', { params }).then((r) => r.data),
+  vehicleOrderStock: (params?: { warehouseId?: string; keyword?: string }) =>
+    http.get<VehicleOrderStock[]>('/ivs/inventory/vehicle-order-stock', { params }).then((r) => r.data),
   locks: (params?: { status?: string }) =>
     http.get<StockLock[]>('/ivs/inventory/locks', { params }).then((r) => r.data),
   summary: () => http.get<InventorySummary>('/ivs/inventory/summary').then((r) => r.data),

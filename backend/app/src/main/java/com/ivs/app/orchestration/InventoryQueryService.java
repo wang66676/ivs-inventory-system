@@ -91,6 +91,55 @@ public class InventoryQueryService {
     }
 
     @Transactional(readOnly = true)
+    public List<InventoryApi.VehicleOrderStockView> vehicleOrderStock(UUID warehouseId, String keyword) {
+        String kw = keyword == null ? null : keyword.trim().toLowerCase();
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                with purchase_origin as (
+                    select sl.serial_id, sl.biz_id,
+                           row_number() over (partition by sl.serial_id order by sl.occurred_at asc, sl.created_at asc) rn
+                      from ivs.stock_ledger sl
+                     where sl.serial_id is not null and sl.biz_id is not null and sl.move_type = 'PURCHASE_IN'
+                )
+                select po.id purchase_order_id,
+                       coalesce(po.external_order_no, po.order_no) purchase_order_no,
+                       p.id product_id, p.product_no, p.name product_name, c.code category_code,
+                       ps.warehouse_id, w.name warehouse_name,
+                       count(*) on_hand_qty,
+                       sum(case when ps.status = 'LOCKED' then 1 else 0 end) locked_qty,
+                       sum(case when ps.status = 'IN_STOCK' then 1 else 0 end) available_qty,
+                       coalesce(avg(ps.purchase_price), 0) unit_cost,
+                       coalesce(sum(ps.purchase_price), 0) amount,
+                       max(ps.updated_at) updated_at
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                  left join ivs.warehouse w on w.id = ps.warehouse_id
+                  join purchase_origin origin on origin.serial_id = ps.id and origin.rn = 1
+                  join ivs.purchase_receipt pr on pr.id = origin.biz_id
+                  join ivs.purchase_order po on po.id = pr.order_id
+                 where c.status_template = 'VEHICLE' and ps.status in ('IN_STOCK', 'LOCKED')
+                 group by po.id, po.external_order_no, po.order_no, p.id, p.product_no, p.name, c.code,
+                          ps.warehouse_id, w.name
+                 order by purchase_order_no, p.name, warehouse_name
+                """);
+        return rows.stream()
+                .map(row -> new InventoryApi.VehicleOrderStockView(
+                        (UUID) row.get("purchase_order_id"), String.valueOf(row.get("purchase_order_no")),
+                        (UUID) row.get("product_id"), String.valueOf(row.get("product_no")),
+                        String.valueOf(row.get("product_name")), String.valueOf(row.get("category_code")),
+                        (UUID) row.get("warehouse_id"),
+                        row.get("warehouse_name") == null ? null : String.valueOf(row.get("warehouse_name")),
+                        toDecimal(row.get("on_hand_qty")), toDecimal(row.get("locked_qty")),
+                        toDecimal(row.get("available_qty")), toDecimal(row.get("unit_cost")),
+                        toDecimal(row.get("amount")), toInstant(row.get("updated_at"))))
+                .filter(view -> warehouseId == null || warehouseId.equals(view.warehouseId()))
+                .filter(view -> kw == null || kw.isEmpty()
+                        || (view.purchaseOrderNo() + " " + view.productNo() + " " + view.productName()
+                        + " " + (view.warehouseName() == null ? "" : view.warehouseName())).toLowerCase().contains(kw))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<InventoryApi.LedgerView> ledger(UUID productId, UUID warehouseId, StockMoveType moveType,
                                                 int limit) {
         int max = Math.max(1, Math.min(limit, 500));
@@ -289,7 +338,18 @@ public class InventoryQueryService {
                 product.name(), ledger.getSerialId(), serialNo, ledger.getWarehouseId(), warehouseName,
                 ledger.getMoveType(), ledger.getDirection(), ledger.getQuantity(), ledger.getUnitCost(),
                 ledger.getAmount(), ledger.getBalanceAfter(), ledger.getBizType(), ledger.getBizNo(),
-                ledger.getOccurredAt(), ledger.getRemark());
+                ledger.getOccurredAt(), ledger.getRemark(), product.series(), purchaseOrderNoOf(ledger));
+    }
+
+    private String purchaseOrderNoOf(StockLedger ledger) {
+        if (ledger.getBizId() == null) return null;
+        List<String> rows = jdbc.queryForList("""
+                select coalesce(po.external_order_no, po.order_no) as order_no
+                  from ivs.purchase_receipt pr
+                  join ivs.purchase_order po on po.id = pr.order_id
+                 where pr.id = ?
+                """, String.class, ledger.getBizId());
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     private InventoryApi.LockView toLockView(StockLock lock) {
@@ -314,5 +374,11 @@ public class InventoryQueryService {
 
     private BigDecimal toMoney(Object value) {
         return value instanceof BigDecimal decimal ? decimal : BigDecimal.ZERO;
+    }
+
+    private BigDecimal toDecimal(Object value) {
+        if (value instanceof BigDecimal decimal) return decimal;
+        if (value instanceof Number number) return BigDecimal.valueOf(number.doubleValue());
+        return BigDecimal.ZERO;
     }
 }

@@ -15,14 +15,14 @@
           <a-button type="primary" size="small" :loading="savingRole === role.roleCode" @click="save(role)">保存</a-button>
         </a-space>
       </template>
-      <div v-for="group in groups" :key="group.group" class="perm-group">
-        <div class="perm-group-title">{{ group.group }}</div>
-        <a-checkbox-group v-model:value="checked[role.roleCode]">
+      <a-checkbox-group v-model:value="checked[role.roleCode]" style="width:100%">
+        <div v-for="group in groups" :key="group.group" class="perm-group">
+          <div class="perm-group-title">{{ group.group }}</div>
           <a-checkbox v-for="item in group.permissions" :key="item.code" :value="item.code" class="perm-item">
             {{ item.label }}<span class="perm-code">{{ item.code }}</span>
           </a-checkbox>
-        </a-checkbox-group>
-      </div>
+        </div>
+      </a-checkbox-group>
     </a-card>
   </a-space>
 </template>

@@ -1,6 +1,6 @@
 import { http } from './http'
 import type {
-  ClaimDifferenceRow, CostRateRow, Entitlement, FundLedgerReport, FundOffset, FundPool, FundTxn,
+  ClaimDifferenceRow, CostRateRow, Entitlement, FundLedgerReport, FundOffset, FundOffsetPreview, FundPool, FundTxn,
   OemClaim, Policy, PoolProgressRow, PreEntitlement, ReceivableAgingRow, UnitCostRow,
 } from '../types/policy'
 
@@ -50,6 +50,10 @@ export const policyApi = {
     http.get<FundTxn[]>('/ivs/rebate-fund-pool/txns', { params }).then((r) => r.data),
   fundOffsets: (params?: { supplierId?: string }) =>
     http.get<FundOffset[]>('/ivs/rebate-fund-pool/offsets', { params }).then((r) => r.data),
+  fundOffsetPreview: (params: { supplierId: string; maxAmount?: number }) =>
+    http.get<FundOffsetPreview>('/ivs/rebate-fund-pool/offset-preview', { params }).then((r) => r.data),
+  cancelFundOffset: (offsetId: string) =>
+    http.post<FundOffset>(`/ivs/rebate-fund-pool/offsets/${offsetId}/cancel`, {}).then((r) => r.data),
   creditFund: (body: Record<string, unknown>) =>
     http.post<FundPool>('/ivs/rebate-fund-pool/credits', body).then((r) => r.data),
   requestCreditFund: (body: Record<string, unknown>) =>

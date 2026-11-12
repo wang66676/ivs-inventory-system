@@ -17,9 +17,8 @@
         </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'method'">{{ methodLabel(record.method) }}</template>
-          <template v-else-if="column.key === 'receivedAt'">
-            {{ String(record.receivedAt).replace('T', ' ').slice(0, 19) }}
-          </template>
+          <template v-else-if="column.key === 'salesOrderNo'">{{ salesOrderNos(record) }}</template>
+          <template v-else-if="column.key === 'receivedAt'">{{ dayjs(record.receivedAt).format('YYYY-MM-DD') }}</template>
         </template>
       </a-table>
     </a-card>
@@ -32,6 +31,9 @@
         <a-form-item label="收款方式">
           <a-select v-model:value="form.method" :options="methodOptions" />
         </a-form-item>
+        <a-form-item label="收款时间" required>
+          <a-date-picker v-model:value="form.receivedAt" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+        </a-form-item>
         <a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item>
       </a-form>
     </a-modal>
@@ -41,6 +43,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import { salesApi } from '../../api/sales'
 import { customerApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
@@ -59,14 +62,16 @@ const form = reactive<Record<string, any>>({ method: 'BANK_TRANSFER' })
 const columns = [
   { title: '收款单号', key: 'receiptNo', dataIndex: 'receiptNo', width: 150 },
   { title: '客户', key: 'customerName', dataIndex: 'customerName', width: 220 },
+  { title: '销售订单编号', key: 'salesOrderNo', width: 190 },
   { title: '收款金额', key: 'amount', dataIndex: 'amount', width: 140 },
   { title: '方式', key: 'method', width: 120 },
-  { title: '收款时间', key: 'receivedAt', width: 180 },
+  { title: '收款时间', key: 'receivedAt', width: 120 },
   { title: '备注', key: 'remark', dataIndex: 'remark' },
 ]
 
 const methodOptions = Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({ value, label }))
 const methodLabel = (method: string) => PAYMENT_METHOD_LABELS[method as PaymentMethod]
+const salesOrderNos = (receipt: Receipt) => [...new Set(receipt.allocations.map((item) => item.orderNo).filter(Boolean))].join('、') || '-'
 
 async function reload() {
   try {
@@ -79,12 +84,14 @@ async function reload() {
 function openCreate() {
   Object.keys(form).forEach((key) => delete form[key])
   form.method = 'BANK_TRANSFER'
+  form.receivedAt = dayjs().format('YYYY-MM-DD')
   modalOpen.value = true
 }
 
 async function submit() {
   if (!form.customerId) { message.warning('请选择客户'); return }
   if (!form.amount || form.amount <= 0) { message.warning('请填写收款金额'); return }
+  if (!form.receivedAt) { message.warning('请选择收款时间'); return }
   saving.value = true
   try {
     const receipt = await salesApi.createReceipt({ ...form })

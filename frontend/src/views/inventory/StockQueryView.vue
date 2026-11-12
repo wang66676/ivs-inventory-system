@@ -13,7 +13,7 @@
         <a-button @click="exportStock">导出</a-button>
         <span class="hint">共 {{ rows.length }} 条</span>
       </a-space>
-      <a-table v-resizable-columns :data-source="rows" :columns="columns" row-key="id" size="middle"
+      <a-table v-resizable-columns :data-source="rows" :columns="columns" :row-key="stockRowKey" size="middle"
                :pagination="{ pageSize: 15, showSizeChanger: true }" :scroll="{ x: 1250 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'purchaseOrderNo'">
@@ -36,13 +36,14 @@
             <a-descriptions-item label="状态">{{ PURCHASE_STATUS_LABELS[orderDetail.status] }}</a-descriptions-item>
             <a-descriptions-item label="预计到货">{{ orderDetail.expectedDate || '-' }}</a-descriptions-item>
             <a-descriptions-item label="总金额">{{ money(orderDetail.totalAmount) }}</a-descriptions-item>
+            <a-descriptions-item label="当前在库合计">{{ quantity(currentOrderStock) }}</a-descriptions-item>
             <a-descriptions-item label="备注">{{ orderDetail.remark || '-' }}</a-descriptions-item>
           </a-descriptions>
           <a-table :data-source="orderDetail.lines" row-key="id" size="small" :pagination="false" :scroll="{ x: 1100 }">
             <a-table-column title="车系" :width="140"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
             <a-table-column title="商品名称" :width="190"><template #default="{ record }">{{ record.productName }}</template></a-table-column>
             <a-table-column title="配置" :width="160"><template #default="{ record }">{{ record.configText || record.configCode || '-' }}</template></a-table-column>
-            <a-table-column title="数量" data-index="quantity" :width="80" />
+            <a-table-column title="采购数量" data-index="quantity" :width="100" />
             <a-table-column title="单价" :width="110"><template #default="{ record }">{{ money(record.unitPrice) }}</template></a-table-column>
             <a-table-column title="总计车款" :width="120"><template #default="{ record }">{{ money(record.amount) }}</template></a-table-column>
             <a-table-column title="返利政策" :width="220"><template #default="{ record }"><a-tag v-for="policy in record.policies" :key="policy.id" color="blue">{{ policy.name }}</a-tag></template></a-table-column>
@@ -55,12 +56,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { inventoryApi } from '../../api/inventory'
 import { purchaseApi } from '../../api/procurement'
 import { warehouseApi } from '../../api/masterdata'
-import type { StockBalance } from '../../types/inventory'
+import type { StockBalance, VehicleOrderStock } from '../../types/inventory'
 import type { PurchaseOrder } from '../../types/procurement'
 import { PURCHASE_STATUS_LABELS } from '../../types/procurement'
 import { exportCsv, exportTimestamp } from '../../utils/csvExport'
@@ -69,13 +70,21 @@ import type { BusinessScope } from '../../utils/businessScope'
 
 const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
-const rows = ref<StockBalance[]>([])
+type StockRow = StockBalance | VehicleOrderStock
+const rows = ref<StockRow[]>([])
 const warehouseId = ref<string | undefined>(undefined)
 const keyword = ref('')
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const orderDetailOpen = ref(false)
 const orderLoading = ref(false)
 const orderDetail = ref<PurchaseOrder>()
+const currentOrderStock = computed(() => orderDetail.value
+  ? rows.value.filter((row) => row.purchaseOrderId === orderDetail.value?.id)
+    .reduce((sum, row) => sum + Number(row.onHandQty || 0), 0)
+  : 0)
+const stockRowKey = (row: StockRow) => 'id' in row
+  ? row.id
+  : `${row.purchaseOrderId}-${row.productId}-${row.warehouseId}`
 
 const columns = [
   { title: '订单编号', key: 'purchaseOrderNo', width: 150, ellipsis: true },
@@ -92,10 +101,13 @@ const columns = [
 function money(value?: number | null) {
   return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
+function quantity(value?: number | null) {
+  return Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 })
+}
 
 function exportStock() {
   if (!rows.value.length) { message.warning('当前没有可导出的库存数据'); return }
-  exportCsv<StockBalance>(`库存查询-${exportTimestamp()}`, [
+  exportCsv<StockRow>(`库存查询-${exportTimestamp()}`, [
     { title: '订单编号', value: (row) => row.purchaseOrderNo },
     { title: '商品名称', value: (row) => row.productName },
     { title: '仓库', value: (row) => row.warehouseName },
@@ -109,7 +121,7 @@ function exportStock() {
   message.success('库存数据已导出')
 }
 
-async function openOrderDetail(record: StockBalance) {
+async function openOrderDetail(record: StockRow) {
   if (!record.purchaseOrderId) return
   orderDetailOpen.value = true
   orderLoading.value = true
@@ -121,8 +133,15 @@ async function openOrderDetail(record: StockBalance) {
 
 async function reload() {
   try {
-    const result = await inventoryApi.balances({ warehouseId: warehouseId.value, keyword: keyword.value || undefined })
-    rows.value = result.filter((row) => isBatteryCategory(row.categoryCode) === (props.scope === 'BATTERY'))
+    if (props.scope === 'VEHICLE') {
+      rows.value = await inventoryApi.vehicleOrderStock({
+        warehouseId: warehouseId.value,
+        keyword: keyword.value || undefined,
+      })
+    } else {
+      const result = await inventoryApi.balances({ warehouseId: warehouseId.value, keyword: keyword.value || undefined })
+      rows.value = result.filter((row) => isBatteryCategory(row.categoryCode))
+    }
   } catch (error) {
     message.error((error as Error).message)
   }

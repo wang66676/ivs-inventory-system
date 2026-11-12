@@ -5,7 +5,7 @@
                message="库存台账：只追加的事实表。每一笔变动都记录方向、数量、单位成本、金额与变动后余额，并关联业务单据（收货单号等）。台账可完整重建余额。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button @click="reload">刷新</a-button>
-        <a-select v-model:value="productId" :options="productOptions" allow-clear show-search placeholder="按商品筛选"
+        <a-select v-model:value="productSeries" :options="productOptions" allow-clear show-search placeholder="按车系筛选"
                   style="width:280px" @change="reload" />
         <a-select v-model:value="warehouseId" :options="warehouseOptions" allow-clear placeholder="按仓库筛选"
                   style="width:190px" @change="reload" />
@@ -26,8 +26,8 @@
           <template v-else-if="column.key === 'moveType'">
             {{ MOVE_TYPE_LABELS[record.moveType] ?? record.moveType }}
           </template>
-          <template v-else-if="column.key === 'occurredAt'">
-            {{ String(record.occurredAt).replace('T', ' ').slice(0, 19) }}
+          <template v-else-if="column.key === 'purchaseOrderNo'">
+            {{ record.purchaseOrderNo || '-' }}
           </template>
           <template v-else-if="column.key === 'serialNo'">
             {{ record.serialNo ?? '-' }}
@@ -52,17 +52,17 @@ import { isBatteryCategory } from '../../utils/businessScope'
 const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 
 const rows = ref<LedgerEntry[]>([])
-const productId = ref<string | undefined>(undefined)
+const productSeries = ref<string | undefined>(undefined)
 const warehouseId = ref<string | undefined>(undefined)
 const moveType = ref<string | undefined>(undefined)
-const limit = ref(200)
+const limit = ref(500)
 const productOptions = ref<{ label: string; value: string }[]>([])
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const scopedProductIds = ref<Set<string>>(new Set())
 const moveTypeOptions = Object.entries(MOVE_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 
 const columns = [
-  { title: '发生时间', key: 'occurredAt', width: 170 },
+  { title: '采购订单编号', key: 'purchaseOrderNo', width: 170 },
   { title: '商品', key: 'productName', dataIndex: 'productName', width: 200 },
   { title: '序列号', key: 'serialNo', width: 190 },
   { title: '仓库', key: 'warehouseName', dataIndex: 'warehouseName', width: 130 },
@@ -78,9 +78,10 @@ const columns = [
 async function reload() {
   try {
     const result = await inventoryApi.ledger({
-      productId: productId.value, warehouseId: warehouseId.value, moveType: moveType.value, limit: limit.value,
+      warehouseId: warehouseId.value, moveType: moveType.value, limit: limit.value,
     })
-    rows.value = result.filter((row) => scopedProductIds.value.has(row.productId))
+    rows.value = result.filter((row) => scopedProductIds.value.has(row.productId)
+      && (!productSeries.value || row.series === productSeries.value))
   } catch (error) {
     message.error((error as Error).message)
   }
@@ -89,7 +90,7 @@ async function reload() {
 function exportLedger() {
   if (!rows.value.length) { message.warning('当前没有可导出的库存台账数据'); return }
   exportCsv<LedgerEntry>(`库存台账-${exportTimestamp()}`, [
-    { title: '发生时间', value: (row) => String(row.occurredAt).replace('T', ' ').slice(0, 19) },
+    { title: '采购订单编号', value: (row) => row.purchaseOrderNo },
     { title: '商品编码', value: (row) => row.productNo },
     { title: '商品名称', value: (row) => row.productName },
     { title: 'VIN/SN', value: (row) => row.serialNo },
@@ -111,7 +112,9 @@ onMounted(async () => {
     const [products, warehouses] = await Promise.all([productApi.list(), warehouseApi.list()])
     const scopedProducts = products.filter((item) => isBatteryCategory(item.categoryCode, item.categoryName) === (props.scope === 'BATTERY'))
     scopedProductIds.value = new Set(scopedProducts.map((item) => item.id))
-    productOptions.value = scopedProducts.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
+    const series = [...new Set(scopedProducts.map((item) => item.series || item.name).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    productOptions.value = series.map((item) => ({ label: item, value: item }))
     warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
   } catch { /* ignore */ }
   await reload()

@@ -7,11 +7,14 @@
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="supplierId" :options="supplierOptions" allow-clear show-search
                   placeholder="按供应商筛选" style="width:240px" @change="reload" />
+        <a-select v-model:value="status" :options="statusOptions" allow-clear
+                  placeholder="按状态筛选" style="width:180px" @change="reload" />
       </a-space>
       <a-table :data-source="rows" :columns="columns" row-key="id" size="middle"
-               :pagination="{ pageSize: 15 }" :scroll="{ x: 1300 }">
+               :pagination="{ pageSize: 15 }" :scroll="{ x: 1500 }">
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'amount'">{{ money(record.amount) }}</template>
+          <template v-if="column.key === 'purchaseQuantity'">{{ quantity(record.purchaseQuantity) }}</template>
+          <template v-else-if="column.key === 'amount'">{{ money(record.amount) }}</template>
           <template v-else-if="column.key === 'invoiced'">{{ money(record.invoiceMatchedAmount) }}</template>
           <template v-else-if="column.key === 'uninvoiced'">{{ money(record.uninvoicedAmount) }}</template>
           <template v-else-if="column.key === 'paid'">{{ money(record.paidAmount) }}</template>
@@ -47,13 +50,15 @@ import { PAYABLE_STATUS_LABELS } from '../../types/payable'
 import type { Payable, PayableStatus } from '../../types/payable'
 const rows = ref<Payable[]>([])
 const supplierId = ref<string | undefined>()
+const status = ref<PayableStatus | undefined>()
 const supplierOptions = ref<{ label: string; value: string }[]>([])
+const statusOptions = Object.entries(PAYABLE_STATUS_LABELS).map(([value, label]) => ({ value, label }))
 const payOpen = ref(false); const saving = ref(false); const current = ref<Payable>(); const payAmount = ref<number>(); const payRemark = ref('')
 const columns = [
   { title: '应付单号', key: 'payableNo', dataIndex: 'payableNo', width: 140 },
   { title: '供应商', key: 'supplierName', dataIndex: 'supplierName', width: 190 },
-  { title: '采购单', key: 'orderNo', dataIndex: 'orderNo', width: 130 },
-  { title: '入库单', key: 'receiptNo', dataIndex: 'receiptNo', width: 130 },
+  { title: '采购订单编号', key: 'orderNo', dataIndex: 'orderNo', width: 160 },
+  { title: '采购数量', key: 'purchaseQuantity', width: 110, align: 'right' },
   { title: '应付金额', key: 'amount', width: 130 },
   { title: '已开票', key: 'invoiced', width: 130 },
   { title: '未开票', key: 'uninvoiced', width: 130 },
@@ -65,6 +70,7 @@ const columns = [
   { title: '操作', key: 'actions', width: 100 },
 ]
 function money(v?: number) { return `¥${Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
+function quantity(v?: number) { return Number(v || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 }) }
 function formatTime(v: string) { return v ? v.replace('T', ' ').slice(0, 19) : '-' }
 function openPay(record: Payable) { current.value = record; payAmount.value = record.outstanding; payRemark.value = ''; payOpen.value = true }
 async function submitPay() {
@@ -73,6 +79,6 @@ async function submitPay() {
   try { await payableApi.pay(current.value.id, { amount: payAmount.value, remark: payRemark.value || null }); message.success('付款已核销'); payOpen.value = false; await reload() }
   catch (e) { message.error((e as Error).message) } finally { saving.value = false }
 }
-async function reload() { try { rows.value = await payableApi.list({ supplierId: supplierId.value }) } catch (e) { message.error((e as Error).message) } }
+async function reload() { try { rows.value = await payableApi.list({ supplierId: supplierId.value, status: status.value }) } catch (e) { message.error((e as Error).message) } }
 onMounted(async () => { try { const s = await supplierApi.list(); supplierOptions.value = s.map(x => ({ label: `${x.name}（${x.code}）`, value: x.id })) } catch {} await reload() })
 </script>

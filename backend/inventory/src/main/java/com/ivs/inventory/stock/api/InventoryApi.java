@@ -33,14 +33,24 @@ public final class InventoryApi {
             UUID id, UUID productId, String productNo, String productName, UUID serialId, String serialNo,
             UUID warehouseId, String warehouseName, StockMoveType moveType, StockDirection direction,
             BigDecimal quantity, BigDecimal unitCost, BigDecimal amount, BigDecimal balanceAfter,
-            String bizType, String bizNo, Instant occurredAt, String remark
+            String bizType, String bizNo, Instant occurredAt, String remark, String series,
+            String purchaseOrderNo
     ) {
         public static LedgerView from(StockLedger ledger) {
             return new LedgerView(ledger.getId(), ledger.getProductId(), null, null, ledger.getSerialId(), null,
                     ledger.getWarehouseId(), null, ledger.getMoveType(), ledger.getDirection(),
                     ledger.getQuantity(), ledger.getUnitCost(), ledger.getAmount(), ledger.getBalanceAfter(),
-                    ledger.getBizType(), ledger.getBizNo(), ledger.getOccurredAt(), ledger.getRemark());
+                    ledger.getBizType(), ledger.getBizNo(), ledger.getOccurredAt(), ledger.getRemark(),
+                    null, null);
         }
+    }
+
+    /** 整车库存按 VIN 的实际采购来源归集到采购订单，避免把多个订单的余额串到最近一张订单。 */
+    public record VehicleOrderStockView(
+            UUID purchaseOrderId, String purchaseOrderNo, UUID productId, String productNo, String productName,
+            String categoryCode, UUID warehouseId, String warehouseName, BigDecimal onHandQty, BigDecimal lockedQty,
+            BigDecimal availableQty, BigDecimal unitCost, BigDecimal amount, Instant updatedAt
+    ) {
     }
 
     public record AgeBucketView(String label, int serialCount, BigDecimal amount) {

@@ -53,6 +53,7 @@ class PayableIntegrationTest {
                 "/api/ivs/payables?supplierId=" + supplierId, PayableApi.PayableView[].class).getBody();
         assertThat(payables).isNotNull().hasSize(1);
         assertThat(payables[0].amount()).isEqualByComparingTo("1000.00");
+        assertThat(payables[0].purchaseQuantity()).isEqualByComparingTo("10.000");
         assertThat(payables[0].outstanding()).isEqualByComparingTo("1000.00");
 
         PayableApi.PayableView paid = post("/api/ivs/payables/" + payables[0].id() + "/pay",

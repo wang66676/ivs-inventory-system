@@ -20,6 +20,7 @@ public class Payable {
     @Column(name = "purchase_receipt_id", unique = true) private UUID purchaseReceiptId;
     @Column(name = "order_no", length = 40) private String orderNo;
     @Column(name = "receipt_no", length = 40) private String receiptNo;
+    @Column(name = "purchase_quantity", nullable = false, precision = 18, scale = 3) private BigDecimal purchaseQuantity;
     @Column(nullable = false, precision = 18, scale = 2) private BigDecimal amount;
     @Column(name = "paid_amount", nullable = false, precision = 18, scale = 2) private BigDecimal paidAmount;
     @Column(name = "invoice_matched_amount", nullable = false, precision = 18, scale = 2)
@@ -35,7 +36,8 @@ public class Payable {
     }
 
     public static Payable fromReceipt(String payableNo, UUID supplierId, UUID orderId, UUID receiptId,
-                                      String orderNo, String receiptNo, BigDecimal amount, LocalDate dueDate) {
+                                      String orderNo, String receiptNo, BigDecimal purchaseQuantity,
+                                      BigDecimal amount, LocalDate dueDate) {
         Payable value = new Payable();
         value.id = UUID.randomUUID();
         value.payableNo = payableNo;
@@ -44,6 +46,7 @@ public class Payable {
         value.purchaseReceiptId = receiptId;
         value.orderNo = orderNo;
         value.receiptNo = receiptNo;
+        value.purchaseQuantity = purchaseQuantity == null ? BigDecimal.ZERO : purchaseQuantity;
         value.amount = money(amount);
         value.paidAmount = money(BigDecimal.ZERO);
         value.invoiceMatchedAmount = money(BigDecimal.ZERO);
@@ -63,6 +66,7 @@ public class Payable {
         value.amount = money(amount);
         value.paidAmount = money(paidAmount);
         value.invoiceMatchedAmount = money(BigDecimal.ZERO);
+        value.purchaseQuantity = qty(BigDecimal.ZERO);
         if (value.amount.signum() <= 0) throw new IllegalArgumentException("期初应付金额必须大于 0");
         if (value.paidAmount.signum() < 0 || value.paidAmount.compareTo(value.amount) > 0) {
             throw new IllegalArgumentException("已付金额必须在 0 与应付金额之间");
@@ -131,6 +135,7 @@ public class Payable {
     @PrePersist void prePersist() {
         Instant now = Instant.now();
         if (id == null) id = UUID.randomUUID();
+        if (purchaseQuantity == null) purchaseQuantity = qty(BigDecimal.ZERO);
         if (amount == null) amount = money(BigDecimal.ZERO);
         if (paidAmount == null) paidAmount = money(BigDecimal.ZERO);
         if (invoiceMatchedAmount == null) invoiceMatchedAmount = money(BigDecimal.ZERO);
@@ -144,6 +149,10 @@ public class Payable {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private static BigDecimal qty(BigDecimal value) {
+        return (value == null ? BigDecimal.ZERO : value).setScale(3, RoundingMode.HALF_UP);
+    }
+
     public UUID getId() { return id; }
     public String getPayableNo() { return payableNo; }
     public UUID getSupplierId() { return supplierId; }
@@ -151,6 +160,7 @@ public class Payable {
     public UUID getPurchaseReceiptId() { return purchaseReceiptId; }
     public String getOrderNo() { return orderNo; }
     public String getReceiptNo() { return receiptNo; }
+    public BigDecimal getPurchaseQuantity() { return purchaseQuantity == null ? qty(BigDecimal.ZERO) : purchaseQuantity; }
     public BigDecimal getAmount() { return amount; }
     public BigDecimal getPaidAmount() { return paidAmount; }
     public BigDecimal getInvoiceMatchedAmount() {

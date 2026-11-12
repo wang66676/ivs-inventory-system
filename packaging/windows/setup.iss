@@ -1,6 +1,7 @@
 #define MyAppName "IVS 进销存系统"
 #define MyAppVersion GetEnv("APP_VERSION")
-#define MyAppExeName "IVS.exe"
+#define MyAppExeName "IVSLauncher.exe"
+#define MyCoreExeName "IVS.exe"
 
 [Setup]
 AppId={{A7F4C34D-8E7D-4BD0-9B29-3C2D27EA8C52}
@@ -20,6 +21,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
+SetupIconFile=packaging\windows\IVS.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Tasks]
@@ -30,9 +32,9 @@ Source: "windows-app\IVS\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdi
 Source: "packaging\web\网页登录版.url"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\IVS 进销存系统"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{group}\网页登录版"; Filename: "{app}\网页登录版.url"
-Name: "{autodesktop}\IVS 进销存系统"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\IVS 进销存系统"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0
+Name: "{group}\网页登录版"; Filename: "{app}\网页登录版.url"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0
+Name: "{autodesktop}\IVS 进销存系统"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "立即运行 IVS 进销存系统"; Flags: nowait postinstall skipifsilent
@@ -42,6 +44,7 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
+  Exec('taskkill.exe', '/IM IVSLauncher.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/IM IVS.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := '';
 end;

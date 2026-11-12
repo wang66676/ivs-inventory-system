@@ -10,9 +10,10 @@
         <a-input v-model:value="keyword" placeholder="订单号" allow-clear style="width:190px" @press-enter="reload" />
       </a-space>
       <a-table v-resizable-columns :data-source="salesRows" :columns="columns" row-key="rowKey" size="middle"
-               :pagination="false" :scroll="{ x: 1760 }">
+               :pagination="false" :scroll="{ x: 1900 }">
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'lineNo'">{{ record.line.lineNo }}</template>
+          <template v-if="column.key === 'orderNo'">{{ record.order.externalOrderNo || record.order.orderNo }}</template>
+          <template v-else-if="column.key === 'customer'">{{ record.order.customerName }}</template>
           <template v-else-if="column.key === 'product'">
             <div>{{ record.line.productName }}</div>
             <a-tag v-if="record.order.paymentMode === 'INSTALLMENT'" color="purple" style="margin-top:3px">分期 / 以租代售</a-tag>
@@ -285,9 +286,9 @@ const salesRows = computed<SalesListRow[]>(() => rows.value.flatMap((order) => o
   isFirstLine: index === 0,
 }))))
 const vehicleColumns = [
-  { title: '行号', key: 'lineNo', width: 70, align: 'center' },
+  { title: '销售订单号', key: 'orderNo', width: 160, ellipsis: true },
+  { title: '客户', key: 'customer', width: 180, ellipsis: true },
   { title: '商品', key: 'product', width: 240 },
-  { title: '追踪', key: 'tracking', width: 100, align: 'center' },
   { title: '数量', key: 'quantity', width: 90, align: 'right' },
   { title: '已出', key: 'deliveredQuantity', width: 90, align: 'right' },
   { title: '成交价', key: 'unitPrice', width: 150, align: 'right' },
@@ -296,9 +297,9 @@ const vehicleColumns = [
   { title: '操作', key: 'actions', width: 330, fixed: 'right' },
 ]
 const batteryColumns = [
-  ...vehicleColumns.slice(0, 2),
+  ...vehicleColumns.slice(0, 3),
   { title: '电池信息', key: 'batteryInfo', width: 300, ellipsis: true },
-  ...vehicleColumns.slice(2),
+  ...vehicleColumns.slice(3),
 ]
 const columns = computed(() => props.scope === 'BATTERY' ? batteryColumns : vehicleColumns)
 

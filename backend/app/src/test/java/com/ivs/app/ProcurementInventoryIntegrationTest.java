@@ -93,6 +93,14 @@ class ProcurementInventoryIntegrationTest {
         assertThat(balances[0].amount()).isEqualByComparingTo("840000.00");
         assertThat(balances[0].productName()).isEqualTo("Q3 牵引车");
 
+        InventoryApi.VehicleOrderStockView[] orderStock = restTemplate.getForEntity(
+                "/api/ivs/inventory/vehicle-order-stock?warehouseId=" + warehouse.id(),
+                InventoryApi.VehicleOrderStockView[].class).getBody();
+        assertThat(orderStock).isNotNull().hasSize(1);
+        assertThat(orderStock[0].purchaseOrderId()).isEqualTo(order.id());
+        assertThat(orderStock[0].onHandQty()).isEqualByComparingTo("2.000");
+        String expectedOrderNo = order.orderNo();
+
         // 台账：两条按序列号的入库记录
         InventoryApi.LedgerView[] ledger = restTemplate.getForEntity(
                 "/api/ivs/inventory/ledger?productId=" + product.id(), InventoryApi.LedgerView[].class).getBody();
@@ -102,6 +110,7 @@ class ProcurementInventoryIntegrationTest {
             assertThat(item.moveType().name()).isEqualTo("PURCHASE_IN");
             assertThat(item.serialNo()).isNotBlank();
             assertThat(item.bizNo()).startsWith("RC-");
+            assertThat(item.purchaseOrderNo()).isEqualTo(expectedOrderNo);
         });
         InventoryApi.LedgerView[] filteredLedger = restTemplate.getForEntity(
                 "/api/ivs/inventory/ledger?warehouseId=" + warehouse.id() + "&moveType=PURCHASE_IN",

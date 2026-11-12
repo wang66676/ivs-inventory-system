@@ -13,6 +13,8 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 /** 收款单：登记收款并按到期日 FIFO 核销应收。 */
@@ -60,7 +62,7 @@ public class Receipt {
     }
 
     public static Receipt create(String receiptNo, UUID customerId, BigDecimal amount, PaymentMethod method,
-                                 String remark) {
+                                 String remark, LocalDate receivedDate) {
         Receipt receipt = new Receipt();
         receipt.id = UUID.randomUUID();
         receipt.receiptNo = receiptNo;
@@ -70,7 +72,8 @@ public class Receipt {
             throw new IllegalArgumentException("收款金额必须大于 0");
         }
         receipt.method = method == null ? PaymentMethod.BANK_TRANSFER : method;
-        receipt.receivedAt = Instant.now();
+        receipt.receivedAt = receivedDate == null ? Instant.now()
+                : receivedDate.atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant();
         receipt.status = ReceiptStatus.POSTED;
         receipt.remark = remark;
         receipt.createdAt = receipt.receivedAt;

@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="库龄按每个 VIN/SN 的实际入库时间计算；可按商品、仓库、整车/电池及库龄区间筛选。" />
+               message="库龄按每个 VIN/SN 的实际入库时间计算；可按车系、仓库、整车/电池及库龄区间筛选。" />
       <a-row :gutter="12" style="margin-bottom:12px">
         <a-col :xs="12" :md="6"><a-card size="small"><a-statistic title="库存序列号" :value="filtered.length" suffix="条" /></a-card></a-col>
         <a-col :xs="12" :md="6"><a-card size="small"><a-statistic title="90 天以上" :value="criticalRows.length" suffix="条" /></a-card></a-col>
@@ -10,7 +10,7 @@
       </a-row>
       <a-space wrap style="margin-bottom:12px">
         <a-input v-model:value="keyword" placeholder="VIN/SN / 商品" allow-clear style="width:220px" @press-enter="reload" />
-        <a-select v-model:value="productId" :options="productOptions" allow-clear show-search placeholder="按商品筛选" style="width:220px" />
+        <a-select v-model:value="productSeries" :options="productOptions" allow-clear show-search placeholder="按车系筛选" style="width:220px" />
         <a-select v-model:value="warehouseId" :options="warehouseOptions" allow-clear placeholder="按仓库筛选" style="width:180px" />
         <a-select v-model:value="type" :options="typeOptions" allow-clear placeholder="按类型筛选" style="width:150px" />
         <a-select v-model:value="bucket" :options="bucketOptions" allow-clear placeholder="按库龄筛选" style="width:150px" />
@@ -40,7 +40,7 @@ import type { AgeAnalysisItem } from '../../types/inventory'
 
 const rows = ref<AgeAnalysisItem[]>([])
 const keyword = ref('')
-const productId = ref<string>()
+const productSeries = ref<string>()
 const warehouseId = ref<string>()
 const type = ref<string>()
 const bucket = ref<string>()
@@ -66,7 +66,7 @@ const filtered = computed(() => rows.value.filter((row) => {
     ? row.categoryCode?.toUpperCase().startsWith('BATTERY') || row.categoryName?.includes('电池')
     : !(row.categoryCode?.toUpperCase().startsWith('BATTERY') || row.categoryName?.includes('电池')))
   return (!keyword.value || text.includes(keyword.value.toLowerCase()))
-    && (!productId.value || row.productId === productId.value)
+    && (!productSeries.value || row.series === productSeries.value)
     && (!warehouseId.value || row.warehouseId === warehouseId.value)
     && matchesType && (!bucket.value || row.ageBucket === bucket.value)
 }))
@@ -90,7 +90,9 @@ function exportRows() {
 onMounted(async () => {
   try {
     const [products, warehouses] = await Promise.all([productApi.list(), warehouseApi.list()])
-    productOptions.value = products.map((item) => ({ label: `${item.productNo}（${item.name}）`, value: item.id }))
+    const series = [...new Set(products.map((item) => item.series || item.name).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    productOptions.value = series.map((item) => ({ label: item, value: item }))
     warehouseOptions.value = warehouses.map((item) => ({ label: item.name, value: item.id }))
   } catch { /* ignore */ }
   reload()

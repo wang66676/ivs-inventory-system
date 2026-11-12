@@ -106,6 +106,7 @@ export interface Receivable {
 export interface ReceiptAllocation {
   receivableId: string
   receivableNo: string
+  orderNo?: string
   amount: number
 }
 

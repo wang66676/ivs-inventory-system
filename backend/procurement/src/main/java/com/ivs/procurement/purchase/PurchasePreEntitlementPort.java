@@ -13,6 +13,11 @@ public interface PurchasePreEntitlementPort {
 
     void clear(UUID purchaseOrderId);
 
+    void sync(UUID purchaseOrderId, List<PreEntitlementLine> lines);
+
+    record PreEntitlementLine(UUID orderLineId, UUID productId, BigDecimal unitPrice, List<UUID> policyIds) {
+    }
+
     void syncSerials(UUID purchaseOrderId, UUID orderLineId, UUID productId, BigDecimal unitPrice,
                      List<UUID> policyIds, List<String> serialNos);
 }

@@ -148,7 +148,7 @@ const statusOptions = [
 const policyTypeOptions = Object.entries(POLICY_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 const cycleOptions = Object.entries(CYCLE_LABELS).filter(([value]) => value !== 'MIXED').map(([value, label]) => ({ value, label }))
 const referenceOptions = [
-  { value: 'RETAIL_DATE', label: '实销日期（默认）' }, { value: 'ORDER_DATE', label: '订单日期' },
+  { value: 'RETAIL_DATE', label: '实销日期（默认）' }, { value: 'ORDER_DATE', label: '采购订单时间（CG年月日）' },
   { value: 'INVOICE_DATE', label: '终端开票时间' }, { value: 'DELIVERY_DATE', label: '交付日期' },
   { value: 'REGISTER_DATE', label: '上牌日期' },
 ]

@@ -2,7 +2,7 @@
   <div class="login-page">
     <a-card class="login-card" :bordered="false">
       <div class="login-brand">
-        <div class="brand-mark">TC</div>
+        <img class="brand-mark" :src="brandLogoUrl" alt="容大进销存" />
         <div>
           <h1>进销存系统</h1>
           <p>整车 · 动力电池 · 其他产品</p>
@@ -27,6 +27,8 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '../../stores/auth'
+
+const brandLogoUrl = import.meta.env.BASE_URL + 'logo.png'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -73,15 +75,13 @@ async function submit() {
 }
 
 .brand-mark {
-  display: grid;
   width: 52px;
   height: 52px;
-  place-items: center;
+  padding: 5px;
+  box-sizing: border-box;
   border-radius: 16px;
-  background: #1677ff;
-  color: #fff;
-  font-size: 20px;
-  font-weight: 800;
+  background: rgba(255, 255, 255, 0.92);
+  object-fit: contain;
 }
 
 h1 {

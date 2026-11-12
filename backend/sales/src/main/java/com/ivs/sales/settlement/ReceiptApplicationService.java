@@ -80,7 +80,7 @@ public class ReceiptApplicationService {
         try {
             receipt = receiptRepository.save(Receipt.create(
                     "RCPT-%06d".formatted(receiptRepository.nextReceiptSequence()),
-                    customer.id(), amount, command.method(), command.remark()));
+                    customer.id(), amount, command.method(), command.remark(), command.receivedAt()));
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("RECEIPT_INVALID", exception.getMessage());
         }
@@ -99,7 +99,8 @@ public class ReceiptApplicationService {
             receivableRepository.save(receivable);
             allocationRepository.save(ReceiptAllocation.create(receipt.getId(), receivable.getId(), applied));
             installmentPlanService.refreshForReceivable(receivable.getId());
-            allocations.add(new SalesApi.ReceiptAllocationView(receivable.getId(), receivable.getReceivableNo(), applied));
+            allocations.add(new SalesApi.ReceiptAllocationView(receivable.getId(), receivable.getReceivableNo(),
+                    orderNoOf(receivable.getOrderId()), applied));
             remaining = remaining.subtract(applied);
         }
         // 款货两清：该订单应收全部结清则关闭订单
@@ -119,10 +120,13 @@ public class ReceiptApplicationService {
                 .map(receipt -> SalesApi.ReceiptView.from(receipt,
                         customerName(receipt.getCustomerId()),
                         allocationRepository.findByReceiptId(receipt.getId()).stream()
-                                .map(allocation -> new SalesApi.ReceiptAllocationView(allocation.getReceivableId(),
-                                        receivableRepository.findById(allocation.getReceivableId())
-                                                .map(Receivable::getReceivableNo).orElse(null),
-                                        allocation.getAmount()))
+                                .map(allocation -> {
+                                    Receivable receivable = receivableRepository.findById(allocation.getReceivableId()).orElse(null);
+                                    return new SalesApi.ReceiptAllocationView(allocation.getReceivableId(),
+                                            receivable == null ? null : receivable.getReceivableNo(),
+                                            receivable == null ? null : orderNoOf(receivable.getOrderId()),
+                                            allocation.getAmount());
+                                })
                                 .toList()))
                 .toList();
     }
@@ -170,6 +174,6 @@ public class ReceiptApplicationService {
 
     /** 结算与订单同属销售模块，直接复用订单仓储取单号。 */
     private String orderNoOf(UUID orderId) {
-        return orderRepository.findById(orderId).map(SalesOrder::getOrderNo).orElse(null);
+        return orderId == null ? null : orderRepository.findById(orderId).map(SalesOrder::getExternalOrderNo).orElse(null);
     }
 }

@@ -25,6 +25,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -123,9 +125,12 @@ class SalesSettlementIntegrationTest {
         // 收款核销
         SalesApi.ReceiptView receipt = post("/api/ivs/receipts", Map.of(
                 "customerId", customer.id().toString(), "amount", 460000, "method", "BANK_TRANSFER",
-                "remark", "全款到账"), SalesApi.ReceiptView.class);
+                "receivedAt", "2026-11-10", "remark", "全款到账"), SalesApi.ReceiptView.class);
         assertThat(receipt.allocations()).hasSize(1);
         assertThat(receipt.allocations().get(0).amount()).isEqualByComparingTo("460000.00");
+        assertThat(receipt.allocations().get(0).orderNo()).isEqualTo(order.orderNo());
+        assertThat(receipt.receivedAt().atZone(ZoneId.of("Asia/Shanghai")).toLocalDate())
+                .isEqualTo(LocalDate.of(2026, 11, 10));
         SalesApi.ReceivableView[] settled = restTemplate.getForEntity(
                 "/api/ivs/receivables?customerId=" + customer.id(), SalesApi.ReceivableView[].class).getBody();
         assertThat(settled).isNotNull();

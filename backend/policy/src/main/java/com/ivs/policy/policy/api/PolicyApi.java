@@ -55,7 +55,8 @@ public final class PolicyApi {
             UUID id, String preNo, UUID orderId, UUID orderLineId, UUID productId, UUID serialId,
             UUID policyId, String policyName, BigDecimal estimateAmount, PreEntitlementStatus status,
             boolean addedAfterOrder, String addReason, String serialNos, String orderNo,
-            Instant invoiceIssuedAt, LocalDate retailDate, Instant createdAt
+            Instant invoiceIssuedAt, LocalDate retailDate, String referenceDateType,
+            LocalDate referenceDate, Instant createdAt
     ) {
     }
 

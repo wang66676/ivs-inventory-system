@@ -58,7 +58,15 @@
               <template v-else-if="column.key === 'appliedAmount'">{{ money(record.appliedAmount) }}</template>
               <template v-else-if="column.key === 'balanceAfter'">{{ money(record.balanceAfter) }}</template>
               <template v-else-if="column.key === 'status'">
-                <a-tag :color="record.status === 'ACTIVE' ? 'green' : 'default'">{{ record.status }}</a-tag>
+                <a-tag :color="record.status === 'ACTIVE' ? 'green' : 'default'">
+                  {{ record.status === 'ACTIVE' ? '已抵扣' : record.status === 'CANCELLED' ? '已取消' : record.status }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.key === 'actions'">
+                <a-button v-if="canOffset && record.status === 'ACTIVE'" danger size="small" @click="cancelOffset(record)">
+                  取消抵扣
+                </a-button>
+                <span v-else>-</span>
               </template>
             </template>
           </a-table>
@@ -82,7 +90,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { policyApi } from '../../api/policy'
 import { supplierApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
@@ -90,6 +98,7 @@ import type { FundOffset, FundPool, FundTxn } from '../../types/policy'
 
 const auth = useAuthStore()
 const canAdjust = auth.can('IVS_FUND_POOL_ADJUST')
+const canOffset = auth.can('IVS_FUND_OFFSET')
 const pool = ref<FundPool>()
 const txns = ref<FundTxn[]>([])
 const offsets = ref<FundOffset[]>([])
@@ -125,6 +134,7 @@ const offsetColumns = [
   { title: '抵扣后余额', key: 'balanceAfter', width: 140 },
   { title: '状态', key: 'status', width: 100 },
   { title: '时间', key: 'createdAt', dataIndex: 'createdAt', width: 170 },
+  { title: '操作', key: 'actions', width: 110, fixed: 'right' },
 ]
 
 function supplierName(id: string) { return supplierNames.value[id] || id }
@@ -151,6 +161,23 @@ async function credit() {
     creditOpen.value = false
     await reload()
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }
+}
+
+function cancelOffset(record: FundOffset) {
+  Modal.confirm({
+    title: `取消抵扣 ${record.offsetNo}？`,
+    content: `取消后将回补厂家返利余额 ${money(record.appliedAmount)}，并新增回补流水。`,
+    okText: '确认取消', okType: 'danger', cancelText: '返回',
+    onOk: async () => {
+      try {
+        await policyApi.cancelFundOffset(record.id)
+        message.success('抵扣已取消，返利余额已回补')
+        await reload()
+      } catch (error) {
+        message.error((error as Error).message)
+      }
+    },
+  })
 }
 
 async function reload() {
