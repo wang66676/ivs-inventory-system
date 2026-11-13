@@ -353,6 +353,19 @@ public class PolicyApplicationService {
         }
     }
 
+    /** 采购收货单退回时释放对应 VIN 的预享受项。 */
+    @Transactional
+    public void removeReceivedSerials(UUID orderId, List<UUID> serialIds) {
+        if (serialIds == null || serialIds.isEmpty()) return;
+        java.util.Set<UUID> targets = new HashSet<>(serialIds);
+        for (PolicyPreEntitlement pre : preRepository.findByOrderIdForUpdate(orderId)) {
+            if (pre.getSerialId() != null && targets.contains(pre.getSerialId())) {
+                releaseForResync(pre);
+            }
+        }
+        preRepository.flush();
+    }
+
     /** 采购草稿变更时释放旧预享受项；后续收货会按 VIN 重新生成。 */
     @Transactional
     public void clearFromPurchaseOrder(UUID orderId) {

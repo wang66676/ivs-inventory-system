@@ -5,6 +5,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,6 +43,14 @@ public class PurchaseReceiptController {
             @PathVariable("lineId") UUID lineId,
             @RequestBody ProcurementApi.UpdateCertificateDateCommand command) {
         return service.updateCertificateApplicationDate(receiptId, lineId, command.certificateApplicationDate());
+    }
+
+    @PostMapping("/{id}/return")
+    @PreAuthorize("hasAuthority('IVS_WRITE')")
+    public ProcurementApi.PurchaseReceiptView returnReceipt(
+            @PathVariable("id") UUID id,
+            @RequestBody(required = false) ProcurementApi.ReturnReceiptCommand command) {
+        return service.returnReceipt(id, command == null ? null : command.reason());
     }
 
     @PutMapping("/{receiptId}/lines/{lineId}/warehouse")

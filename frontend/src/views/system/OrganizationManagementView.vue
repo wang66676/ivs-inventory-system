@@ -3,9 +3,9 @@
     <a-tabs v-model:activeKey="activeTab">
       <a-tab-pane key="company" tab="公司">
         <a-form layout="inline" @finish="addCompany">
-          <a-form-item label="编码"><a-input v-model:value="companyForm.code" /></a-form-item>
-          <a-form-item label="名称"><a-input v-model:value="companyForm.name" /></a-form-item>
-          <a-form-item><a-button type="primary" html-type="submit">新增公司</a-button></a-form-item>
+          <a-form-item label="编码" required><a-input v-model:value="companyForm.code" placeholder="例如：RDJT" /></a-form-item>
+          <a-form-item label="名称" required><a-input v-model:value="companyForm.name" placeholder="例如：容大集团" /></a-form-item>
+          <a-form-item><a-button type="primary" html-type="submit" :loading="companySaving">新增公司</a-button></a-form-item>
         </a-form>
         <a-table v-resizable-columns class="table" row-key="id" :data-source="companies" :columns="baseColumns" :pagination="false" />
       </a-tab-pane>
@@ -56,6 +56,7 @@ const stores = ref<OrganizationItem[]>([])
 const teams = ref<OrganizationItem[]>([])
 const teamStores = ref<OrganizationItem[]>([])
 const companyForm = reactive({ code: '', name: '' })
+const companySaving = ref(false)
 const storeForm = reactive({ companyId: '', code: '', name: '' })
 const teamForm = reactive({ companyId: '', storeId: '', code: '', name: '' })
 const baseColumns = [
@@ -79,7 +80,14 @@ async function loadTeamStores() {
   teamStores.value = teamForm.companyId ? await organizationApi.stores(teamForm.companyId) : []
 }
 async function addCompany() {
-  try { await organizationApi.createCompany(companyForm.code, companyForm.name); message.success('公司已创建'); companyForm.code=''; companyForm.name=''; await loadAll() } catch(e){ message.error((e as Error).message) }
+  if (!companyForm.code.trim() || !companyForm.name.trim()) { message.warning('请填写公司编码和名称'); return }
+  companySaving.value = true
+  try {
+    await organizationApi.createCompany(companyForm.code.trim().toUpperCase(), companyForm.name.trim())
+    message.success('公司已创建')
+    companyForm.code=''; companyForm.name=''
+    await loadAll()
+  } catch(e){ message.error((e as Error).message) } finally { companySaving.value = false }
 }
 async function addStore() {
   try { await organizationApi.createStore(storeForm.companyId, storeForm.code, storeForm.name); message.success('门店已创建'); storeForm.code=''; storeForm.name=''; await loadAll() } catch(e){ message.error((e as Error).message) }

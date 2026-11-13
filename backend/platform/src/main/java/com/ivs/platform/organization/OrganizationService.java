@@ -24,8 +24,16 @@ public class OrganizationService {
     @Transactional(readOnly = true) public List<OrganizationView> teams(UUID storeId){return (storeId==null?teamRepository.findAllByOrderByNameAsc():teamRepository.findByStoreIdOrderByNameAsc(storeId)).stream().map(OrganizationView::from).toList();}
 
     @Transactional public OrganizationView createCompany(CreateCompanyCommand c){
-        if(companyRepository.existsByCode(c.code().trim())) throw new ConflictException("COMPANY_CODE_DUPLICATE","公司编码已存在");
-        return OrganizationView.from(companyRepository.save(Company.create(c.code().trim(),c.name().trim())));
+        String code = c.code() == null ? "" : c.code().trim().toUpperCase();
+        String name = c.name() == null ? "" : c.name().trim();
+        if(code.isEmpty()) throw new ConflictException("COMPANY_CODE_REQUIRED","公司编码不能为空");
+        if(name.isEmpty()) throw new ConflictException("COMPANY_NAME_REQUIRED","公司名称不能为空");
+        if(companyRepository.existsByCodeIgnoreCase(code)) throw new ConflictException("COMPANY_CODE_DUPLICATE","公司编码已存在");
+        try {
+            return OrganizationView.from(companyRepository.saveAndFlush(Company.create(code,name)));
+        } catch (org.springframework.dao.DataIntegrityViolationException exception) {
+            throw new ConflictException("COMPANY_CODE_DUPLICATE","公司编码已存在");
+        }
     }
     @Transactional public OrganizationView createStore(CreateStoreCommand c){
         requireCompany(c.companyId());

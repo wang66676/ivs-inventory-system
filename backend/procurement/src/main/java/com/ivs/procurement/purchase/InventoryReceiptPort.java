@@ -15,6 +15,8 @@ public interface InventoryReceiptPort {
 
     void postReceipt(ReceiptPosting posting);
 
+    void reverseReceipt(ReceiptPosting posting);
+
     void updateCertificateApplicationDate(List<String> serialNos, LocalDate certificateApplicationDate);
 
     void relocateSerial(String serialNo, UUID productId, UUID fromWarehouseId, UUID toWarehouseId,

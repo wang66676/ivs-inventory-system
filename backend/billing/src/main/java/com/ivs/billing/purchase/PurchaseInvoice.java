@@ -18,6 +18,8 @@ public class PurchaseInvoice {
     @Column(name = "original_invoice_id") private UUID originalInvoiceId;
     @Column(name = "original_invoice_no", length = 100) private String originalInvoiceNo;
     @Column(name = "supplier_id", nullable = false) private UUID supplierId;
+    @Column(name = "purchase_order_id") private UUID purchaseOrderId;
+    @Column(name = "serial_nos", columnDefinition = "text") private String serialNos;
     @Column(nullable = false, precision = 18, scale = 2) private BigDecimal amount;
     @Column(name = "matched_amount", nullable = false, precision = 18, scale = 2) private BigDecimal matchedAmount;
     @Column(name = "tax_rate", precision = 8, scale = 4) private BigDecimal taxRate;
@@ -60,15 +62,17 @@ public class PurchaseInvoice {
         return invoice;
     }
 
-    public static PurchaseInvoice registerBlue(String invoiceNo, UUID supplierId, BigDecimal amount,
-                                               BigDecimal taxRate, String externalInvoiceNo,
-                                               Instant issuedAt, String remark) {
+    public static PurchaseInvoice registerBlue(String invoiceNo, UUID supplierId, UUID purchaseOrderId,
+                                               String serialNos, BigDecimal amount, BigDecimal taxRate,
+                                               String externalInvoiceNo, Instant issuedAt, String remark) {
         PurchaseInvoice invoice = new PurchaseInvoice();
         invoice.id = UUID.randomUUID();
         invoice.invoiceNo = invoiceNo;
         invoice.direction = "IN";
         invoice.type = "BLUE";
         invoice.supplierId = supplierId;
+        invoice.purchaseOrderId = purchaseOrderId;
+        invoice.serialNos = serialNos == null || serialNos.isBlank() ? null : serialNos.trim();
         invoice.amount = money(amount);
         if (invoice.amount.signum() <= 0) throw new IllegalArgumentException("蓝字发票金额必须大于 0");
         invoice.taxRate = taxRate;
@@ -127,6 +131,8 @@ public class PurchaseInvoice {
     public UUID getOriginalInvoiceId() { return originalInvoiceId; }
     public String getOriginalInvoiceNo() { return originalInvoiceNo; }
     public UUID getSupplierId() { return supplierId; }
+    public UUID getPurchaseOrderId() { return purchaseOrderId; }
+    public String getSerialNos() { return serialNos; }
     public BigDecimal getAmount() { return amount; }
     public BigDecimal getMatchedAmount() { return matchedAmount == null ? money(BigDecimal.ZERO) : matchedAmount; }
     public BigDecimal getUnmatchedAmount() { return unmatchedAmount(); }

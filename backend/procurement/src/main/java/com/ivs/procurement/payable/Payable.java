@@ -26,6 +26,7 @@ public class Payable {
     @Column(name = "invoice_matched_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal invoiceMatchedAmount;
     @Column(name = "due_date") private LocalDate dueDate;
+    @Column(name = "last_payment_date") private LocalDate lastPaymentDate;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PayableStatus status;
     @Column(length = 300) private String remark;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
@@ -80,12 +81,17 @@ public class Payable {
         return value;
     }
 
-    public void pay(BigDecimal value) {
+    public void pay(BigDecimal value, LocalDate paymentDate) {
         BigDecimal pay = money(value);
         if (pay.signum() <= 0 || pay.compareTo(outstanding()) > 0) {
             throw new IllegalArgumentException("付款金额必须大于 0 且不能超过未付余额");
         }
+        LocalDate actualDate = paymentDate == null ? LocalDate.now() : paymentDate;
+        if (actualDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("付款日期不能晚于今天");
+        }
         this.paidAmount = money(paidAmount.add(pay));
+        this.lastPaymentDate = actualDate;
         refreshStatus();
     }
 
@@ -184,6 +190,7 @@ public class Payable {
     }
     public BigDecimal getUninvoicedAmount() { return uninvoicedAmount(); }
     public LocalDate getDueDate() { return dueDate; }
+    public LocalDate getLastPaymentDate() { return lastPaymentDate; }
     public PayableStatus getStatus() { return status; }
     public String getRemark() { return remark; }
     public Instant getCreatedAt() { return createdAt; }

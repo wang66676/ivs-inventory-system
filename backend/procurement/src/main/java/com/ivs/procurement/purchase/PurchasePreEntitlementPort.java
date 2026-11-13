@@ -20,4 +20,6 @@ public interface PurchasePreEntitlementPort {
 
     void syncSerials(UUID purchaseOrderId, UUID orderLineId, UUID productId, BigDecimal unitPrice,
                      List<UUID> policyIds, List<String> serialNos);
+
+    void removeSerials(UUID purchaseOrderId, List<String> serialNos);
 }

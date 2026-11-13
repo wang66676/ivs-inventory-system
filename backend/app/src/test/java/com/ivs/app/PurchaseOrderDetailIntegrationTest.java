@@ -395,6 +395,23 @@ class PurchaseOrderDetailIntegrationTest {
         assertThat(pres[0].referenceDate()).isEqualTo(LocalDate.of(2026, 1, 1));
         assertThat(pres[0].status().name()).isEqualTo("READY");
     }
+    @Test
+    void 采购订单编号不能重复() {
+        var supplier = createSupplier("唯一订单号整车厂");
+        var warehouse = createWarehouse("WH-UNIQUE");
+        var product = createProduct("Q3 唯一订单号测试车");
+        Map<String, Object> body = Map.of(
+                "supplierId", supplier.id().toString(), "externalOrderNo", "UNIQUE-ORDER-001",
+                "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 1, "unitPrice", 400000)));
+        ResponseEntity<ProcurementApi.PurchaseOrderView> first = restTemplate.postForEntity(
+                "/api/ivs/purchase-orders", body, ProcurementApi.PurchaseOrderView.class);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        ResponseEntity<Map> duplicate = restTemplate.postForEntity("/api/ivs/purchase-orders", body, Map.class);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(duplicate.getBody().get("code")).isEqualTo("PURCHASE_ORDER_NO_DUPLICATE");
+    }
+
     private MasterdataApi.SupplierView createSupplier(String name) {
         return restTemplate.postForEntity("/api/ivs/suppliers", Map.of(
                 "name", name, "supplierType", SupplierType.OEM.name()

@@ -50,4 +50,14 @@ public class PurchasePreEntitlementAdapter implements PurchasePreEntitlementPort
         }
         policyService.syncReceivedSerials(purchaseOrderId, lines);
     }
+
+    @Override
+    public void removeSerials(UUID purchaseOrderId, List<String> serialNos) {
+        if (serialNos == null || serialNos.isEmpty()) return;
+        List<UUID> serialIds = new ArrayList<>();
+        for (String serialNo : serialNos) {
+            serialRepository.findBySerialNo(serialNo.trim().toUpperCase()).ifPresent(serial -> serialIds.add(serial.getId()));
+        }
+        policyService.removeReceivedSerials(purchaseOrderId, serialIds);
+    }
 }

@@ -19,6 +19,9 @@ export const purchaseApi = {
   updateReceiptWarehouse: (receiptId: string, lineId: string, warehouseId: string) =>
     http.put<PurchaseReceipt>(`/ivs/purchase-receipts/${receiptId}/lines/${lineId}/warehouse`,
       { warehouseId }).then((r) => r.data),
+  returnReceipt: (receiptId: string, reason?: string) =>
+    http.post<PurchaseReceipt>(`/ivs/purchase-receipts/${receiptId}/return`,
+      { reason: reason || null }).then((r) => r.data),
 }
 
 export const inventoryApi = {

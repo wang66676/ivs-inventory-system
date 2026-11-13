@@ -5,6 +5,12 @@
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">新建销售订单</a-button>
         <a-button @click="reload">刷新</a-button>
+        <a-button @click="exportOrders">导出</a-button>
+        <template v-if="canWrite">
+          <a-button @click="downloadSalesTemplate">下载导入模板</a-button>
+          <a-button type="primary" :loading="importing" @click="triggerSalesImport">批量导入</a-button>
+          <input ref="salesImportInput" type="file" accept=".csv,text/csv" style="display:none" @change="handleSalesImport" />
+        </template>
         <a-select v-model:value="filterStatus" :options="statusOptions" allow-clear placeholder="按状态筛选"
                   style="width:180px" @change="reload" />
         <a-input v-model:value="keyword" placeholder="订单号" allow-clear style="width:190px" @press-enter="reload" />
@@ -232,6 +238,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { salesApi } from '../../api/sales'
+import { exportCsv, exportTimestamp, parseCsv } from '../../utils/csvExport'
 import { inventoryApi } from '../../api/inventory'
 import { customerApi, productApi, serialApi, warehouseApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
@@ -248,6 +255,8 @@ const scopeHint = computed(() => props.scope === 'BATTERY'
 
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_WRITE')
+const importing = ref(false)
+const salesImportInput = ref<HTMLInputElement>()
 const canApprovePrice = auth.can('IVS_PRICE_APPROVE')
 
 const rows = ref<SalesOrder[]>([])
@@ -606,6 +615,120 @@ async function submit() {
   }
 }
 
+function exportOrders() {
+  if (!salesRows.value.length) { message.warning('当前没有可导出的销售订单数据'); return }
+  exportCsv(`销售订单-${exportTimestamp()}`, [
+    { title: '销售订单编号', value: (row: SalesListRow) => row.order.externalOrderNo || row.order.orderNo },
+    { title: '客户', value: (row: SalesListRow) => row.order.customerName },
+    { title: '商品', value: (row: SalesListRow) => row.line.productName },
+    { title: '数量', value: (row: SalesListRow) => row.line.quantity },
+    { title: '已出', value: (row: SalesListRow) => row.line.deliveredQuantity },
+    { title: '成交价', value: (row: SalesListRow) => row.line.unitPrice },
+    { title: '金额', value: (row: SalesListRow) => row.line.amount },
+    { title: 'VIN/SN', value: (row: SalesListRow) => (row.line.serialIds || []).map(serialNoOf).join('、') },
+    { title: '状态', value: (row: SalesListRow) => SALES_STATUS_LABELS[row.order.status] },
+  ], salesRows.value)
+  message.success('销售订单已导出')
+}
+function downloadSalesTemplate() {
+  exportCsv('销售订单批量导入模板', [
+    { title: '销售订单编号', value: () => 'XS2026111301' },
+    { title: '客户名称', value: () => '示例客户' },
+    { title: '仓库', value: () => '主体仓' },
+    { title: '商品', value: () => '示例车系' },
+    { title: '数量', value: () => 1 },
+    { title: '成交价', value: () => 420000 },
+    { title: 'VIN/SN', value: () => 'LZZ1EXAMPLE000001' },
+    { title: '备注', value: () => '批量导入' },
+  ], [{}] as Record<string, never>[])
+}
+function triggerSalesImport() { salesImportInput.value?.click() }
+async function handleSalesImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) await importSalesOrders(file)
+  input.value = ''
+}
+async function importSalesOrders(file: File) {
+  importing.value = true
+  try {
+    const csv = parseCsv(await file.text())
+    if (csv.length < 2) throw new Error('CSV 没有有效数据')
+    const headers = new Map(csv[0].map((header, index) => [header.trim(), index]))
+    const column = (row: string[], name: string) => row[headers.get(name) ?? -1]?.trim() || ''
+    const customerByName = new Map(customerOptions.value.map((item) => [item.label.replace(/（.*/, ''), item.value]))
+    const warehouseByName = new Map(warehouseOptions.value.map((item) => [item.label.replace(/（.*/, ''), item.value]))
+    const productByName = new Map<string, typeof productOptions.value[number]>()
+    for (const item of productOptions.value) productByName.set(item.name, item)
+    const serialByName = new Map(availableSerials.value.map((item) => [item.serialNo.toUpperCase(), item]))
+    const groups = new Map<string, { customerId: string; warehouseId: string; remark: string; lines: Record<string, unknown>[] }>()
+    const errors: string[] = []
+    for (let index = 1; index < csv.length; index += 1) {
+      const row = csv[index]
+      const orderNo = column(row, '销售订单编号')
+      const customerName = column(row, '客户名称')
+      const warehouseName = column(row, '仓库')
+      const productName = column(row, '商品')
+      if (!orderNo && !customerName && !productName) continue
+      const customerId = customerByName.get(customerName)
+      const warehouseId = warehouseByName.get(warehouseName)
+      const product = productByName.get(productName) || [...productByName.values()].find((item) => item.label === productName)
+      if (!orderNo || !customerId || !warehouseId || !product) {
+        errors.push(`第${index + 1}行订单编号、客户、仓库或商品无法匹配`); continue
+      }
+      const quantity = Number(column(row, '数量') || 1)
+      const unitPrice = Number(column(row, '成交价') || 0)
+      if (!(quantity > 0) || unitPrice < 0) { errors.push(`第${index + 1}行数量或成交价无效`); continue }
+      const serials = column(row, 'VIN/SN').split(/[,，、]/).map((item) => item.trim().toUpperCase()).filter(Boolean)
+      const serialIds: string[] = []
+      let serialError = ''
+      for (const serialNo of serials) {
+        const serial = serialByName.get(serialNo)
+        if (!serial || serial.productId !== product.value || (serial.warehouseId && serial.warehouseId !== warehouseId)) {
+          serialError = `VIN/SN ${serialNo} 与商品或仓库不匹配`
+          break
+        }
+        serialIds.push(serial.id)
+      }
+      if (serialError) { errors.push(`第${index + 1}行${serialError}`); continue }
+      let group = groups.get(orderNo)
+      if (!group) {
+        group = { customerId, warehouseId, remark: column(row, '备注') || '批量导入', lines: [] }
+        groups.set(orderNo, group)
+      }
+      group.lines.push({
+        productId: product.value,
+        quantity,
+        unitPrice,
+        serialIds: serialIds.length ? serialIds : null,
+        batteryBoxManufacturer: null,
+        batteryBoxModel: null,
+        batteryBoxUnitPrice: null,
+        batteryPackManufacturer: null,
+        batteryEnergyKwh: null,
+        batteryPackUnitPrice: null,
+      })
+    }
+    let created = 0
+    for (const [orderNo, group] of groups) {
+      await salesApi.create({
+        externalOrderNo: orderNo,
+        customerId: group.customerId,
+        warehouseId: group.warehouseId,
+        remark: group.remark,
+        paymentMode: 'CASH',
+        downPayment: 0,
+        installmentCount: 0,
+        firstDueDate: null,
+        lines: group.lines,
+      })
+      created += 1
+    }
+    if (errors.length) message.warning(`已导入 ${created} 张订单；${errors.length} 行未导入：${errors.slice(0, 3).join('；')}`)
+    else message.success(`已批量导入 ${created} 张销售订单`)
+    await Promise.all([reload(), refreshSerials()])
+  } catch (error) { message.error((error as Error).message) } finally { importing.value = false }
+}
 async function approvePrice(record: SalesOrder) {
   try { await salesApi.approvePrice(record.id); message.success('价格审批完成'); await reload() }
   catch (error) { message.error((error as Error).message) }

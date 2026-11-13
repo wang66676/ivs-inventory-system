@@ -101,6 +101,8 @@ public class PurchaseOrderApplicationService {
             throw new ConflictException("PURCHASE_LINE_REQUIRED", "采购单至少需要一行明细");
         }
         masterData.requireSupplier(command.supplierId());
+        String orderNo = "PO-%06d".formatted(orderRepository.nextOrderSequence());
+        String externalOrderNo = requireUniqueExternalOrderNo(command.externalOrderNo(), null, orderNo);
         UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
                 : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
                     ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
@@ -108,8 +110,7 @@ public class PurchaseOrderApplicationService {
                 && command.warehouseId() != null) {
             masterData.requireWarehouse(command.warehouseId());
         }
-        String orderNo = "PO-%06d".formatted(orderRepository.nextOrderSequence());
-        PurchaseOrder order = orderRepository.save(PurchaseOrder.create(orderNo, command.externalOrderNo(),
+        PurchaseOrder order = orderRepository.save(PurchaseOrder.create(orderNo, externalOrderNo,
                 command.supplierId(), orderWarehouseId, BigDecimal.ZERO, command.expectedDate(),
                 command.remark(), currentUserId()));
         BigDecimal total = saveLines(order, command.supplierId(), command.lines());
@@ -131,6 +132,7 @@ public class PurchaseOrderApplicationService {
             throw new ConflictException("PURCHASE_LINE_REQUIRED", "采购单至少需要一行明细");
         }
         masterData.requireSupplier(command.supplierId());
+        String externalOrderNo = requireUniqueExternalOrderNo(command.externalOrderNo(), order.getId(), order.getOrderNo());
         UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
                 : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
                     ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
@@ -139,7 +141,7 @@ public class PurchaseOrderApplicationService {
             masterData.requireWarehouse(command.warehouseId());
         }
         try {
-            order.updateDraft(command.externalOrderNo(), command.supplierId(), orderWarehouseId,
+            order.updateDraft(externalOrderNo, command.supplierId(), orderWarehouseId,
                     command.expectedDate(), command.remark());
         } catch (IllegalStateException exception) {
             throw new ConflictException("PURCHASE_STATUS_INVALID", exception.getMessage());
@@ -157,6 +159,20 @@ public class PurchaseOrderApplicationService {
         preEntitlementPort.clear(view.id());
         syncPreEntitlements(order);
         return view;
+    }
+
+    private String requireUniqueExternalOrderNo(String value, UUID currentOrderId, String fallback) {
+        String externalOrderNo = value == null || value.isBlank() ? fallback : value.trim();
+        if (externalOrderNo == null || externalOrderNo.isBlank()) {
+            throw new ConflictException("PURCHASE_ORDER_NO_REQUIRED", "采购订单编号不能为空");
+        }
+        boolean duplicate = currentOrderId == null
+                ? orderRepository.existsByExternalOrderNoIgnoreCase(externalOrderNo)
+                : orderRepository.existsByExternalOrderNoIgnoreCaseAndIdNot(externalOrderNo, currentOrderId);
+        if (duplicate) {
+            throw new ConflictException("PURCHASE_ORDER_NO_DUPLICATE", "采购订单编号已存在，不能重复");
+        }
+        return externalOrderNo;
     }
 
     private void syncPreEntitlements(PurchaseOrder order) {
@@ -482,6 +498,63 @@ public class PurchaseOrderApplicationService {
             line.updateWarehouse(warehouseId);
             receiptLineRepository.save(line);
         }
+        return toReceiptView(receipt);
+    }
+
+    /** 退回整张已入库收货单，冲销库存、应付、订单收货数量及预享受项。 */
+    @Transactional
+    public ProcurementApi.PurchaseReceiptView returnReceipt(UUID receiptId, String reason) {
+        PurchaseReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new NotFoundException("收货单", receiptId));
+        if (receipt.getStatus() != ReceiptStatus.POSTED) {
+            throw new ConflictException("RECEIPT_RETURN_STATUS_INVALID", "只有已入库收货单可以退回");
+        }
+        if (receipt.getOffsetAmount().signum() > 0) {
+            throw new ConflictException("RECEIPT_RETURN_OFFSET_ACTIVE",
+                    "该收货单存在返利抵扣，请先在返利抵扣工作台取消抵扣后再退回");
+        }
+        PurchaseOrder order = orderRepository.findById(receipt.getOrderId())
+                .orElseThrow(() -> new NotFoundException("采购单", receipt.getOrderId()));
+        List<PurchaseReceiptLine> receiptLines = receiptLineRepository.findByReceiptId(receiptId);
+        if (receiptLines.isEmpty()) {
+            throw new ConflictException("RECEIPT_LINE_REQUIRED", "收货单没有可退回的明细");
+        }
+        List<InventoryReceiptPort.ReceiptPostingLine> postingLines = new ArrayList<>();
+        List<String> allSerialNos = new ArrayList<>();
+        for (PurchaseReceiptLine line : receiptLines) {
+            List<String> serialNos = parseSerialNos(line.getSerialNos());
+            allSerialNos.addAll(serialNos);
+            postingLines.add(new InventoryReceiptPort.ReceiptPostingLine(line.getProductId(),
+                    line.getWarehouseId(), line.getQuantity(), line.getUnitPrice(), line.getBatchNo(),
+                    serialNos, line.getCertificateApplicationDate()));
+            if (line.getOrderLineId() != null) {
+                PurchaseOrderLine orderLine = lineRepository.findById(line.getOrderLineId())
+                        .orElseThrow(() -> new NotFoundException("采购明细", line.getOrderLineId()));
+                try {
+                    orderLine.unreceive(line.getQuantity());
+                } catch (IllegalArgumentException exception) {
+                    throw new ConflictException("RECEIPT_RETURN_QUANTITY_INVALID", exception.getMessage());
+                }
+                lineRepository.save(orderLine);
+            }
+        }
+        inventoryReceiptPort.reverseReceipt(new InventoryReceiptPort.ReceiptPosting(
+                receipt.getId(), receipt.getReceiptNo(), receipt.getWarehouseId(), postingLines));
+        payableService.reverseReceipt(receiptId);
+        preEntitlementPort.removeSerials(order.getId(), allSerialNos);
+        boolean anyReceived = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()).stream()
+                .anyMatch(line -> line.getReceivedQuantity().signum() > 0);
+        order.afterReceiptReturn(anyReceived);
+        orderRepository.save(order);
+        receipt.markReturned(reason);
+        receiptRepository.save(receipt);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("receiptId", receipt.getId());
+        payload.put("receiptNo", receipt.getReceiptNo());
+        payload.put("orderId", order.getId());
+        payload.put("reason", reason);
+        events.publish(new EventEnvelope(UUID.randomUUID(), "PurchaseReceiptReturned", "PurchaseReceipt",
+                receipt.getId(), receipt.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
         return toReceiptView(receipt);
     }
 

@@ -64,6 +64,33 @@ public class InventoryReceiptAdapter implements InventoryReceiptPort {
     }
 
     @Override
+    public void reverseReceipt(ReceiptPosting posting) {
+        for (ReceiptPostingLine line : posting.lines()) {
+            MasterdataApi.ProductView product = productService.get(line.productId());
+            UUID warehouseId = line.warehouseId() == null ? posting.warehouseId() : line.warehouseId();
+            if (product.trackingMode().name().equals("SERIAL")) {
+                for (String serialNo : line.serialNos()) {
+                    ProductSerial serial = serialRepository.findBySerialNo(serialNo)
+                            .orElseThrow(() -> new ConflictException("SERIAL_NOT_FOUND", "VIN/SN 档案不存在：" + serialNo));
+                    if (serial.getStatus() != SerialStatus.IN_STOCK) {
+                        throw new ConflictException("RECEIPT_RETURN_SERIAL_IN_USE",
+                                "VIN/SN「" + serialNo + "」当前状态为 " + serial.getStatus() + "，不能退回收货");
+                    }
+                    UUID currentWarehouseId = serial.getWarehouseId() == null ? warehouseId : serial.getWarehouseId();
+                    stockService.issue(product.id(), serial.getId(), currentWarehouseId, null, BigDecimal.ONE,
+                            StockMoveType.PURCHASE_RECEIPT_REVERSAL, BIZ_TYPE, posting.receiptId(),
+                            posting.receiptNo(), "采购收货退回冲销");
+                    serialService.markReceiptReturned(serial.getId());
+                }
+            } else {
+                stockService.issue(product.id(), null, warehouseId, line.batchNo(), line.quantity(),
+                        StockMoveType.PURCHASE_RECEIPT_REVERSAL, BIZ_TYPE, posting.receiptId(),
+                        posting.receiptNo(), "采购收货退回冲销");
+            }
+        }
+    }
+
+    @Override
     public void updateCertificateApplicationDate(List<String> serialNos, java.time.LocalDate certificateApplicationDate) {
         serialService.updateCertificateApplicationDate(serialNos, certificateApplicationDate);
     }

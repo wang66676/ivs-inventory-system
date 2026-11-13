@@ -39,6 +39,23 @@ class PurchaseInvoiceRebateIntegrationTest {
     }
 
     @Test
+    void 蓝字进项发票保存采购订单和多VIN联动信息() {
+        UUID supplier = post("/api/ivs/suppliers", Map.of("name", "蓝票整车厂", "supplierType", SupplierType.OEM.name()),
+                MasterdataApi.SupplierView.class).id();
+        UUID orderId = UUID.randomUUID();
+        PurchaseInvoiceApi.PurchaseInvoiceView blue = restTemplate.postForEntity(
+                "/api/ivs/purchase-invoices/blue", Map.of(
+                        "supplierId", supplier.toString(), "purchaseOrderId", orderId.toString(),
+                        "serialNos", List.of("LZZBLUE000000001", "LZZBLUE000000002"),
+                        "amount", 820000, "taxRate", 0.13, "externalInvoiceNo", "B-2026-001"),
+                PurchaseInvoiceApi.PurchaseInvoiceView.class).getBody();
+        assertThat(blue).isNotNull();
+        assertThat(blue.purchaseOrderId()).isEqualTo(orderId);
+        assertThat(blue.serialNos()).containsExactly("LZZBLUE000000001", "LZZBLUE000000002");
+        assertThat(blue.amount()).isEqualByComparingTo("820000.00");
+    }
+
+    @Test
     void 厂家红字发票登记后自动入池并可抵扣车款() {
         UUID supplier = post("/api/ivs/suppliers", Map.of("name", "某整车厂", "supplierType", SupplierType.OEM.name()),
                 MasterdataApi.SupplierView.class).id();

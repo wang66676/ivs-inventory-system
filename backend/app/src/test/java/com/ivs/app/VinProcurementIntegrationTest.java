@@ -206,6 +206,49 @@ class VinProcurementIntegrationTest {
         assertThat(movedSerial[0].warehouseId()).isEqualTo(thirdWarehouse.id());
     }
 
+    @Test
+    void 已入库VIN可整单退回并修正后重新收货() {
+        var supplier = post("/api/ivs/suppliers", Map.of("name", "VIN退回整车厂", "supplierType", SupplierType.OEM.name()),
+                MasterdataApi.SupplierView.class);
+        var warehouse = post("/api/ivs/warehouses", Map.of("code", "VIN-RET-WH", "name", "退回测试仓",
+                "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);
+        var category = post("/api/ivs/product-categories", Map.of("code", "VIN-RET-CAT", "name", "退回测试车",
+                "trackingMode", TrackingMode.SERIAL.name(), "statusTemplate", "VEHICLE", "unit", "台", "sortOrder", 0),
+                MasterdataApi.CategoryView.class);
+        var product = post("/api/ivs/products", Map.of("name", "退回测试车", "categoryId", category.id().toString(),
+                "unit", "台", "minPrice", 0), MasterdataApi.ProductView.class);
+        var order = post("/api/ivs/purchase-orders", Map.of("supplierId", supplier.id().toString(),
+                "externalOrderNo", "VIN-RETURN-ORDER-001", "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 1, "unitPrice", 400000))),
+                ProcurementApi.PurchaseOrderView.class);
+        order = post("/api/ivs/purchase-orders/" + order.id() + "/approve", Map.of(),
+                ProcurementApi.PurchaseOrderView.class);
+        UUID lineId = order.lines().get(0).id();
+        Map<String, Object> receiveBody = Map.of("warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("orderLineId", lineId.toString(), "serialNos",
+                        List.of("LZZRETURN00000001"), "unitPrice", 400000,
+                        "warehouseId", warehouse.id().toString())));
+        var receipt = post("/api/ivs/purchase-orders/" + order.id() + "/receive", receiveBody,
+                ProcurementApi.PurchaseReceiptView.class);
+        assertThat(receipt.status().name()).isEqualTo("POSTED");
+
+        var returned = post("/api/ivs/purchase-receipts/" + receipt.id() + "/return",
+                Map.of("reason", "VIN录入错误"), ProcurementApi.PurchaseReceiptView.class);
+        assertThat(returned.status().name()).isEqualTo("RETURNED");
+        var restoredOrder = restTemplate.getForEntity("/api/ivs/purchase-orders/" + order.id(),
+                ProcurementApi.PurchaseOrderView.class).getBody();
+        assertThat(restoredOrder.status().name()).isEqualTo("APPROVED");
+        assertThat(restoredOrder.lines().get(0).receivedQuantity()).isEqualByComparingTo("0.000");
+        var payables = restTemplate.getForEntity("/api/ivs/payables?supplierId=" + supplier.id(),
+                Map[].class).getBody();
+        assertThat(payables).isEmpty();
+
+        var reReceived = post("/api/ivs/purchase-orders/" + order.id() + "/receive", receiveBody,
+                ProcurementApi.PurchaseReceiptView.class);
+        assertThat(reReceived.status().name()).isEqualTo("POSTED");
+        assertThat(reReceived.lines().get(0).serialNos()).containsExactly("LZZRETURN00000001");
+    }
+
     private <T> T post(String url, Object body, Class<T> type) {
         return restTemplate.postForEntity(url, body, type).getBody();
     }

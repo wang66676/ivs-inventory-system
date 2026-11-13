@@ -180,6 +180,14 @@ public class PurchaseOrderLine {
         this.receivedQuantity = next;
     }
 
+    public void unreceive(BigDecimal returnedQuantity) {
+        BigDecimal returned = qty(returnedQuantity);
+        if (returned.signum() <= 0 || returned.compareTo(receivedQuantity) > 0) {
+            throw new IllegalArgumentException("退回数量不合法");
+        }
+        this.receivedQuantity = qty(receivedQuantity.subtract(returned));
+    }
+
     public BigDecimal remaining() {
         return qty(quantity.subtract(receivedQuantity));
     }
