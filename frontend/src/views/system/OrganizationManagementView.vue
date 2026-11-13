@@ -2,28 +2,28 @@
   <a-card :bordered="false" title="组织架构">
     <a-tabs v-model:activeKey="activeTab">
       <a-tab-pane key="company" tab="公司">
-        <a-form layout="inline" @finish="addCompany">
-          <a-form-item label="编码" required><a-input v-model:value="companyForm.code" placeholder="例如：RDJT" /></a-form-item>
-          <a-form-item label="名称" required><a-input v-model:value="companyForm.name" placeholder="例如：容大集团" /></a-form-item>
-          <a-form-item><a-button type="primary" html-type="submit" :loading="companySaving">新增公司</a-button></a-form-item>
+        <a-form layout="inline">
+          <a-form-item label="编码" required><a-input v-model:value="companyForm.code" placeholder="例如：RDJT" @press-enter="addCompany" /></a-form-item>
+          <a-form-item label="名称" required><a-input v-model:value="companyForm.name" placeholder="例如：容大集团" @press-enter="addCompany" /></a-form-item>
+          <a-form-item><a-button type="primary" html-type="button" :loading="companySaving" @click="addCompany">新增公司</a-button></a-form-item>
         </a-form>
         <a-table v-resizable-columns class="table" row-key="id" :data-source="companies" :columns="baseColumns" :pagination="false" />
       </a-tab-pane>
       <a-tab-pane key="store" tab="门店">
-        <a-form layout="inline" @finish="addStore">
+        <a-form layout="inline">
           <a-form-item label="公司">
             <a-select v-model:value="storeForm.companyId" style="width: 220px">
               <a-select-option v-for="item in companies" :key="item.id" :value="item.id">{{ item.name }}</a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item label="编码"><a-input v-model:value="storeForm.code" /></a-form-item>
-          <a-form-item label="名称"><a-input v-model:value="storeForm.name" /></a-form-item>
-          <a-form-item><a-button type="primary" html-type="submit">新增门店</a-button></a-form-item>
+          <a-form-item label="编码"><a-input v-model:value="storeForm.code" @press-enter="addStore" /></a-form-item>
+          <a-form-item label="名称"><a-input v-model:value="storeForm.name" @press-enter="addStore" /></a-form-item>
+          <a-form-item><a-button type="primary" html-type="button" @click="addStore">新增门店</a-button></a-form-item>
         </a-form>
         <a-table v-resizable-columns class="table" row-key="id" :data-source="stores" :columns="storeColumns" :pagination="false" />
       </a-tab-pane>
       <a-tab-pane key="team" tab="团队">
-        <a-form layout="inline" @finish="addTeam">
+        <a-form layout="inline">
           <a-form-item label="公司">
             <a-select v-model:value="teamForm.companyId" style="width: 200px" @change="loadTeamStores">
               <a-select-option v-for="item in companies" :key="item.id" :value="item.id">{{ item.name }}</a-select-option>
@@ -34,9 +34,9 @@
               <a-select-option v-for="item in teamStores" :key="item.id" :value="item.id">{{ item.name }}</a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item label="编码"><a-input v-model:value="teamForm.code" /></a-form-item>
-          <a-form-item label="名称"><a-input v-model:value="teamForm.name" /></a-form-item>
-          <a-form-item><a-button type="primary" html-type="submit">新增团队</a-button></a-form-item>
+          <a-form-item label="编码"><a-input v-model:value="teamForm.code" @press-enter="addTeam" /></a-form-item>
+          <a-form-item label="名称"><a-input v-model:value="teamForm.name" @press-enter="addTeam" /></a-form-item>
+          <a-form-item><a-button type="primary" html-type="button" @click="addTeam">新增团队</a-button></a-form-item>
         </a-form>
         <a-table v-resizable-columns class="table" row-key="id" :data-source="teams" :columns="storeColumns" :pagination="false" />
       </a-tab-pane>
