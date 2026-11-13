@@ -4,6 +4,8 @@ export interface PurchaseRedInvoice {
   direction: string
   type: string
   supplierId: string
+  purchaseOrderId?: string
+  serialNos?: string[]
   amount: number
   matchedAmount?: number
   unmatchedAmount?: number

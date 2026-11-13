@@ -56,6 +56,20 @@ public class PayableService {
         repository.save(payable);
     }
 
+    /** 收货单退回时删除未付款、未匹配进项发票的应付。 */
+    @Transactional
+    public void reverseReceipt(UUID receiptId) {
+        Payable payable = repository.findByPurchaseReceiptId(receiptId).orElse(null);
+        if (payable == null) return;
+        if (payable.getPaidAmount().signum() > 0) {
+            throw new ConflictException("RECEIPT_RETURN_PAYABLE_PAID", "该收货单已发生付款，不能退回");
+        }
+        if (payable.getInvoiceMatchedAmount().signum() > 0) {
+            throw new ConflictException("RECEIPT_RETURN_INVOICE_MATCHED", "该收货单已匹配进项发票，不能退回");
+        }
+        repository.delete(payable);
+    }
+
     @Transactional(readOnly = true)
     public List<PayableApi.PayableView> list(UUID supplierId, PayableStatus status) {
         List<Payable> rows = supplierId == null ? repository.findAllByOrderByCreatedAtDesc()
@@ -71,7 +85,7 @@ public class PayableService {
     public PayableApi.PayableView pay(UUID id, PayableApi.PayCommand command) {
         Payable payable = repository.findById(id).orElseThrow(() -> new NotFoundException("应付单", id));
         try {
-            payable.pay(command == null ? null : command.amount());
+            payable.pay(command == null ? null : command.amount(), command == null ? null : command.paymentDate());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("PAYABLE_PAY_INVALID", exception.getMessage());
         }

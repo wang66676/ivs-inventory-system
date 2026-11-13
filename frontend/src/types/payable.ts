@@ -15,6 +15,7 @@ export interface Payable {
   paidAmount: number
   outstanding: number
   dueDate?: string
+  lastPaymentDate?: string
   status: PayableStatus
   remark?: string
   createdAt: string

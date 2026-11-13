@@ -86,6 +86,16 @@ public class PurchaseReceipt {
         this.status = ReceiptStatus.POSTED;
     }
 
+    public void markReturned(String reason) {
+        if (status != ReceiptStatus.POSTED) {
+            throw new IllegalStateException("只有已入库收货单可以退回");
+        }
+        this.status = ReceiptStatus.RETURNED;
+        if (reason != null && !reason.isBlank()) {
+            this.remark = (remark == null || remark.isBlank() ? "" : remark + "；") + "退回原因：" + reason.trim();
+        }
+    }
+
     /** 入库单确认时抵扣车款：金额必须在 0 与本单金额之间。 */
     public void applyOffset(BigDecimal value) {
         BigDecimal offset = (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);

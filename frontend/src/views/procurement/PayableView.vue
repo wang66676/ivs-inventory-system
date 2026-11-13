@@ -36,6 +36,9 @@
         <a-form-item label="应付单">{{ current?.payableNo }}</a-form-item>
         <a-form-item label="未付金额">{{ money(current?.outstanding) }}</a-form-item>
         <a-form-item label="本次付款" required><MoneyInput v-model:value="payAmount" :min="0.01" :max="current?.outstanding" :precision="2" style="width:100%" /></a-form-item>
+        <a-form-item label="付款时间" required>
+          <a-date-picker v-model:value="payDate" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+        </a-form-item>
         <a-form-item label="备注"><a-input v-model:value="payRemark" /></a-form-item>
       </a-form>
     </a-modal>
@@ -44,6 +47,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import { payableApi } from '../../api/payable'
 import { supplierApi } from '../../api/masterdata'
 import { PAYABLE_STATUS_LABELS } from '../../types/payable'
@@ -53,7 +57,7 @@ const supplierId = ref<string | undefined>()
 const status = ref<PayableStatus | undefined>()
 const supplierOptions = ref<{ label: string; value: string }[]>([])
 const statusOptions = Object.entries(PAYABLE_STATUS_LABELS).map(([value, label]) => ({ value, label }))
-const payOpen = ref(false); const saving = ref(false); const current = ref<Payable>(); const payAmount = ref<number>(); const payRemark = ref('')
+const payOpen = ref(false); const saving = ref(false); const current = ref<Payable>(); const payAmount = ref<number>(); const payRemark = ref(''); const payDate = ref(dayjs().format('YYYY-MM-DD'))
 const columns = [
   { title: '应付单号', key: 'payableNo', dataIndex: 'payableNo', width: 140 },
   { title: '供应商', key: 'supplierName', dataIndex: 'supplierName', width: 190 },
@@ -65,6 +69,7 @@ const columns = [
   { title: '已付', key: 'paid', width: 130 },
   { title: '未付', key: 'outstanding', width: 130 },
   { title: '到期日', key: 'dueDate', dataIndex: 'dueDate', width: 110 },
+  { title: '最近付款日', key: 'lastPaymentDate', dataIndex: 'lastPaymentDate', width: 120 },
   { title: '状态', key: 'status', width: 100 },
   { title: '创建时间', key: 'createdAt', width: 170 },
   { title: '操作', key: 'actions', width: 100 },
@@ -72,11 +77,12 @@ const columns = [
 function money(v?: number) { return `¥${Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
 function quantity(v?: number) { return Number(v || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 }) }
 function formatTime(v: string) { return v ? v.replace('T', ' ').slice(0, 19) : '-' }
-function openPay(record: Payable) { current.value = record; payAmount.value = record.outstanding; payRemark.value = ''; payOpen.value = true }
+function openPay(record: Payable) { current.value = record; payAmount.value = record.outstanding; payRemark.value = ''; payDate.value = dayjs().format('YYYY-MM-DD'); payOpen.value = true }
 async function submitPay() {
   if (!current.value || !payAmount.value) { message.warning('请填写付款金额'); return }
+  if (!payDate.value) { message.warning('请选择付款时间'); return }
   saving.value = true
-  try { await payableApi.pay(current.value.id, { amount: payAmount.value, remark: payRemark.value || null }); message.success('付款已核销'); payOpen.value = false; await reload() }
+  try { await payableApi.pay(current.value.id, { amount: payAmount.value, remark: payRemark.value || null, paymentDate: payDate.value }); message.success('付款已核销'); payOpen.value = false; await reload() }
   catch (e) { message.error((e as Error).message) } finally { saving.value = false }
 }
 async function reload() { try { rows.value = await payableApi.list({ supplierId: supplierId.value, status: status.value }) } catch (e) { message.error((e as Error).message) } }

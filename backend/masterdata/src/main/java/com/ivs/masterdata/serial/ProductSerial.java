@@ -163,6 +163,12 @@ public class ProductSerial {
         this.certificateApplicationDate = certificateApplicationDate;
     }
 
+    public void clearInbound() {
+        this.warehouseId = null;
+        this.inboundAt = null;
+        this.certificateApplicationDate = null;
+    }
+
     /** 按产品大项配置的状态机模板迁移状态，非法迁移直接拒绝。 */
     public void moveTo(SerialStatus target, SerialStatusTemplate template) {
         if (target == null) {

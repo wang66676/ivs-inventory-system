@@ -135,6 +135,9 @@ public final class ProcurementApi {
     public record UpdateReceiptWarehouseCommand(UUID warehouseId) {
     }
 
+    public record ReturnReceiptCommand(String reason) {
+    }
+
     public record PurchaseOrderLinkView(UUID orderId, String orderNo, String externalOrderNo,
                                         BigDecimal purchasePrice) {
     }

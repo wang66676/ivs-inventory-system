@@ -93,10 +93,13 @@ public class PurchaseInvoiceApplicationService {
         }
         PurchaseInvoice invoice;
         try {
+            String serialNos = command.serialNos() == null ? null : command.serialNos().stream()
+                    .map(String::trim).filter(value -> !value.isBlank()).distinct()
+                    .collect(java.util.stream.Collectors.joining(","));
             invoice = PurchaseInvoice.registerBlue(
                     "PINV-B-%06d".formatted(repository.nextInvoiceSequence()), command.supplierId(),
-                    command.amount(), command.taxRate(), command.externalInvoiceNo(),
-                    command.issuedAt(), command.remark());
+                    command.purchaseOrderId(), serialNos, command.amount(), command.taxRate(),
+                    command.externalInvoiceNo(), command.issuedAt(), command.remark());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("PURCHASE_INVOICE_INVALID", exception.getMessage());
         }
@@ -104,6 +107,8 @@ public class PurchaseInvoiceApplicationService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("invoiceNo", saved.getInvoiceNo());
         payload.put("supplierId", saved.getSupplierId().toString());
+        payload.put("purchaseOrderId", saved.getPurchaseOrderId());
+        payload.put("serialNos", saved.getSerialNos());
         payload.put("amount", saved.getAmount());
         payload.put("taxAmount", saved.getTaxAmount());
         events.publish(new EventEnvelope(UUID.randomUUID(), "PurchaseInvoiceRegistered", "PurchaseInvoice",

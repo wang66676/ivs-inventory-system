@@ -105,6 +105,14 @@ public class PurchaseOrder {
         this.status = fullyReceived ? PurchaseOrderStatus.RECEIVED : PurchaseOrderStatus.PARTIALLY_RECEIVED;
     }
 
+    /** 收货退回后恢复可收货状态；若仍有其它有效收货则保持部分收货。 */
+    public void afterReceiptReturn(boolean anyReceived) {
+        if (status != PurchaseOrderStatus.PARTIALLY_RECEIVED && status != PurchaseOrderStatus.RECEIVED) {
+            throw new IllegalStateException("当前采购单状态不允许收货退回: " + status);
+        }
+        this.status = anyReceived ? PurchaseOrderStatus.PARTIALLY_RECEIVED : PurchaseOrderStatus.APPROVED;
+    }
+
     public void cancel() {
         if (status == PurchaseOrderStatus.CANCELLED) {
             return;

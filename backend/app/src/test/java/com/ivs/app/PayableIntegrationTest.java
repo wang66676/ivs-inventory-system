@@ -57,9 +57,10 @@ class PayableIntegrationTest {
         assertThat(payables[0].outstanding()).isEqualByComparingTo("1000.00");
 
         PayableApi.PayableView paid = post("/api/ivs/payables/" + payables[0].id() + "/pay",
-                Map.of("amount", 300), PayableApi.PayableView.class);
+                Map.of("amount", 300, "paymentDate", "2026-11-12"), PayableApi.PayableView.class);
         assertThat(paid.outstanding()).isEqualByComparingTo("700.00");
         assertThat(paid.status().name()).isEqualTo("PARTIALLY_PAID");
+        assertThat(paid.lastPaymentDate()).isEqualTo(java.time.LocalDate.of(2026, 11, 12));
 
         PurchaseReturnApi.ReturnView ret = post("/api/ivs/purchase-returns", Map.of(
                 "supplierId", supplierId.toString(), "warehouseId", warehouseId.toString(),

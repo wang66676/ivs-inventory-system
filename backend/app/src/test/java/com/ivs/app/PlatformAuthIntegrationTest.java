@@ -115,6 +115,20 @@ class PlatformAuthIntegrationTest {
     }
 
     @Test
+    void 组织架构可新增公司且编码不区分大小写唯一() {
+        String code = "RD" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        var created = restTemplate.postForEntity("/api/platform/companies",
+                Map.of("code", code, "name", "容大测试公司"), Map.class);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).containsEntry("code", code);
+
+        var duplicate = restTemplate.postForEntity("/api/platform/companies",
+                Map.of("code", code.toLowerCase(), "name", "重复公司"), Map.class);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(duplicate.getBody()).containsEntry("code", "COMPANY_CODE_DUPLICATE");
+    }
+
+    @Test
     void 角色权限目录可查询() {
         var response = restTemplate.getForEntity("/api/platform/roles", RolePermissionCatalogView.class);
 

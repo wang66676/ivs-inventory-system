@@ -12,7 +12,7 @@
         <a-input v-model:value="keyword" placeholder="订单编号" allow-clear style="width:220px" @press-enter="reload" />
       </a-space>
       <a-table v-resizable-columns :data-source="purchaseRows" :columns="columns" row-key="rowKey" size="middle"
-               :pagination="false" :scroll="{ x: 2260 }">
+               :pagination="tablePagination" :scroll="{ x: 2260 }" @change="onTableChange">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'orderNo'">{{ record.order.externalOrderNo || record.order.orderNo }}</template>
           <template v-else-if="column.key === 'series'">{{ record.line.series || record.line.productName || '-' }}</template>
@@ -246,6 +246,19 @@ const canOffset = auth.can('IVS_FUND_OFFSET')
 const rows = ref<PurchaseOrder[]>([])
 const keyword = ref('')
 const filterStatus = ref<string | undefined>(undefined)
+const tableCurrent = ref(1)
+const tablePageSize = ref(20)
+const tablePagination = computed(() => ({
+  current: tableCurrent.value,
+  pageSize: tablePageSize.value,
+  showSizeChanger: true,
+  pageSizeOptions: ['10', '20', '50'],
+  showTotal: (total: number) => `共 ${total} 条采购明细`,
+}))
+function onTableChange(pagination: { current?: number; pageSize?: number }) {
+  tableCurrent.value = pagination.current || 1
+  tablePageSize.value = pagination.pageSize || 20
+}
 const createOpen = ref(false)
 const receiveOpen = ref(false)
 const saving = ref(false)
@@ -321,7 +334,7 @@ const configOfRow = (row: PurchaseListRow) => row.line.configText || row.line.co
 const warehouseOfRow = (row: PurchaseListRow) => row.line.warehouseName || row.order.warehouseName || ''
 const policiesOfRow = (row: PurchaseListRow) => (row.line.policies ?? []).map((policy) => policy.name).join('|')
 const vehicleColumns = [
-  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(orderNoOf(a), orderNoOf(b)) },
+  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true, fixed: 'left', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(orderNoOf(a), orderNoOf(b)) },
   { title: '车系', key: 'series', width: 120, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(seriesOfRow(a), seriesOfRow(b)) },
   { title: '型号', key: 'model', width: 120, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(modelOf(a.line.productId), modelOf(b.line.productId)) },
   { title: '配置', key: 'config', width: 140, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(configOfRow(a), configOfRow(b)) },
@@ -333,7 +346,7 @@ const vehicleColumns = [
   { title: '操作', key: 'actions', width: 300, fixed: 'right' },
 ]
 const batteryColumns = [
-  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(orderNoOf(a), orderNoOf(b)) },
+  { title: '订单编号', key: 'orderNo', width: 150, ellipsis: true, fixed: 'left', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(orderNoOf(a), orderNoOf(b)) },
   { title: '商品', key: 'series', width: 170, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(seriesOfRow(a), seriesOfRow(b)) },
   { title: '到货时间', key: 'arrivalDate', width: 120, align: 'center', sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(a.line.arrivalDate, b.line.arrivalDate) },
   { title: '电池箱制造商', key: 'batteryBoxManufacturer', width: 160, ellipsis: true, sorter: (a: PurchaseListRow, b: PurchaseListRow) => compareText(a.line.batteryBoxManufacturer, b.line.batteryBoxManufacturer) },
@@ -430,6 +443,7 @@ async function reload() {
   try {
     const result = await purchaseApi.list({ keyword: keyword.value || undefined, status: filterStatus.value })
     rows.value = result.filter((order) => (order.businessScope || 'VEHICLE') === props.scope)
+    tableCurrent.value = 1
   }
   catch (error) { message.error((error as Error).message) }
 }
@@ -634,6 +648,17 @@ async function submit() {
       else await purchaseApi.create(body)
       message.success(editingId.value ? '电池采购单已更新' : '电池采购单已创建')
     } else {
+      const existingOrderNos = new Set(rows.value
+        .filter((order) => order.id !== editingId.value)
+        .map((order) => order.externalOrderNo || order.orderNo)
+        .filter(Boolean))
+      for (const line of lines) {
+        const orderNo = String(line.orderNo ?? '').trim()
+        if (existingOrderNos.has(orderNo)) {
+          message.warning(`订单编号 ${orderNo} 已存在，不能重复新建`)
+          return
+        }
+      }
       const grouped = new Map<string, Record<string, any>[]>()
       for (const line of lines) {
         const orderNo = String(line.orderNo).trim()
@@ -646,7 +671,23 @@ async function submit() {
     createOpen.value = false; await reload()
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }
 }
-async function approve(record: PurchaseOrder) { try { await purchaseApi.approve(record.id); message.success('已审核'); await reload() } catch (error) { message.error((error as Error).message) } }
+function approve(record: PurchaseOrder) {
+  Modal.confirm({
+    title: `审核采购订单 ${record.externalOrderNo || record.orderNo}？`,
+    content: props.scope === 'VEHICLE'
+      ? '请确认本订单所有整车明细均已选定返利政策。确认后订单将审核通过并进入收货流程。'
+      : '确认后订单将审核通过并进入收货流程。',
+    okText: '已确认，审核通过',
+    cancelText: '返回检查',
+    onOk: async () => {
+      try {
+        await purchaseApi.approve(record.id)
+        message.success('采购订单已审核')
+        await reload()
+      } catch (error) { message.error((error as Error).message) }
+    },
+  })
+}
 function cancel(record: PurchaseOrder) {
   Modal.confirm({
     title: `取消采购订单 ${record.externalOrderNo || record.orderNo}？`,

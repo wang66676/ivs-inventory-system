@@ -173,6 +173,20 @@ public class ProductSerialService {
         serialRepository.save(serial);
     }
 
+    /** 采购收货单退回时撤销该 VIN 的入库状态，保留档案以便修正后重新收货。 */
+    @Transactional
+    public void markReceiptReturned(UUID id) {
+        ProductSerial serial = find(id);
+        Product product = productService.find(serial.getProductId());
+        ProductCategory category = categoryService.find(product.getCategoryId());
+        SerialStatus from = serial.getStatus();
+        serial.moveTo(SerialStatus.RETURNED, category.statusTemplate());
+        serial.clearInbound();
+        ProductSerial saved = serialRepository.save(serial);
+        publish(saved, "SerialStatusChanged", java.util.Map.of(
+                "from", from.name(), "to", SerialStatus.RETURNED.name(), "reason", "采购收货退回"));
+    }
+
     /** 收货后补录或调整申请合格证日期，按 VIN/SN 批量同步一物一档。 */
     @Transactional
     public void updateCertificateApplicationDate(List<String> serialNos, java.time.LocalDate certificateApplicationDate) {

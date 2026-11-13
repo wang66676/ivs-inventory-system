@@ -1,5 +1,5 @@
 export type PurchaseOrderStatus = 'DRAFT' | 'APPROVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED'
-export type ReceiptStatus = 'PENDING' | 'POSTED'
+export type ReceiptStatus = 'PENDING' | 'POSTED' | 'RETURNED'
 
 export interface PurchasePolicyRef {
   id: string

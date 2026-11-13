@@ -16,6 +16,10 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
 
     boolean existsByOrderNo(String orderNo);
 
+    boolean existsByExternalOrderNoIgnoreCase(String externalOrderNo);
+
+    boolean existsByExternalOrderNoIgnoreCaseAndIdNot(String externalOrderNo, UUID id);
+
     List<PurchaseOrder> findAllByOrderByCreatedAtDesc();
 
     List<PurchaseOrder> findByStatusOrderByCreatedAtDesc(PurchaseOrderStatus status);
