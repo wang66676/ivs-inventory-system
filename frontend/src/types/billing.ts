@@ -3,6 +3,7 @@ export interface PurchaseRedInvoice {
   invoiceNo: string
   direction: string
   type: string
+  invoiceType?: string
   supplierId: string
   purchaseOrderId?: string
   serialNos?: string[]
@@ -41,6 +42,7 @@ export interface PurchaseInvoicePdfExtraction {
   fileName: string
   rawText?: string
   invoiceNo?: string
+  invoiceType?: string
   type?: 'BLUE' | 'RED'
   amount?: number
   taxAmount?: number

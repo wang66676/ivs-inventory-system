@@ -15,6 +15,7 @@ public class PurchaseInvoice {
     @Column(name = "invoice_no", nullable = false, unique = true, length = 40) private String invoiceNo;
     @Column(nullable = false, length = 10) private String direction;
     @Column(nullable = false, length = 10) private String type;
+    @Column(name = "invoice_type", length = 100) private String invoiceType;
     @Column(name = "original_invoice_id") private UUID originalInvoiceId;
     @Column(name = "original_invoice_no", length = 100) private String originalInvoiceNo;
     @Column(name = "supplier_id", nullable = false) private UUID supplierId;
@@ -67,12 +68,13 @@ public class PurchaseInvoice {
 
     public static PurchaseInvoice registerBlue(String invoiceNo, UUID supplierId, UUID purchaseOrderId,
                                                String serialNos, BigDecimal amount, BigDecimal taxRate,
-                                               String externalInvoiceNo, Instant issuedAt, String remark) {
+                                               String invoiceType, String externalInvoiceNo, Instant issuedAt, String remark) {
         PurchaseInvoice invoice = new PurchaseInvoice();
         invoice.id = UUID.randomUUID();
         invoice.invoiceNo = invoiceNo;
         invoice.direction = "IN";
         invoice.type = "BLUE";
+        invoice.invoiceType = invoiceType == null || invoiceType.isBlank() ? null : invoiceType.trim();
         invoice.supplierId = supplierId;
         invoice.purchaseOrderId = purchaseOrderId;
         invoice.serialNos = serialNos == null || serialNos.isBlank() ? null : serialNos.trim();
@@ -137,6 +139,7 @@ public class PurchaseInvoice {
     public String getInvoiceNo() { return invoiceNo; }
     public String getDirection() { return direction; }
     public String getType() { return type; }
+    public String getInvoiceType() { return invoiceType; }
     public UUID getOriginalInvoiceId() { return originalInvoiceId; }
     public String getOriginalInvoiceNo() { return originalInvoiceNo; }
     public UUID getSupplierId() { return supplierId; }

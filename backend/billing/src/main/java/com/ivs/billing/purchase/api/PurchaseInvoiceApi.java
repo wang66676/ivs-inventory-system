@@ -12,7 +12,7 @@ public final class PurchaseInvoiceApi {
     }
 
     public record PurchaseInvoiceView(
-            UUID id, String invoiceNo, String direction, String type, UUID supplierId, UUID purchaseOrderId,
+            UUID id, String invoiceNo, String direction, String type, String invoiceType, UUID supplierId, UUID purchaseOrderId,
             java.util.List<String> serialNos, BigDecimal amount,
             BigDecimal matchedAmount, BigDecimal unmatchedAmount, BigDecimal taxRate, BigDecimal taxAmount,
             String status, String originalInvoiceNo,
@@ -21,7 +21,7 @@ public final class PurchaseInvoiceApi {
     ) {
         public static PurchaseInvoiceView from(PurchaseInvoice invoice) {
             return new PurchaseInvoiceView(invoice.getId(), invoice.getInvoiceNo(), invoice.getDirection(),
-                    invoice.getType(), invoice.getSupplierId(), invoice.getPurchaseOrderId(),
+                    invoice.getType(), invoice.getInvoiceType(), invoice.getSupplierId(), invoice.getPurchaseOrderId(),
                     invoice.getSerialNos() == null ? java.util.List.of()
                             : java.util.Arrays.stream(invoice.getSerialNos().split(","))
                             .map(String::trim).filter(value -> !value.isBlank()).toList(),
@@ -42,13 +42,13 @@ public final class PurchaseInvoiceApi {
 
     public record RegisterBlueInvoiceCommand(
             UUID supplierId, UUID purchaseOrderId, java.util.List<String> serialNos,
-            BigDecimal amount, BigDecimal taxRate, String externalInvoiceNo,
+            BigDecimal amount, BigDecimal taxRate, String invoiceType, String externalInvoiceNo,
             Instant issuedAt, String pdfFileName, String pdfStorageKey, String extractedText, String remark
     ) {
     }
 
     public record PdfExtractionView(
-            String storageKey, String fileName, String rawText, String invoiceNo, String type,
+            String storageKey, String fileName, String rawText, String invoiceNo, String invoiceType, String type,
             BigDecimal amount, BigDecimal taxAmount, BigDecimal taxRate, Instant issuedAt,
             String sellerName, String sellerTaxNo, String buyerName, String buyerTaxNo,
             java.util.List<String> vinCandidates, java.util.List<String> orderNoCandidates,

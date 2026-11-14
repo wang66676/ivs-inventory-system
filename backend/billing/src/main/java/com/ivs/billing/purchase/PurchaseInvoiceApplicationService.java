@@ -130,7 +130,7 @@ public class PurchaseInvoiceApplicationService {
             invoice = PurchaseInvoice.registerBlue(
                     "PINV-B-%06d".formatted(repository.nextInvoiceSequence()), command.supplierId(),
                     command.purchaseOrderId(), serialNos, command.amount(), command.taxRate(),
-                    command.externalInvoiceNo(), command.issuedAt(), command.remark());
+                    command.invoiceType(), command.externalInvoiceNo(), command.issuedAt(), command.remark());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("PURCHASE_INVOICE_INVALID", exception.getMessage());
         }

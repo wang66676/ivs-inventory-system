@@ -54,7 +54,7 @@ public class PurchaseInvoicePdfService {
             Files.write(storageRoot.resolve(storageKey), bytes);
             PurchaseInvoicePdfParser.ParsedInvoice parsed = parser.parse(bytes);
             return new PurchaseInvoiceApi.PdfExtractionView(storageKey, fileName, parsed.rawText(),
-                    parsed.invoiceNo(), parsed.type(), parsed.amount(), parsed.taxAmount(), parsed.taxRate(),
+                    parsed.invoiceNo(), parsed.invoiceType(), parsed.type(), parsed.amount(), parsed.taxAmount(), parsed.taxRate(),
                     parsed.issuedAt(), parsed.sellerName(), parsed.sellerTaxNo(), parsed.buyerName(),
                     parsed.buyerTaxNo(), parsed.vinCandidates(), parsed.orderNoCandidates(), parsed.confidence(),
                     parsed.textExtracted(), parsed.warning());

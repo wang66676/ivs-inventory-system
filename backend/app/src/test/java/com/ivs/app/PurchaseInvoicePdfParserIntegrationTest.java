@@ -1,5 +1,6 @@
 package com.ivs.app;
 
+import com.ivs.billing.purchase.PurchaseInvoice;
 import com.ivs.billing.purchase.PurchaseInvoicePdfParser;
 import com.ivs.billing.purchase.PurchaseInvoicePdfService;
 import org.junit.jupiter.api.Test;
@@ -57,6 +58,7 @@ class PurchaseInvoicePdfParserIntegrationTest {
     @Test
     void 根据票面文字识别发票号码开票时间金额和VIN() {
         String text = """
+                电子发票（增值税专用发票）
                 购买方信息
                 名称：天津容大汽车销售有限公司
                 纳税人识别号：91120101TEST123456
@@ -68,10 +70,12 @@ class PurchaseInvoicePdfParserIntegrationTest {
                 税率 13%
                 税额 ¥94336.28
                 价税合计（小写） ¥820000.00
-                备注：采购订单编号：CG2026111401 VIN：LZZ1CLWB0NA123456
+                备注：采购订单编号：CG2026111401
+                车辆识别代号/车架号码：LZZ1CLWB0NA123456
                 """;
         PurchaseInvoicePdfParser.ParsedInvoice parsed = parser.parseText(text);
         assertThat(parsed.invoiceNo()).isEqualTo("26112000000012345678");
+        assertThat(parsed.invoiceType()).isEqualTo("电子发票（增值税专用发票）");
         assertThat(parsed.type()).isEqualTo("BLUE");
         assertThat(parsed.amount()).isEqualByComparingTo("820000.00");
         assertThat(parsed.taxAmount()).isEqualByComparingTo("94336.28");
@@ -83,5 +87,15 @@ class PurchaseInvoicePdfParserIntegrationTest {
         assertThat(parsed.vinCandidates()).contains("LZZ1CLWB0NA123456");
         assertThat(parsed.textExtracted()).isTrue();
         assertThat(parsed.confidence()).isGreaterThanOrEqualTo(5);
+    }
+
+    @Test
+    void 蓝字发票登记保存发票类型() {
+        PurchaseInvoice invoice = PurchaseInvoice.registerBlue("PINV-B-000001", java.util.UUID.randomUUID(),
+                java.util.UUID.randomUUID(), "LZZ1CLWB0NA123456", new BigDecimal("820000.00"),
+                new BigDecimal("0.13"), "电子发票（增值税专用发票）", "26112000000012345678",
+                java.time.Instant.now(), null);
+        assertThat(invoice.getInvoiceType()).isEqualTo("电子发票（增值税专用发票）");
+        assertThat(invoice.getExternalInvoiceNo()).isEqualTo("26112000000012345678");
     }
 }
