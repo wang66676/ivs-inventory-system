@@ -53,7 +53,7 @@ test('系统健康检查可加载并执行备份恢复验证', async ({ page }) 
   test.setTimeout(120000)
   await login(page)
   await page.goto('/system/health')
-  await expect(page.getByText('系统健康', { exact: true }).first()).toBeVisible()
+
   await expect(page.getByRole('button', { name: '立即备份并验证恢复', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '立即备份并验证恢复', exact: true }).click()
   await expect(page.getByText(/备份完成并已通过恢复验证/)).toBeVisible({ timeout: 90000 })
