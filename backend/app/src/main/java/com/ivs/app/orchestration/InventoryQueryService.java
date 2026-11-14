@@ -218,20 +218,21 @@ public class InventoryQueryService {
     private List<InventoryApi.VehicleSeriesInventoryView> vehicleSeriesInventory() {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select coalesce(nullif(trim(p.series), ''), p.name) as series,
-                       sum(case when ps.status = 'IN_STOCK' then 1 else 0 end) as unsold_count,
-                       sum(case when ps.status = 'LOCKED' then 1 else 0 end) as locked_count
+                       coalesce(nullif(trim(p.config_code), ''), nullif(trim(p.model), ''), '未配置') as config,
+                       count(*) as quantity
                   from ivs.product_serial ps
                   join ivs.product p on p.id = ps.product_id
                   join ivs.product_category c on c.id = p.category_id
-                 where c.status_template = 'VEHICLE' and ps.status in ('IN_STOCK', 'LOCKED')
-                 group by coalesce(nullif(trim(p.series), ''), p.name)
-                 order by series
+                 where c.status_template = 'VEHICLE' and ps.status = 'IN_STOCK'
+                 group by coalesce(nullif(trim(p.series), ''), p.name),
+                          coalesce(nullif(trim(p.config_code), ''), nullif(trim(p.model), ''), '未配置')
+                 order by series, config
                 """);
         return rows.stream()
                 .map(row -> new InventoryApi.VehicleSeriesInventoryView(
                         String.valueOf(row.get("series")),
-                        ((Number) row.get("unsold_count")).intValue(),
-                        ((Number) row.get("locked_count")).intValue()))
+                        String.valueOf(row.get("config")),
+                        ((Number) row.get("quantity")).intValue()))
                 .toList();
     }
 
