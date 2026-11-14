@@ -36,6 +36,7 @@
             <a-menu-item key="/system/roles">角色权限</a-menu-item>
             <a-menu-item key="/system/approvals">审批配置</a-menu-item>
             <a-menu-item key="/system/settings">全局参数</a-menu-item>
+            <a-menu-item key="/system/health">系统健康</a-menu-item>
             <a-menu-item key="/system/update">在线更新</a-menu-item>
             <a-menu-item key="/system/migration">数据迁移</a-menu-item>
             <a-menu-item key="/system/audit">审计日志</a-menu-item>
@@ -280,15 +281,31 @@ async function openNotifications() {
 }
 
 async function readNotification(item: NotificationItem) {
-  if (item.read) return
   try {
-    await notificationApi.markRead(item.id)
-    await loadNotifications()
+    if (!item.read) {
+      await notificationApi.markRead(item.id)
+      await loadNotifications()
+    }
   } catch (error) {
     message.error((error as Error).message)
+    return
+  }
+  const target: Record<string, string> = {
+    SYSTEM_HEALTH: '/system/health',
+    APPROVAL_TASK: '/system/approval-tasks',
+    SALES_ORDER: '/sales/orders',
+    STOCKTAKE: '/inventory/stocktakes',
+    POLICY: '/policy/policies',
+    POLICY_POOL: '/policy/subsidy-pools',
+    REBATE_FUND: '/policy/fund-pool',
+    REFUND: '/billing/refunds',
+  }
+  const path = item.businessType ? target[item.businessType] : undefined
+  if (path) {
+    notificationOpen.value = false
+    await router.push(path)
   }
 }
-
 async function markAllNotificationsRead() {
   try {
     await notificationApi.markAllRead()
@@ -354,6 +371,7 @@ const systemTitles: Record<string, string> = {
   '/system/audit': '审计日志',
   '/system/migration': '数据迁移',
   '/system/settings': '全局参数',
+  '/system/health': '系统健康',
   '/system/update': '在线更新',
 }
 

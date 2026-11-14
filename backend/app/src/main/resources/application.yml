@@ -33,7 +33,7 @@ management:
         include: health,info,metrics
 
 ivs:
-  version: ${IVS_VERSION:1.9.17}
+  version: ${IVS_VERSION:1.9.18}
   invoice:
     storage-dir: ${IVS_INVOICE_STORAGE_DIR:./data/invoice-files}
   cors:
@@ -47,6 +47,20 @@ ivs:
       enabled: ${BOOTSTRAP_ADMIN_ENABLED:true}
       username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:admin123}
+  backup:
+    enabled: ${IVS_BACKUP_ENABLED:true}
+    dir: ${IVS_BACKUP_DIR:./backups}
+    cron: "${IVS_BACKUP_CRON:0 30 2 * * *}"
+    retention-days: ${IVS_BACKUP_RETENTION_DAYS:30}
+  health:
+    initial-delay-ms: ${IVS_HEALTH_INITIAL_DELAY_MS:60000}
+    check-interval-ms: ${IVS_HEALTH_CHECK_INTERVAL_MS:900000}
+    backup-max-age-hours: ${IVS_BACKUP_MAX_AGE_HOURS:36}
+    min-free-mb: ${IVS_MIN_FREE_MB:1024}
+  audit:
+    cleanup-enabled: ${IVS_AUDIT_CLEANUP_ENABLED:true}
+    retention-days: ${IVS_AUDIT_RETENTION_DAYS:730}
+    cleanup-cron: "${IVS_AUDIT_CLEANUP_CRON:0 10 3 * * *}"
   outbox:
     dispatch-enabled: true
     dispatch-interval-ms: 3000

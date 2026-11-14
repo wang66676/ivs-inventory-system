@@ -1,0 +1,90 @@
+name: frontend-e2e
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: 构建前端
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: 构建测试应用
+        run: mvn -B -f backend/pom.xml -DskipTests package
+
+      - name: 安装 Chromium
+        working-directory: frontend
+        run: pnpm exec playwright install chromium
+
+      - name: 启动测试服务
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath java -ArgumentList '-jar','backend/app/target/ivs-app-0.1.0-SNAPSHOT.jar' -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput 'e2e-app.log' -RedirectStandardError 'e2e-app.err'
+          "E2E_APP_PID=$($process.Id)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $ready = $false
+          for ($i = 0; $i -lt 90; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $health = Invoke-RestMethod -Uri 'http://localhost:8090/actuator/health' -TimeoutSec 3
+              if ($health.status -eq 'UP') { $ready = $true; break }
+            } catch {}
+          }
+          if (-not $ready) { throw 'E2E 后端启动超时' }
+
+      - name: 执行前端端到端测试
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://localhost:8090
+          E2E_USERNAME: admin
+          E2E_PASSWORD: admin123
+        run: pnpm run test:e2e
+
+      - name: 停止测试服务
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:E2E_APP_PID) { Stop-Process -Id ([int]$env:E2E_APP_PID) -Force -ErrorAction SilentlyContinue }
+
+      - name: 上传失败诊断
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            e2e-app.log
+            e2e-app.err
+            frontend/playwright-report
+            frontend/test-results

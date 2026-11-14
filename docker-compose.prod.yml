@@ -35,20 +35,69 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
       DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-5}
-      IVS_VERSION: ${IVS_VERSION:-1.1.0}
+      IVS_VERSION: ${IVS_VERSION:-1.9.18}
       IVS_PUBLIC_HOST: ${IVS_PUBLIC_HOST}
       IVS_CORS_ALLOWED_ORIGINS: ${IVS_CORS_ALLOWED_ORIGINS}
+      IVS_BACKUP_ENABLED: 'false'
+      IVS_BACKUP_DIR: /app/backups
+      IVS_INVOICE_STORAGE_DIR: /app/data/invoice-files
       BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED:-true}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
     ports:
       - "127.0.0.1:${APP_PORT:-8090}:8090"
+    volumes:
+      - ./backups:/app/backups
+      - ./data/invoice-files:/app/data/invoice-files
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8090/actuator/health | grep -q UP || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 20
 
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - ./backups:/backups
+      - ./data/invoice-files:/invoice-files:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        while true; do
+          stamp=$$(date +%Y%m%d-%H%M%S)
+          file="/backups/ivs-backup-$${stamp}.dump"
+          verify_db="$${POSTGRES_DB}_restore_verify"
+          echo "creating $$file"
+          pg_dump -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc -f "$$file"
+          dropdb -h postgres -U "$$POSTGRES_USER" --if-exists "$$verify_db"
+          createdb -h postgres -U "$$POSTGRES_USER" "$$verify_db"
+          pg_restore -h postgres -U "$$POSTGRES_USER" -d "$$verify_db" "$$file"
+          count=$$(psql -h postgres -U "$$POSTGRES_USER" -d "$$verify_db" -tAc "select count(*) from ivs.flyway_schema_history" | tr -d '[:space:]')
+          if [ "$$count" -gt 0 ]; then
+            echo "verified" > "$$file.verified"
+          else
+            echo "restore verification failed" >&2
+            mv "$$file" "$$file.failed"
+          fi
+          dropdb -h postgres -U "$$POSTGRES_USER" --if-exists "$$verify_db"
+          if [ -d /invoice-files ]; then
+            tar -czf "/backups/ivs-attachments-$${stamp}.tar.gz" -C /invoice-files .
+            tar -tzf "/backups/ivs-attachments-$${stamp}.tar.gz" >/dev/null
+          fi
+          find /backups -name 'ivs-backup-*.dump' -mtime +"$$BACKUP_RETENTION_DAYS" -delete
+          find /backups -name 'ivs-attachments-*.tar.gz' -mtime +"$$BACKUP_RETENTION_DAYS" -delete
+          sleep 86400
+        done
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
