@@ -27,7 +27,7 @@
           <template v-else-if="column.key === 'tax'">{{ money(record.taxAmount) }}</template>
           <template v-else-if="column.key === 'matched'">{{ money(record.matchedAmount) }}</template>
           <template v-else-if="column.key === 'unmatched'">{{ money(record.unmatchedAmount) }}</template>
-          <template v-else-if="column.key === 'issuedAt'">{{ formatDateTime(record.issuedAt) }}</template>
+          <template v-else-if="column.key === 'issuedAt'">{{ formatDate(record.issuedAt) }}</template>
           <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
           <template v-else-if="column.key === 'pdf'">
             <a-button v-if="record.pdfFileName" type="link" size="small" style="padding:0" @click="downloadPdf(record)">
@@ -93,7 +93,7 @@
             </a-form-item>
           </a-col>
           <a-col :span="12"><a-form-item label="税率"><a-input-number v-model:value="form.taxRate" :min="0" :max="1" :step="0.01" :precision="4" style="width:100%" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="开票时间"><a-date-picker v-model:value="form.issuedAt" show-time format="YYYY-MM-DD HH:mm" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="开票日期"><a-date-picker v-model:value="form.issuedAt" format="YYYY-MM-DD" placeholder="选择年月日" style="width:100%" /></a-form-item></a-col>
           <a-col :span="24"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
         </a-row>
       </a-form>
@@ -144,7 +144,7 @@ const columns = [
   { title: '未匹配', key: 'unmatched', width: 140, align: 'right' },
   { title: '发票号码', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 180 },
   { title: '状态', key: 'status', dataIndex: 'status', width: 100 },
-  { title: '开票时间', key: 'issuedAt', width: 165 },
+  { title: '开票日期', key: 'issuedAt', width: 130 },
   { title: '电子发票', key: 'pdf', width: 180 },
   { title: '登记日期', key: 'createdAt', width: 120 },
   { title: '操作', key: 'actions', width: 120, fixed: 'right' },
@@ -198,15 +198,29 @@ const serialOptions = computed(() => {
   }
   return options
 })
-const linkedOrderNoSummary = computed(() => {
+function serialValues(value?: string) {
+  return String(value || '').split(/[、,，\s]+/).map((item) => item.trim()).filter(Boolean)
+}
+
+function orderIdsForVins(vins: string[]) {
+  const vinSet = new Set(vins)
   const orderIds = new Set<string>()
-  for (const vin of form.serialNos || []) {
-    for (const receipt of receipts.value) {
-      if (receipt.status === 'POSTED' && receipt.lines.some((line) => (line.serialNos || []).includes(vin))) {
-        orderIds.add(receipt.orderId)
-      }
+  for (const order of purchaseOrders.value) {
+    if (order.lines.some((line) => serialValues(line.serialNo).some((serialNo) => vinSet.has(serialNo)))) {
+      orderIds.add(order.id)
     }
   }
+  for (const receipt of receipts.value) {
+    if (receipt.status !== 'POSTED') continue
+    if (receipt.lines.some((line) => (line.serialNos || []).some((serialNo) => vinSet.has(serialNo)))) {
+      orderIds.add(receipt.orderId)
+    }
+  }
+  return orderIds
+}
+
+const linkedOrderNoSummary = computed(() => {
+  const orderIds = orderIdsForVins(form.serialNos || [])
   const linkedOrderNos = [...new Set([...orderIds]
     .map((orderId) => orderNoById.value[orderId])
     .filter(Boolean))]
@@ -275,11 +289,7 @@ async function extractPdf(file: File) {
       resetOrderSelection()
       if (result.amount != null) form.amount = Number(result.amount)
     }
-    const invoiceVins = new Set(result.vinCandidates)
-    const vinOrderIds = new Set(receipts.value
-      .filter((receipt) => receipt.status === 'POSTED' && receipt.lines.some((line) =>
-        (line.serialNos || []).some((serialNo) => invoiceVins.has(serialNo))))
-      .map((receipt) => receipt.orderId))
+    const vinOrderIds = orderIdsForVins(result.vinCandidates)
     const matchedOrder = purchaseOrders.value.find((order) =>
       result.orderNoCandidates.some((candidate) => candidate === order.externalOrderNo || candidate === order.orderNo))
       || (vinOrderIds.size === 1 ? purchaseOrders.value.find((order) =>
@@ -323,7 +333,7 @@ async function downloadPdf(record: PurchaseRedInvoice) {
 
 async function save() {
   if (!form.supplierId || !form.purchaseOrderId) { message.warning('请选择厂家和采购订单编号'); return }
-  if (!form.issuedAt) { message.warning('请选择开票时间'); return }
+  if (!form.issuedAt) { message.warning('请选择开票日期'); return }
   if (!form.serialNos?.length) { message.warning('请至少选择一个 VIN/SN'); return }
   if (!form.amount || Number(form.amount) <= 0) { message.warning('所选 VIN/SN 没有有效发票金额'); return }
   saving.value = true
@@ -336,7 +346,7 @@ async function save() {
       taxRate: form.taxRate,
       invoiceType: form.invoiceType || null,
       externalInvoiceNo: form.externalInvoiceNo || null,
-      issuedAt: form.issuedAt ? dayjs(form.issuedAt).toDate().toISOString() : null,
+      issuedAt: form.issuedAt ? dayjs(form.issuedAt).startOf('day').toDate().toISOString() : null,
       pdfFileName: form.pdfFileName || null,
       pdfStorageKey: form.pdfStorageKey || null,
       extractedText: form.extractedText || null,

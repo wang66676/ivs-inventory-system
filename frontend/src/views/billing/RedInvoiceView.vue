@@ -20,7 +20,7 @@
             <span v-if="record.claimId">{{ claimLabel(record.claimId) }}</span>
             <span v-else class="sub">未关联申报单</span>
           </template>
-          <template v-else-if="column.key === 'issuedAt'">{{ formatTime(record.issuedAt) }}</template>
+          <template v-else-if="column.key === 'issuedAt'">{{ formatDate(record.issuedAt) }}</template>
           <template v-else-if="column.key === 'pdf'">
             <a-button v-if="record.pdfFileName" type="link" size="small" style="padding:0" @click="downloadPdf(record)">
               {{ record.pdfFileName }}
@@ -61,7 +61,7 @@
           <a-col :span="12">
             <a-form-item label="税率"><a-input-number v-model:value="form.taxRate" :min="0" :max="1" :step="0.01" :precision="4" style="width:100%" /></a-form-item>
           </a-col>
-          <a-col :span="12"><a-form-item label="开票时间" required><a-date-picker v-model:value="form.issuedAt" show-time format="YYYY-MM-DD HH:mm" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="开票日期" required><a-date-picker v-model:value="form.issuedAt" format="YYYY-MM-DD" placeholder="选择年月日" style="width:100%" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="原蓝票号"><a-input v-model:value="form.originalInvoiceNo" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="厂家外部票号"><a-input v-model:value="form.externalInvoiceNo" /></a-form-item></a-col>
           <a-col :span="24"><a-form-item label="备注"><a-textarea v-model:value="form.remark" :rows="2" /></a-form-item></a-col>
@@ -111,7 +111,7 @@ const columns = [
   { title: '外部票号', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 150 },
   { title: '关联申报单', key: 'claim', width: 180 },
   { title: '状态', key: 'status', dataIndex: 'status', width: 100 },
-  { title: '开票时间', key: 'issuedAt', width: 165 },
+  { title: '开票日期', key: 'issuedAt', width: 130 },
   { title: '电子发票', key: 'pdf', width: 180 },
   { title: '登记时间', key: 'createdAt', width: 170 },
 ]
@@ -120,6 +120,7 @@ function money(value?: number) { return value == null ? '-' : `¥${Number(value)
 function rate(value?: number) { return value == null ? '-' : `${(Number(value) * 100).toFixed(2)}%` }
 function supplierName(id: string) { return supplierNames.value[id] || id }
 function claimLabel(id: string) { return claims.value.find((claim) => claim.id === id)?.claimNo || id }
+function formatDate(value?: string) { return value ? dayjs(value).format('YYYY-MM-DD') : '-' }
 function formatTime(value: string) { return value ? value.replace('T', ' ').slice(0, 19) : '-' }
 
 function openCreate() {
@@ -180,7 +181,7 @@ async function save() {
   if (!form.supplierId || !form.amount || Number(form.amount) <= 0) {
     message.warning('请选择厂家并填写红字金额'); return
   }
-  if (!form.issuedAt) { message.warning('请选择开票时间'); return }
+  if (!form.issuedAt) { message.warning('请选择开票日期'); return }
   if (form.claimId) {
     const claim = claims.value.find((item) => item.id === form.claimId)
     if (claim && Number(form.amount) !== Number(claim.confirmedAmount)) {
@@ -193,7 +194,7 @@ async function save() {
       supplierId: form.supplierId, amount: form.amount, taxRate: form.taxRate,
       originalInvoiceNo: form.originalInvoiceNo || null, externalInvoiceNo: form.externalInvoiceNo || null,
       claimId: form.claimId || null,
-      issuedAt: dayjs(form.issuedAt).toDate().toISOString(),
+      issuedAt: dayjs(form.issuedAt).startOf('day').toDate().toISOString(),
       pdfFileName: form.pdfFileName || null,
       pdfStorageKey: form.pdfStorageKey || null,
       extractedText: form.extractedText || null,
