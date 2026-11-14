@@ -20,6 +20,14 @@ ivs:
       enabled: true
       username: admin
       password: admin123
+  backup:
+    enabled: false
+    cron: "0 0 0 1 1 *"
+  health:
+    initial-delay-ms: 3600000
+    check-interval-ms: 3600000
+  audit:
+    cleanup-enabled: false
   outbox:
     dispatch-enabled: false
     dispatch-interval-ms: 60000

@@ -60,6 +60,7 @@ import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { approvalApi } from '../../api/approval'
 import { salesApi } from '../../api/sales'
+import { approvalBusinessLocation } from '../../utils/approvalNavigation'
 import type { ApprovalTask, ApprovalTaskStatus } from '../../types/approval'
 
 const router = useRouter()
@@ -91,13 +92,9 @@ function statusColor(value: ApprovalTaskStatus) {
 function money(value: number) { return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
 function formatDate(value?: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '-' }
 function goBusiness(task: ApprovalTask) {
-  if (task.businessType === 'SALES_ORDER') router.push('/sales/orders')
-  else if (task.businessType === 'STOCKTAKE') router.push('/inventory/stocktake')
-  else if (task.businessType === 'POLICY') router.push('/policy/policies')
-  else if (task.businessType === 'POLICY_POOL') router.push('/policy/subsidy-pools')
-  else if (task.businessType === 'REBATE_FUND') router.push('/policy/fund-pool')
-  else if (task.businessType === 'REFUND') router.push('/billing/refunds')
-  else message.info('关联业务页面尚未开放')
+  const location = approvalBusinessLocation(task)
+  if (location) router.push(location)
+  else message.warning(`未识别的审批业务类型：${task.businessType}`)
 }
 async function approve(task: ApprovalTask) {
   saving.value = true

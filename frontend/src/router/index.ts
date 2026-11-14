@@ -84,7 +84,6 @@ const modulePages: MenuPage[] = [
   { path: '/billing/sales-invoices', name: 'sales-invoice', component: () => import('../views/billing/InvoiceView.vue'), title: '销项发票', description: '开票、作废与红冲（一期整车按全价开票）。', permission: 'IVS_INVOICE_WRITE' },
   { path: '/billing/red-invoices', name: 'red-invoice', component: () => import('../views/billing/RedInvoiceView.vue'), title: '红字发票', description: '进项红字（厂家 → 我方）为主通道；关联原蓝票与申报单。', permission: 'IVS_INVOICE_REDFLUSH' },
   { path: '/billing/refunds', name: 'refund', component: () => import('../views/billing/RefundView.vue'), title: '退款', description: '退款单：审批 → 执行 → 成功/失败/重试 → 人工兜底。', permission: 'IVS_FINANCE_READ' },
-  { path: '/billing/payments', name: 'payment', title: '付款', description: '付款与批次执行。', permission: 'IVS_FINANCE_READ' },
 
   // 报表
   { path: '/reports/monthly', name: 'report-monthly', component: () => import('../views/reports/MonthlyReportView.vue'), title: '进销存月报', description: '采购、销售、库存、返利月度汇总。', permission: 'IVS_FINANCE_READ' },
@@ -143,6 +142,7 @@ export const router = createRouter({
     { path: '/login', name: 'login', component: () => import('../views/auth/LoginView.vue'), meta: { public: true } },
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', name: 'dashboard', component: () => import('../views/dashboard/DashboardView.vue') },
+    { path: '/billing/payments', redirect: '/procurement/payables', meta: { permission: 'IVS_FINANCE_READ' } },
     ...modulePages.map((page) => ({
       path: page.path,
       name: page.name,
@@ -157,6 +157,7 @@ export const router = createRouter({
     { path: '/system/audit', name: 'audit-log', component: () => import('../views/system/AuditLogView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/migration', name: 'data-migration', component: () => import('../views/system/DataMigrationView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/settings', name: 'system-settings', component: () => import('../views/system/SystemSettingView.vue'), meta: { permission: 'USER_MANAGE' } },
+    { path: '/system/health', name: 'system-health', component: () => import('../views/system/SystemHealthView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/update', name: 'system-update', component: () => import('../views/system/SystemUpdateView.vue'), meta: { permission: 'IVS_READ' } },
     { path: '/system/approvals', name: 'approval-config', component: () => import('../views/system/ApprovalConfigView.vue'), meta: { permission: 'USER_MANAGE' } },
     { path: '/system/approval-tasks', name: 'approval-tasks', component: () => import('../views/system/ApprovalTaskView.vue'), meta: { permission: 'IVS_READ' } },

@@ -130,6 +130,24 @@ class PurchaseInvoicePdfParserIntegrationTest {
     }
 
     @Test
+    void 拒绝非PDF扩展名上传() {
+        MockMultipartFile file = new MockMultipartFile("file", "invoice.exe", "application/pdf",
+                "%PDF-1.4 test".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> pdfService.extract(file))
+                .isInstanceOf(com.ivs.shared.error.ConflictException.class)
+                .hasMessageContaining("只支持上传 PDF");
+    }
+
+    @Test
+    void 拒绝伪造PDF文件内容() {
+        MockMultipartFile file = new MockMultipartFile("file", "invoice.pdf", "application/pdf",
+                "not-a-pdf".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> pdfService.extract(file))
+                .isInstanceOf(com.ivs.shared.error.ConflictException.class)
+                .hasMessageContaining("不是有效的 PDF");
+    }
+
+    @Test
     void 蓝字发票登记保存发票类型() {
         PurchaseInvoice invoice = PurchaseInvoice.registerBlue("PINV-B-000001", java.util.UUID.randomUUID(),
                 java.util.UUID.randomUUID(), "LZZ1CLWB0NA123456", new BigDecimal("820000.00"),

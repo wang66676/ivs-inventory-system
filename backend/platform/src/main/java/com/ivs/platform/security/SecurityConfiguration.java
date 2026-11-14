@@ -66,9 +66,13 @@ public class SecurityConfiguration {
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
             @Value("${ivs.cors.allowed-origins:http://localhost:8090,http://localhost:5174,https://wang66676.github.io}") String origins) {
+        List<String> allowedOrigins = Arrays.stream(origins.split(",")).map(String::trim)
+                .filter(value -> !value.isEmpty()).toList();
+        if (allowedOrigins.contains("*")) {
+            throw new IllegalStateException("生产环境禁止使用通配符 CORS，请配置 ivs.cors.allowed-origins");
+        }
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.stream(origins.split(",")).map(String::trim)
-                .filter(value -> !value.isEmpty()).toList());
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With"));
         configuration.setMaxAge(3600L);
