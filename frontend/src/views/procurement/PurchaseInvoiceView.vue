@@ -54,7 +54,7 @@
           <a-button :loading="extracting">上传电子发票 PDF 并自动识别</a-button>
         </a-upload>
         <a-alert v-if="pdfExtraction" class="pdf-alert" :type="pdfExtraction.textExtracted ? 'info' : 'warning'"
-                 show-icon :message="pdfExtraction.warning" />
+                 show-icon :message="pdfExtractionMessage" />
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item label="销售方（厂家）" required>
@@ -71,7 +71,7 @@
           <a-col :span="24">
             <a-form-item label="VIN / SN（车辆识别代号/车架号码，可多选）" required>
               <a-select v-model:value="form.serialNos" mode="multiple" :options="serialOptions"
-                        :disabled="!form.purchaseOrderId" placeholder="上传 PDF 自动识别并匹配已收货 VIN"
+                        :disabled="!form.purchaseOrderId && !pdfExtraction?.vinCandidates?.length" placeholder="上传 PDF 自动识别并匹配已收货 VIN"
                         @change="onSerialChange" />
             </a-form-item>
           </a-col>
@@ -170,25 +170,35 @@ const orderOptions = computed(() => {
     }))
 })
 const serialOptions = computed(() => {
-  if (!form.purchaseOrderId) return []
-  const invoiced = new Set(allInvoices.value
+  const invoiced = new Set(form.purchaseOrderId ? allInvoices.value
     .filter((row) => row.type === 'BLUE' && row.purchaseOrderId === form.purchaseOrderId)
-    .flatMap((row) => row.serialNos || []))
+    .flatMap((row) => row.serialNos || []) : [])
   const options: { label: string; value: string; amount: number }[] = []
-  for (const receipt of receipts.value) {
-    if (receipt.orderId !== form.purchaseOrderId || receipt.status !== 'POSTED') continue
-    for (const line of receipt.lines) {
-      for (const serialNo of line.serialNos || []) {
-        if (invoiced.has(serialNo)) continue
-        options.push({
-          label: `${serialNo}（${money(line.unitPrice)}）`,
-          value: serialNo,
-          amount: Number(line.unitPrice || 0),
-        })
+  if (form.purchaseOrderId) {
+    for (const receipt of receipts.value) {
+      if (receipt.orderId !== form.purchaseOrderId || receipt.status !== 'POSTED') continue
+      for (const line of receipt.lines) {
+        for (const serialNo of line.serialNos || []) {
+          if (invoiced.has(serialNo)) continue
+          options.push({
+            label: `${serialNo}（${money(line.unitPrice)}）`,
+            value: serialNo,
+            amount: Number(line.unitPrice || 0),
+          })
+        }
       }
     }
   }
+  for (const vin of pdfExtraction.value?.vinCandidates || []) {
+    if (!options.some((item) => item.value === vin)) {
+      options.push({ label: `${vin}（票面识别）`, value: vin, amount: 0 })
+    }
+  }
   return options
+})
+const pdfExtractionMessage = computed(() => {
+  const seller = pdfExtraction.value?.sellerName ? `识别销售方：${pdfExtraction.value.sellerName}` : ''
+  return [seller, pdfExtraction.value?.warning].filter(Boolean).join('；')
 })
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
@@ -262,8 +272,11 @@ async function extractPdf(file: File) {
       const availableVins = new Set(receipts.value
         .filter((receipt) => receipt.orderId === form.purchaseOrderId && receipt.status === 'POSTED')
         .flatMap((receipt) => receipt.lines.flatMap((line) => line.serialNos || [])))
-      form.serialNos = result.vinCandidates.filter((vin) => availableVins.has(vin))
+      const matchedVins = result.vinCandidates.filter((vin) => availableVins.has(vin))
+      form.serialNos = matchedVins.length ? matchedVins : [...result.vinCandidates]
       if (result.amount != null) form.amount = Number(result.amount)
+    } else if (result.vinCandidates.length) {
+      form.serialNos = [...result.vinCandidates]
     }
     if (result.type === 'RED') message.warning('识别为红字发票，请确认当前登记的是蓝字发票')
     else message.success('PDF 已识别，请核对票面字段后再登记')

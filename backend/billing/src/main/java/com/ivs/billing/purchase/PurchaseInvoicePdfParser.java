@@ -27,16 +27,26 @@ public class PurchaseInvoicePdfParser {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern INVOICE_NO = Pattern.compile(
             "(?:发票号码|发票号)[:：\\s]*([0-9A-Z]{8,24})", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INVOICE_NO_AFTER = Pattern.compile(
+            "([0-9A-Z]{8,24})\\s*发票号码", Pattern.CASE_INSENSITIVE);
     private static final Pattern INVOICE_TYPE = Pattern.compile(
             "电\\s*子\\s*发\\s*票\\s*[（(]\\s*([^）)\\r\\n]{2,60})\\s*[）)]");
     private static final Pattern ELECTRONIC_INVOICE_LABEL = Pattern.compile("电\\s*子\\s*发\\s*票");
+    private static final String DATE_VALUE =
+            "((?:\\d{4}[年./-]\\d{1,2}[月./-]\\d{1,2}日?)(?:\\s*\\d{1,2}[:：]\\d{2}(?::\\d{2})?)?)";
     private static final Pattern ISSUED_AT = Pattern.compile(
-            "(?:开票日期|开票时间)[:：\\s]*((?:\\d{4}[年./-]\\d{1,2}[月./-]\\d{1,2}日?)(?:\\s*\\d{1,2}[:：]\\d{2}(?::\\d{2})?)?)");
+            "(?:开票日期|开票时间)[:：\\s]*" + DATE_VALUE);
+    private static final Pattern ISSUED_AT_AFTER = Pattern.compile(
+            DATE_VALUE + "\\s*(?:开票日期|开票时间)");
     private static final Pattern AMOUNT = Pattern.compile(
-            "(?:价税合计(?:\\s*[（(]小写[）)])?|小写)[:：\\s]*[¥￥]?\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
+            "(?:价税合计[\\s\\S]{0,80}?[（(]\\s*小写\\s*[）)]|价税合计|[（(]\\s*小写\\s*[）)]|小写)"
+                    + "[:：\\s]*[¥￥]?\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
     private static final Pattern TAX_AMOUNT = Pattern.compile(
             "(?:合计税额|税额)[:：\\s]*[¥￥]?\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
-    private static final Pattern TAX_RATE = Pattern.compile("(?:税率|征收率)[:：\\s]*(\\d+(?:\\.\\d+)?)\\s*%");
+    private static final Pattern TAX_RATE = Pattern.compile(
+            "(?:税率|征收率|税率\\s*[/／]\\s*征收率)[:：\\s]*(\\d+(?:\\.\\d+)?)\\s*%");
+    private static final Pattern TAX_RATE_FALLBACK = Pattern.compile("(?<!\\d)(\\d{1,2}(?:\\.\\d+)?)\\s*%");
+    private static final Pattern NAME_VALUE = Pattern.compile("名称[:：\\s]*([^\\n\\r]{2,100})");
     private static final Pattern SELLER_NAME = Pattern.compile(
             "(?:销售方(?:信息)?[\\s\\S]{0,360}?|销售方)名称[:：\\s]*([^\\n\\r]{2,100})");
     private static final Pattern BUYER_NAME = Pattern.compile(
@@ -66,19 +76,23 @@ public class PurchaseInvoicePdfParser {
 
     public ParsedInvoice parseText(String text) {
         String raw = normalize(text);
-        String invoiceNo = match(INVOICE_NO, raw);
+        String invoiceNo = firstNonBlank(match(INVOICE_NO, raw), match(INVOICE_NO_AFTER, raw));
         String invoiceType = invoiceType(raw);
         String amountText = match(AMOUNT, raw);
         String taxText = match(TAX_AMOUNT, raw);
-        String rateText = match(TAX_RATE, raw);
-        String issuedText = match(ISSUED_AT, raw);
+        String rateText = firstNonBlank(match(TAX_RATE, raw), match(TAX_RATE_FALLBACK, raw));
+        String issuedText = firstNonBlank(match(ISSUED_AT, raw), match(ISSUED_AT_AFTER, raw));
         BigDecimal amount = decimal(amountText);
+        BigDecimal taxRate = rateText == null ? null
+                : decimal(rateText).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
         BigDecimal taxAmount = decimal(taxText);
-        BigDecimal taxRate = rateText == null ? null : decimal(rateText).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+        if (taxAmount == null && amount != null) taxAmount = taxAmountOf(amount.abs(), taxRate);
         Instant issuedAt = issuedAt(issuedText);
-        String sellerName = cleanName(match(SELLER_NAME, raw));
+        List<String> names = matches(NAME_VALUE, raw).stream().map(PurchaseInvoicePdfParser::cleanName)
+                .filter(value -> value != null && !value.isBlank()).toList();
+        String buyerName = names.size() > 0 ? names.get(0) : cleanName(match(BUYER_NAME, raw));
+        String sellerName = names.size() > 1 ? names.get(1) : cleanName(match(SELLER_NAME, raw));
         String sellerTaxNo = match(SELLER_TAX_NO, raw);
-        String buyerName = cleanName(match(BUYER_NAME, raw));
         String buyerTaxNo = match(BUYER_TAX_NO, raw);
         boolean red = raw.contains("红字") || raw.contains("冲红") || (amount != null && amount.signum() < 0);
         List<String> vins = vinCandidates(raw.toUpperCase());
@@ -107,6 +121,16 @@ public class PurchaseInvoicePdfParser {
     private static String match(Pattern pattern, String text) {
         Matcher matcher = pattern.matcher(text);
         return matcher.find() ? matcher.group(1).trim() : null;
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        return first != null && !first.isBlank() ? first : (second != null && !second.isBlank() ? second : null);
+    }
+
+    private static BigDecimal taxAmountOf(BigDecimal gross, BigDecimal rate) {
+        if (gross == null || rate == null || rate.signum() <= 0) return null;
+        BigDecimal net = gross.divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
+        return gross.subtract(net).setScale(2, RoundingMode.HALF_UP);
     }
 
     private static List<String> matches(Pattern pattern, String text) {
