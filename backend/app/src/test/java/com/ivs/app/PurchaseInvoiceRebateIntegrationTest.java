@@ -47,12 +47,14 @@ class PurchaseInvoiceRebateIntegrationTest {
                 "/api/ivs/purchase-invoices/blue", Map.of(
                         "supplierId", supplier.toString(), "purchaseOrderId", orderId.toString(),
                         "serialNos", List.of("LZZBLUE000000001", "LZZBLUE000000002"),
-                        "amount", 820000, "taxRate", 0.13, "externalInvoiceNo", "B-2026-001"),
+                        "amount", 820000, "taxRate", 0.13, "externalInvoiceNo", "B-2026-001",
+                        "issuedAt", "2026-11-14T06:35:00Z"),
                 PurchaseInvoiceApi.PurchaseInvoiceView.class).getBody();
         assertThat(blue).isNotNull();
         assertThat(blue.purchaseOrderId()).isEqualTo(orderId);
         assertThat(blue.serialNos()).containsExactly("LZZBLUE000000001", "LZZBLUE000000002");
         assertThat(blue.amount()).isEqualByComparingTo("820000.00");
+        assertThat(blue.issuedAt()).isEqualTo(java.time.Instant.parse("2026-11-14T06:35:00Z"));
     }
 
     @Test

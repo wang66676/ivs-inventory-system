@@ -12,6 +12,8 @@ spring:
     clean-disabled: false
 
 ivs:
+  invoice:
+    storage-dir: ${java.io.tmpdir}/ivs-invoice-test
   security:
     session-hours: 1
     bootstrap-admin:

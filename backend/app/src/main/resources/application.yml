@@ -33,7 +33,9 @@ management:
         include: health,info,metrics
 
 ivs:
-  version: ${IVS_VERSION:1.9.11}
+  version: ${IVS_VERSION:1.9.12}
+  invoice:
+    storage-dir: ${IVS_INVOICE_STORAGE_DIR:./data/invoice-files}
   cors:
     allowed-origins: ${IVS_CORS_ALLOWED_ORIGINS:http://localhost:8090,http://localhost:5174,https://wang66676.github.io}
   desktop:
