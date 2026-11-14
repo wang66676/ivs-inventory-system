@@ -40,7 +40,7 @@ jobs:
           VITE_ROUTER_MODE: hash
           VITE_API_BASE_URL: ${{ vars.IVS_API_BASE_URL || 'https://mailto-drum-seeker-darwin.trycloudflare.com/api' }}
           VITE_LIVE_API_CONFIG: 'true'
-          VITE_APP_VERSION: 1.9.11
+          VITE_APP_VERSION: 1.9.12
           VITE_GITHUB_OWNER: wang66676
           VITE_GITHUB_REPO: ivs-inventory-system
         run: |

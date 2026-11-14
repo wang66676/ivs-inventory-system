@@ -24,15 +24,18 @@ public class PurchaseInvoiceApplicationService {
     private final PurchaseInvoiceRepository repository;
     private final RebateCreditPort rebateCreditPort;
     private final ClaimInvoicePort claimInvoicePort;
+    private final PurchaseInvoicePdfService pdfService;
     private final EventPublisher events;
 
     public PurchaseInvoiceApplicationService(PurchaseInvoiceRepository repository,
                                              RebateCreditPort rebateCreditPort,
                                              ClaimInvoicePort claimInvoicePort,
+                                             PurchaseInvoicePdfService pdfService,
                                              EventPublisher events) {
         this.repository = repository;
         this.rebateCreditPort = rebateCreditPort;
         this.claimInvoicePort = claimInvoicePort;
+        this.pdfService = pdfService;
         this.events = events;
     }
 
@@ -64,11 +67,13 @@ public class PurchaseInvoiceApplicationService {
             invoice = PurchaseInvoice.registerRed(
                     "PINV-R-%06d".formatted(repository.nextInvoiceSequence()), command.supplierId(),
                     command.amount(), command.taxRate(), command.originalInvoiceNo(),
-                    command.externalInvoiceNo(), command.claimId(), command.remark());
+                    command.externalInvoiceNo(), command.claimId(), command.issuedAt(), command.remark());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("PURCHASE_INVOICE_INVALID", exception.getMessage());
         }
         PurchaseInvoice saved = repository.save(invoice);
+        attachPdf(saved, command.pdfFileName(), command.pdfStorageKey(), command.extractedText());
+        saved = repository.save(saved);
         if (saved.getClaimId() != null) {
             claimInvoicePort.settleFromInvoice(saved.getClaimId(), saved.getId(), saved.getInvoiceNo());
         }
@@ -82,6 +87,32 @@ public class PurchaseInvoiceApplicationService {
         events.publish(new EventEnvelope(UUID.randomUUID(), "PurchaseInvoiceRegistered", "PurchaseInvoice",
                 saved.getId(), saved.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
         return PurchaseInvoiceApi.PurchaseInvoiceView.from(saved);
+    }
+
+    public PurchaseInvoiceApi.PdfExtractionView extractPdf(org.springframework.web.multipart.MultipartFile file) {
+        return pdfService.extract(file);
+    }
+
+    public org.springframework.core.io.Resource pdf(UUID id) {
+        PurchaseInvoice invoice = repository.findById(id)
+                .orElseThrow(() -> new NotFoundException("进项发票", id));
+        if (invoice.getPdfStorageKey() == null) {
+            throw new NotFoundException("电子发票附件", id);
+        }
+        return pdfService.resource(invoice.getPdfStorageKey());
+    }
+
+    public String pdfFileName(UUID id) {
+        return repository.findById(id).map(PurchaseInvoice::getPdfFileName)
+                .orElseThrow(() -> new NotFoundException("进项发票", id));
+    }
+
+    private void attachPdf(PurchaseInvoice invoice, String fileName, String storageKey, String extractedText) {
+        if (storageKey == null || storageKey.isBlank()) return;
+        pdfService.validatedKey(storageKey);
+        pdfService.resource(storageKey);
+        String safeName = fileName == null || fileName.isBlank() ? storageKey : fileName;
+        invoice.attachPdf(safeName, storageKey, extractedText);
     }
 
     /** 登记厂家蓝字进项发票，用于与供应商应付匹配。 */
@@ -104,6 +135,8 @@ public class PurchaseInvoiceApplicationService {
             throw new ConflictException("PURCHASE_INVOICE_INVALID", exception.getMessage());
         }
         PurchaseInvoice saved = repository.save(invoice);
+        attachPdf(saved, command.pdfFileName(), command.pdfStorageKey(), command.extractedText());
+        saved = repository.save(saved);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("invoiceNo", saved.getInvoiceNo());
         payload.put("supplierId", saved.getSupplierId().toString());

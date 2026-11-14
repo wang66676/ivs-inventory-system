@@ -16,6 +16,8 @@ export interface PurchaseRedInvoice {
   externalInvoiceNo?: string
   claimId?: string
   issuedAt?: string
+  pdfFileName?: string
+  extractedText?: string
   createdAt: string
   remark?: string
 }
@@ -32,4 +34,25 @@ export interface InvoicePayableMatchResult {
   matchedAmount: number
   unmatchedAmount: number
   lines: InvoicePayableMatchLine[]
+}
+
+export interface PurchaseInvoicePdfExtraction {
+  storageKey: string
+  fileName: string
+  rawText?: string
+  invoiceNo?: string
+  type?: 'BLUE' | 'RED'
+  amount?: number
+  taxAmount?: number
+  taxRate?: number
+  issuedAt?: string
+  sellerName?: string
+  sellerTaxNo?: string
+  buyerName?: string
+  buyerTaxNo?: string
+  vinCandidates: string[]
+  orderNoCandidates: string[]
+  confidence: number
+  textExtracted: boolean
+  warning: string
 }

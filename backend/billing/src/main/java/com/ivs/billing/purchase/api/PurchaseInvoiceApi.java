@@ -16,7 +16,8 @@ public final class PurchaseInvoiceApi {
             java.util.List<String> serialNos, BigDecimal amount,
             BigDecimal matchedAmount, BigDecimal unmatchedAmount, BigDecimal taxRate, BigDecimal taxAmount,
             String status, String originalInvoiceNo,
-            String externalInvoiceNo, UUID claimId, Instant issuedAt, Instant createdAt, String remark
+            String externalInvoiceNo, UUID claimId, Instant issuedAt, Instant createdAt,
+            String pdfFileName, String extractedText, String remark
     ) {
         public static PurchaseInvoiceView from(PurchaseInvoice invoice) {
             return new PurchaseInvoiceView(invoice.getId(), invoice.getInvoiceNo(), invoice.getDirection(),
@@ -28,20 +29,30 @@ public final class PurchaseInvoiceApi {
                     invoice.getMatchedAmount(), invoice.getUnmatchedAmount(), invoice.getTaxRate(),
                     invoice.getTaxAmount(), invoice.getStatus(), invoice.getOriginalInvoiceNo(),
                     invoice.getExternalInvoiceNo(), invoice.getClaimId(), invoice.getIssuedAt(),
-                    invoice.getCreatedAt(), invoice.getRemark());
+                    invoice.getCreatedAt(), invoice.getPdfFileName(), invoice.getExtractedText(), invoice.getRemark());
         }
     }
 
     public record RegisterRedInvoiceCommand(
             UUID supplierId, BigDecimal amount, BigDecimal taxRate, String originalInvoiceNo,
-            String externalInvoiceNo, UUID claimId, String remark
+            String externalInvoiceNo, UUID claimId, Instant issuedAt,
+            String pdfFileName, String pdfStorageKey, String extractedText, String remark
     ) {
     }
 
     public record RegisterBlueInvoiceCommand(
             UUID supplierId, UUID purchaseOrderId, java.util.List<String> serialNos,
             BigDecimal amount, BigDecimal taxRate, String externalInvoiceNo,
-            Instant issuedAt, String remark
+            Instant issuedAt, String pdfFileName, String pdfStorageKey, String extractedText, String remark
+    ) {
+    }
+
+    public record PdfExtractionView(
+            String storageKey, String fileName, String rawText, String invoiceNo, String type,
+            BigDecimal amount, BigDecimal taxAmount, BigDecimal taxRate, Instant issuedAt,
+            String sellerName, String sellerTaxNo, String buyerName, String buyerTaxNo,
+            java.util.List<String> vinCandidates, java.util.List<String> orderNoCandidates,
+            int confidence, boolean textExtracted, String warning
     ) {
     }
 }

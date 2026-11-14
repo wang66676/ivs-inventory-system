@@ -28,6 +28,9 @@ public class PurchaseInvoice {
     @Column(name = "claim_id") private UUID claimId;
     @Column(name = "external_invoice_no", length = 100) private String externalInvoiceNo;
     @Column(name = "issued_at") private Instant issuedAt;
+    @Column(name = "pdf_file_name", length = 255) private String pdfFileName;
+    @Column(name = "pdf_storage_key", length = 500) private String pdfStorageKey;
+    @Column(name = "extracted_text", columnDefinition = "text") private String extractedText;
     @Column(length = 300) private String remark;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
@@ -38,7 +41,7 @@ public class PurchaseInvoice {
 
     public static PurchaseInvoice registerRed(String invoiceNo, UUID supplierId, BigDecimal amount,
                                               BigDecimal taxRate, String originalInvoiceNo, String externalInvoiceNo,
-                                              UUID claimId, String remark) {
+                                              UUID claimId, Instant issuedAt, String remark) {
         PurchaseInvoice invoice = new PurchaseInvoice();
         invoice.id = UUID.randomUUID();
         invoice.invoiceNo = invoiceNo;
@@ -55,7 +58,7 @@ public class PurchaseInvoice {
         invoice.originalInvoiceNo = originalInvoiceNo;
         invoice.externalInvoiceNo = externalInvoiceNo;
         invoice.claimId = claimId;
-        invoice.issuedAt = Instant.now();
+        invoice.issuedAt = issuedAt == null ? Instant.now() : issuedAt;
         invoice.remark = remark;
         invoice.createdAt = invoice.issuedAt;
         invoice.updatedAt = invoice.createdAt;
@@ -85,6 +88,12 @@ public class PurchaseInvoice {
         invoice.createdAt = Instant.now();
         invoice.updatedAt = invoice.createdAt;
         return invoice;
+    }
+
+    public void attachPdf(String fileName, String storageKey, String extractedText) {
+        this.pdfFileName = fileName;
+        this.pdfStorageKey = storageKey;
+        this.extractedText = extractedText;
     }
 
     public void matchAmount(BigDecimal value) {
@@ -142,6 +151,9 @@ public class PurchaseInvoice {
     public UUID getClaimId() { return claimId; }
     public String getExternalInvoiceNo() { return externalInvoiceNo; }
     public Instant getIssuedAt() { return issuedAt; }
+    public String getPdfFileName() { return pdfFileName; }
+    public String getPdfStorageKey() { return pdfStorageKey; }
+    public String getExtractedText() { return extractedText; }
     public String getRemark() { return remark; }
     public Instant getCreatedAt() { return createdAt; }
     public long getVersion() { return version; }
