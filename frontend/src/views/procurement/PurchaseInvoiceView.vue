@@ -66,6 +66,7 @@
             <a-form-item label="采购订单编号" required>
               <a-select v-model:value="form.purchaseOrderId" :options="orderOptions" show-search allow-clear
                         :disabled="!form.supplierId" placeholder="仅显示未开票订单" @change="onOrderChange" />
+              <div v-if="linkedOrderNoSummary" class="linked-summary">{{ linkedOrderNoSummary }}</div>
             </a-form-item>
           </a-col>
           <a-col :span="24">
@@ -73,6 +74,7 @@
               <a-select v-model:value="form.serialNos" mode="multiple" :options="serialOptions"
                         :disabled="!form.purchaseOrderId && !pdfExtraction?.vinCandidates?.length" placeholder="上传 PDF 自动识别并匹配已收货 VIN"
                         @change="onSerialChange" />
+              <div v-if="form.serialNos?.length" class="linked-summary">{{ form.serialNos.join('、') }}</div>
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -191,10 +193,27 @@ const serialOptions = computed(() => {
   }
   for (const vin of pdfExtraction.value?.vinCandidates || []) {
     if (!options.some((item) => item.value === vin)) {
-      options.push({ label: `${vin}（票面识别）`, value: vin, amount: 0 })
+      options.push({ label: vin, value: vin, amount: 0 })
     }
   }
   return options
+})
+const linkedOrderNoSummary = computed(() => {
+  const orderIds = new Set<string>()
+  for (const vin of form.serialNos || []) {
+    for (const receipt of receipts.value) {
+      if (receipt.status === 'POSTED' && receipt.lines.some((line) => (line.serialNos || []).includes(vin))) {
+        orderIds.add(receipt.orderId)
+      }
+    }
+  }
+  const linkedOrderNos = [...new Set([...orderIds]
+    .map((orderId) => orderNoById.value[orderId])
+    .filter(Boolean))]
+  if (linkedOrderNos.length) return linkedOrderNos.join('、')
+  const extractedOrderNos = pdfExtraction.value?.orderNoCandidates || []
+  if (extractedOrderNos.length) return extractedOrderNos.join('、')
+  return form.purchaseOrderId ? orderNoById.value[form.purchaseOrderId] || '' : ''
 })
 const pdfExtractionMessage = computed(() => {
   const seller = pdfExtraction.value?.sellerName ? `识别销售方：${pdfExtraction.value.sellerName}` : ''
@@ -363,4 +382,5 @@ onMounted(async () => {
 
 <style scoped>
 .pdf-alert { margin: 12px 0; }
+.linked-summary { margin-top: 4px; color: #4b5563; font-size: 12px; line-height: 18px; }
 </style>

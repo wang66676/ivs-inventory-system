@@ -9,7 +9,7 @@
 import { computed } from 'vue'
 
 defineOptions({ inheritAttrs: false })
-const modelValue = defineModel<number | null>()
+const modelValue = defineModel<any>('value')
 
 const uppercase = computed(() => {
   if (modelValue.value == null) return ''
