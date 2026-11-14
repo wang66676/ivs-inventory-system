@@ -33,7 +33,7 @@ management:
         include: health,info,metrics
 
 ivs:
-  version: ${IVS_VERSION:1.9.14}
+  version: ${IVS_VERSION:1.9.15}
   invoice:
     storage-dir: ${IVS_INVOICE_STORAGE_DIR:./data/invoice-files}
   cors:

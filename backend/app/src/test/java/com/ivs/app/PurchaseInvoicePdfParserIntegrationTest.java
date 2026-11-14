@@ -90,6 +90,46 @@ class PurchaseInvoicePdfParserIntegrationTest {
     }
 
     @Test
+    void 根据机动车电子发票版式识别全部关键字段() {
+        String text = """
+                肆拾万圆整
+                ¥46017.70¥353982.30合 计
+                91440300791738553L统一社会信用代码/纳税人识别号:91120116300584378Q统一社会信用代码/纳税人识别号:
+                购
+                买
+                方
+                信
+                息
+                名称:天津容大汽车贸易有限公司
+                销
+                售
+                方
+                信
+                息
+                名称:比亚迪汽车工业有限公司
+                项目名称 车辆识别代号/车架号码 单 位 数 量 单 价 金 额 税率/征收率 税 额
+                *机动车*比亚迪牌纯电动 LPEKMDBD2TD000093 辆 1 353982.3 353982.30 13% 46017.70
+                运输车
+                价税合计（大写） （小写）¥400000.00
+                开票人:周青
+                机动车 电子发票（增值税专用发票）
+                2026年10月28日开票日期：
+                26957000000273010157发票号码：
+                """;
+        PurchaseInvoicePdfParser.ParsedInvoice parsed = parser.parseText(text);
+        assertThat(parsed.invoiceNo()).isEqualTo("26957000000273010157");
+        assertThat(parsed.invoiceType()).isEqualTo("电子发票（增值税专用发票）");
+        assertThat(parsed.amount()).isEqualByComparingTo("400000.00");
+        assertThat(parsed.taxAmount()).isEqualByComparingTo("46017.70");
+        assertThat(parsed.taxRate()).isEqualByComparingTo(new BigDecimal("0.1300"));
+        assertThat(parsed.issuedAt()).isEqualTo(LocalDateTime.of(2026, 10, 28, 0, 0)
+                .atZone(ZoneId.of("Asia/Shanghai")).toInstant());
+        assertThat(parsed.buyerName()).isEqualTo("天津容大汽车贸易有限公司");
+        assertThat(parsed.sellerName()).isEqualTo("比亚迪汽车工业有限公司");
+        assertThat(parsed.vinCandidates()).containsExactly("LPEKMDBD2TD000093");
+    }
+
+    @Test
     void 蓝字发票登记保存发票类型() {
         PurchaseInvoice invoice = PurchaseInvoice.registerBlue("PINV-B-000001", java.util.UUID.randomUUID(),
                 java.util.UUID.randomUUID(), "LZZ1CLWB0NA123456", new BigDecimal("820000.00"),
