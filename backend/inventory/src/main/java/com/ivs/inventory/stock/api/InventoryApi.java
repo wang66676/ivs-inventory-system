@@ -70,7 +70,7 @@ public final class InventoryApi {
     }
 
     /** 车系 VIN 库存：未销售只统计在库未锁定；已锁定 VIN 视为已销售，仅单独备注。 */
-    public record VehicleSeriesInventoryView(String series, int unsoldVinCount, int lockedVinCount) {
+    public record VehicleSeriesInventoryView(String series, String config, int quantity) {
     }
 
     public record SummaryView(

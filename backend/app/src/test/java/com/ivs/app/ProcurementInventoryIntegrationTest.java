@@ -315,8 +315,8 @@ class ProcurementInventoryIntegrationTest {
         assertThat(summary.batteryInStock()).isEqualTo(1);
         assertThat(summary.vehicleSeriesInventory()).hasSize(1);
         assertThat(summary.vehicleSeriesInventory().get(0).series()).isEqualTo("Q3");
-        assertThat(summary.vehicleSeriesInventory().get(0).unsoldVinCount()).isEqualTo(1);
-        assertThat(summary.vehicleSeriesInventory().get(0).lockedVinCount()).isEqualTo(1);
+        assertThat(summary.vehicleSeriesInventory().get(0).config()).isEqualTo("T31");
+        assertThat(summary.vehicleSeriesInventory().get(0).quantity()).isEqualTo(1);
         assertThat(summary.totalAmount()).isEqualByComparingTo("430000.00");
         assertThat(summary.ageBuckets()).hasSize(4);
         assertThat(summary.consistent()).isTrue();

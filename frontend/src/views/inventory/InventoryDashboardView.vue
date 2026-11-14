@@ -23,11 +23,11 @@
     <a-row :gutter="16" style="margin-top:16px">
       <a-col :span="12">
         <a-card title="车系 VIN 库存" :bordered="false">
-          <div class="hint" style="margin-bottom:8px">未销售数量只统计在库未锁定车辆；已锁定 VIN 视为已销售，仅单独备注。</div>
-          <a-table :data-source="summary?.vehicleSeriesInventory ?? []" row-key="series" size="small" :pagination="false">
+          <div class="hint" style="margin-bottom:8px">数量仅统计状态为“在库”的 VIN/SN；已锁定车辆不计入。</div>
+          <a-table :data-source="summary?.vehicleSeriesInventory ?? []" :row-key="(record: any) => `${record.series}-${record.config}`" size="small" :pagination="false">
             <a-table-column title="车系" data-index="series" :width="180" />
-            <a-table-column title="未销售 VIN 数" data-index="unsoldVinCount" :width="130" align="right" />
-            <a-table-column title="已锁定 VIN 数（视为已销售）" data-index="lockedVinCount" :width="200" align="right" />
+            <a-table-column title="配置" data-index="config" :width="180" />
+            <a-table-column title="数量" data-index="quantity" :width="110" align="right" />
           </a-table>
         </a-card>
       </a-col>

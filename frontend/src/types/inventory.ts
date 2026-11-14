@@ -112,7 +112,7 @@ export interface InventorySummary {
   byCategory: { categoryName: string; itemCount: number; amount: number }[]
   byWarehouse: { warehouseName: string; itemCount: number; amount: number }[]
   ageBuckets: AgeBucket[]
-  vehicleSeriesInventory: { series: string; unsoldVinCount: number; lockedVinCount: number }[]
+  vehicleSeriesInventory: { series: string; config: string; quantity: number }[]
   ledgerCount: number
   consistent: boolean
 }
