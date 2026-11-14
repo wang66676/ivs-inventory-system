@@ -17,6 +17,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
+        assetFileNames(assetInfo) {
+          const name = assetInfo.name ?? 'asset'
+          return name.endsWith('.css') ? 'assets/[name][extname]' : 'assets/[name]-[hash][extname]'
+        },
         manualChunks(id) {
           if (id.includes('node_modules/ant-design-vue') || id.includes('node_modules/@ant-design/icons-vue')) {
             return 'vendor-antd'
