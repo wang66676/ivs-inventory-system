@@ -27,6 +27,9 @@ public class PurchaseInvoicePdfParser {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern INVOICE_NO = Pattern.compile(
             "(?:发票号码|发票号)[:：\\s]*([0-9A-Z]{8,24})", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INVOICE_TYPE = Pattern.compile(
+            "电\\s*子\\s*发\\s*票\\s*[（(]\\s*([^）)\\r\\n]{2,60})\\s*[）)]");
+    private static final Pattern ELECTRONIC_INVOICE_LABEL = Pattern.compile("电\\s*子\\s*发\\s*票");
     private static final Pattern ISSUED_AT = Pattern.compile(
             "(?:开票日期|开票时间)[:：\\s]*((?:\\d{4}[年./-]\\d{1,2}[月./-]\\d{1,2}日?)(?:\\s*\\d{1,2}[:：]\\d{2}(?::\\d{2})?)?)");
     private static final Pattern AMOUNT = Pattern.compile(
@@ -35,7 +38,7 @@ public class PurchaseInvoicePdfParser {
             "(?:合计税额|税额)[:：\\s]*[¥￥]?\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
     private static final Pattern TAX_RATE = Pattern.compile("(?:税率|征收率)[:：\\s]*(\\d+(?:\\.\\d+)?)\\s*%");
     private static final Pattern SELLER_NAME = Pattern.compile(
-            "销售方(?:信息)?[\\s\\S]{0,160}?名称[:：\\s]*([^\\n\\r]{2,100})");
+            "(?:销售方(?:信息)?[\\s\\S]{0,360}?|销售方)名称[:：\\s]*([^\\n\\r]{2,100})");
     private static final Pattern BUYER_NAME = Pattern.compile(
             "购买方(?:信息)?[\\s\\S]{0,160}?名称[:：\\s]*([^\\n\\r]{2,100})");
     private static final Pattern SELLER_TAX_NO = Pattern.compile(
@@ -45,6 +48,9 @@ public class PurchaseInvoicePdfParser {
             "购买方(?:信息)?[\\s\\S]{0,220}?纳税人识别号[:：\\s]*([0-9A-Z]{15,20})",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern VIN = Pattern.compile("(?<![A-Z0-9])([A-HJ-NPR-Z0-9]{17})(?![A-Z0-9])");
+    private static final Pattern LABELLED_VIN = Pattern.compile(
+            "(?:车辆识别代号(?:\\s*[/／]\\s*车架号(?:码)?)?|车架号(?:码)?|VIN)[:：\\s]*([A-HJ-NPR-Z0-9]{17})",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern ORDER_NO = Pattern.compile(
             "(?:采购订单编号|订单编号|订单号)[:：\\s]*([A-Za-z0-9_-]{4,40})");
 
@@ -61,6 +67,7 @@ public class PurchaseInvoicePdfParser {
     public ParsedInvoice parseText(String text) {
         String raw = normalize(text);
         String invoiceNo = match(INVOICE_NO, raw);
+        String invoiceType = invoiceType(raw);
         String amountText = match(AMOUNT, raw);
         String taxText = match(TAX_AMOUNT, raw);
         String rateText = match(TAX_RATE, raw);
@@ -74,10 +81,11 @@ public class PurchaseInvoicePdfParser {
         String buyerName = cleanName(match(BUYER_NAME, raw));
         String buyerTaxNo = match(BUYER_TAX_NO, raw);
         boolean red = raw.contains("红字") || raw.contains("冲红") || (amount != null && amount.signum() < 0);
-        List<String> vins = matches(VIN, raw.toUpperCase());
+        List<String> vins = vinCandidates(raw.toUpperCase());
         List<String> orderNos = matches(ORDER_NO, raw);
         int confidence = 0;
         if (invoiceNo != null) confidence++;
+        if (invoiceType != null) confidence++;
         if (issuedAt != null) confidence++;
         if (amount != null) confidence++;
         if (taxAmount != null) confidence++;
@@ -87,7 +95,7 @@ public class PurchaseInvoicePdfParser {
         String warning = extracted
                 ? (confidence < 3 ? "已提取到文字，但票面字段识别较少，请重点人工核对。" : "已自动识别，请核对后登记。")
                 : "PDF 未提取到文字层，可能是扫描图片发票；当前版本需要手工录入，OCR 可作为后续增强。";
-        return new ParsedInvoice(raw, invoiceNo, red ? "RED" : "BLUE", amount == null ? null : amount.abs(),
+        return new ParsedInvoice(raw, invoiceNo, invoiceType, red ? "RED" : "BLUE", amount == null ? null : amount.abs(),
                 taxAmount == null ? null : taxAmount.abs(), taxRate, issuedAt, sellerName, sellerTaxNo,
                 buyerName, buyerTaxNo, vins, orderNos, confidence, extracted, warning);
     }
@@ -106,6 +114,18 @@ public class PurchaseInvoicePdfParser {
         Matcher matcher = pattern.matcher(text);
         while (matcher.find()) values.add(matcher.group(1));
         return new ArrayList<>(values);
+    }
+
+    private static List<String> vinCandidates(String text) {
+        Set<String> values = new LinkedHashSet<>(matches(LABELLED_VIN, text));
+        if (values.isEmpty()) values.addAll(matches(VIN, text));
+        return new ArrayList<>(values);
+    }
+
+    private static String invoiceType(String text) {
+        String detail = match(INVOICE_TYPE, text);
+        if (detail != null) return "电子发票（" + detail.trim() + "）";
+        return ELECTRONIC_INVOICE_LABEL.matcher(text).find() ? "电子发票" : null;
     }
 
     private static BigDecimal decimal(String value) {
@@ -138,7 +158,7 @@ public class PurchaseInvoicePdfParser {
     }
 
     public record ParsedInvoice(
-            String rawText, String invoiceNo, String type, BigDecimal amount, BigDecimal taxAmount,
+            String rawText, String invoiceNo, String invoiceType, String type, BigDecimal amount, BigDecimal taxAmount,
             BigDecimal taxRate, Instant issuedAt, String sellerName, String sellerTaxNo,
             String buyerName, String buyerTaxNo, List<String> vinCandidates,
             List<String> orderNoCandidates, int confidence, boolean textExtracted, String warning

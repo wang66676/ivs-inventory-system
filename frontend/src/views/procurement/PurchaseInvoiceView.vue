@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="蓝字进项可按 PDF 票面自动识别并回填，也可手工录入；登记后可继续匹配应付。" />
+               message="上传 PDF 后自动识别销售方厂家、发票类型、发票号码、VIN/SN 和价税合计金额；登记后可继续匹配应付。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">登记进项蓝字</a-button>
         <a-button @click="reload">刷新</a-button>
@@ -57,9 +57,9 @@
                  show-icon :message="pdfExtraction.warning" />
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="OEM 厂家" required>
+            <a-form-item label="销售方（厂家）" required>
               <a-select v-model:value="form.supplierId" :options="supplierOptions" show-search
-                        @change="onSupplierChange" />
+                        placeholder="上传 PDF 自动匹配销售方" @change="onSupplierChange" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -69,20 +69,29 @@
             </a-form-item>
           </a-col>
           <a-col :span="24">
-            <a-form-item label="VIN / SN（可多选）" required>
+            <a-form-item label="VIN / SN（车辆识别代号/车架号码，可多选）" required>
               <a-select v-model:value="form.serialNos" mode="multiple" :options="serialOptions"
-                        :disabled="!form.purchaseOrderId" placeholder="选择后自动累计发票金额"
+                        :disabled="!form.purchaseOrderId" placeholder="上传 PDF 自动识别并匹配已收货 VIN"
                         @change="onSerialChange" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="发票金额（按 VIN/SN 自动累计）" required>
+            <a-form-item label="发票类型">
+              <a-input v-model:value="form.invoiceType" placeholder="上传 PDF 后读取“电子发票（…）”" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="发票号码">
+              <a-input v-model:value="form.externalInvoiceNo" placeholder="与发票票面号码保持一致" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="发票金额（价税合计）" required>
               <MoneyInput v-model:value="form.amount" :min="0.01" :precision="2" disabled style="width:100%" />
             </a-form-item>
           </a-col>
           <a-col :span="12"><a-form-item label="税率"><a-input-number v-model:value="form.taxRate" :min="0" :max="1" :step="0.01" :precision="4" style="width:100%" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="开票时间"><a-date-picker v-model:value="form.issuedAt" show-time format="YYYY-MM-DD HH:mm" style="width:100%" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="厂家外部票号"><a-input v-model:value="form.externalInvoiceNo" /></a-form-item></a-col>
           <a-col :span="24"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
         </a-row>
       </a-form>
@@ -122,7 +131,8 @@ const saving = ref(false)
 const form = reactive<Record<string, any>>({})
 const columns = [
   { title: '内部发票号', key: 'invoiceNo', dataIndex: 'invoiceNo', width: 150 },
-  { title: '类型', key: 'type', width: 100 },
+  { title: '业务类型', key: 'type', width: 110 },
+  { title: '发票类型', key: 'invoiceType', dataIndex: 'invoiceType', width: 220 },
   { title: '厂家', key: 'supplier', width: 190 },
   { title: '采购订单编号', key: 'purchaseOrder', width: 170 },
   { title: 'VIN / SN', key: 'serialNos', width: 260 },
@@ -130,7 +140,7 @@ const columns = [
   { title: '税额', key: 'tax', width: 130, align: 'right' },
   { title: '已匹配应付', key: 'matched', width: 140, align: 'right' },
   { title: '未匹配', key: 'unmatched', width: 140, align: 'right' },
-  { title: '外部票号', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 160 },
+  { title: '发票号码', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 180 },
   { title: '状态', key: 'status', dataIndex: 'status', width: 100 },
   { title: '开票时间', key: 'issuedAt', width: 165 },
   { title: '电子发票', key: 'pdf', width: 180 },
@@ -194,7 +204,7 @@ function resetOrderSelection() {
 }
 function openCreate() {
   Object.keys(form).forEach((key) => delete form[key])
-  Object.assign(form, { amount: 0, taxRate: 0.13, serialNos: [], issuedAt: dayjs() })
+  Object.assign(form, { amount: 0, taxRate: 0.13, serialNos: [], issuedAt: dayjs(), invoiceType: '' })
   pdfExtraction.value = undefined
   formOpen.value = true
 }
@@ -203,9 +213,13 @@ function onSupplierChange() {
 }
 function onOrderChange() {
   form.serialNos = []
-  form.amount = 0
+  form.amount = pdfExtraction.value?.amount != null ? Number(pdfExtraction.value.amount) : 0
 }
 function onSerialChange(serialNos: string[]) {
+  if (pdfExtraction.value?.amount != null) {
+    form.amount = Number(pdfExtraction.value.amount)
+    return
+  }
   const selected = new Set(serialNos || [])
   form.amount = Math.round(serialOptions.value
     .filter((item) => selected.has(item.value))
@@ -220,6 +234,7 @@ async function extractPdf(file: File) {
     form.pdfStorageKey = result.storageKey
     form.extractedText = result.rawText || ''
     if (result.invoiceNo) form.externalInvoiceNo = result.invoiceNo
+    if (result.invoiceType) form.invoiceType = result.invoiceType
     if (result.taxRate != null) form.taxRate = result.taxRate
     if (result.issuedAt) form.issuedAt = dayjs(result.issuedAt)
     if (result.amount != null) form.amount = Number(result.amount)
@@ -231,8 +246,15 @@ async function extractPdf(file: File) {
       resetOrderSelection()
       if (result.amount != null) form.amount = Number(result.amount)
     }
+    const invoiceVins = new Set(result.vinCandidates)
+    const vinOrderIds = new Set(receipts.value
+      .filter((receipt) => receipt.status === 'POSTED' && receipt.lines.some((line) =>
+        (line.serialNos || []).some((serialNo) => invoiceVins.has(serialNo))))
+      .map((receipt) => receipt.orderId))
     const matchedOrder = purchaseOrders.value.find((order) =>
       result.orderNoCandidates.some((candidate) => candidate === order.externalOrderNo || candidate === order.orderNo))
+      || (vinOrderIds.size === 1 ? purchaseOrders.value.find((order) =>
+        vinOrderIds.has(order.id) && (!form.supplierId || order.supplierId === form.supplierId)) : undefined)
     if (matchedOrder) {
       const payable = payables.value.find((item) => item.supplierId === form.supplierId &&
         item.purchaseOrderId === matchedOrder.id)
@@ -241,7 +263,7 @@ async function extractPdf(file: File) {
         .filter((receipt) => receipt.orderId === form.purchaseOrderId && receipt.status === 'POSTED')
         .flatMap((receipt) => receipt.lines.flatMap((line) => line.serialNos || [])))
       form.serialNos = result.vinCandidates.filter((vin) => availableVins.has(vin))
-      if (result.amount != null && !form.serialNos.length) form.amount = Number(result.amount)
+      if (result.amount != null) form.amount = Number(result.amount)
     }
     if (result.type === 'RED') message.warning('识别为红字发票，请确认当前登记的是蓝字发票')
     else message.success('PDF 已识别，请核对票面字段后再登记')
@@ -280,6 +302,7 @@ async function save() {
       serialNos: form.serialNos,
       amount: form.amount,
       taxRate: form.taxRate,
+      invoiceType: form.invoiceType || null,
       externalInvoiceNo: form.externalInvoiceNo || null,
       issuedAt: form.issuedAt ? dayjs(form.issuedAt).toDate().toISOString() : null,
       pdfFileName: form.pdfFileName || null,
