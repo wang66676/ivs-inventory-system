@@ -180,11 +180,11 @@ class MasterdataApiIntegrationTest {
 
         // 供应商编码留空 → 自动生成；整车厂标记 OEM
         MasterdataApi.SupplierView oem = restTemplate.postForEntity("/api/ivs/suppliers", Map.of(
-                "name", "某整车厂", "supplierType", SupplierType.OEM.name(), "paymentTerms", "月结 60 天"
+                "name", "某整车厂", "supplierType", SupplierType.VEHICLE_OEM.name(), "paymentTerms", "月结 60 天"
         ), MasterdataApi.SupplierView.class).getBody();
         assertThat(oem).isNotNull();
         assertThat(oem.code()).startsWith("SUP-");
-        assertThat(oem.supplierType()).isEqualTo(SupplierType.OEM);
+        assertThat(oem.supplierType()).isEqualTo(SupplierType.VEHICLE_OEM);
 
         MasterdataApi.CustomerView customer = restTemplate.postForEntity("/api/ivs/customers", Map.of(
                 "name", "上海某物流有限公司", "customerType", CustomerType.COMPANY.name(), "creditLimit", 2000000

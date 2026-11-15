@@ -219,7 +219,7 @@ async function reload() {
 
 onMounted(async () => {
   try {
-    const supplierRows = await supplierApi.list({ supplierType: 'OEM' })
+    const supplierRows = await supplierApi.list({ supplierType: 'VEHICLE_OEM' })
     suppliers.value = supplierRows
     supplierNames.value = Object.fromEntries(supplierRows.map((item) => [item.id, item.name]))
     supplierOptions.value = supplierRows.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))

@@ -1,7 +1,7 @@
 <template>
   <MasterDataCrudView
     title="仓库"
-    description="仓库 / 门店仓 / 在途仓 / 资产池（二期电池租赁使用）。仓库是库存引擎的最小维度。"
+    description="仓库类型：主仓、门店仓、二级仓、客户仓、临时仓、其他。仓库是库存引擎的最小维度。"
     :can-write="canWrite"
     :columns="columns"
     :fields="fields"

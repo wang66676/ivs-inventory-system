@@ -67,7 +67,7 @@ const modulePages: MenuPage[] = [
   { path: '/retail/records', name: 'retail-record', component: () => import('../views/retail/RetailView.vue'), title: '实销登记', description: '实销登记：车辆使用人、手机号、终端发票开票时间（必填），车牌照号（选填）；实销日期须晚于开票时间。', permission: 'IVS_RETAIL_WRITE' },
   { path: '/retail/verify', name: 'retail-verify', component: () => import('../views/retail/RetailView.vue'), title: '实销复核', description: '实销复核、确认与冲正；确认后触发政策匹配与预享受项转可申请。', permission: 'IVS_RETAIL_VERIFY', hideable: true },
   { path: '/retail/ledger', name: 'retail-ledger', component: () => import('../views/retail/RetailView.vue'), title: '实销台账', description: '按期间/门店/车型的实销台账。', permission: 'IVS_READ', hideable: true },
-  { path: '/retail/pending', name: 'retail-pending', component: () => import('../views/retail/RetailPendingView.vue'), title: '未实销预警', description: '已交付未实销车辆清单（直接影响返利申报，必须预警）。', permission: 'IVS_READ' },
+  { path: '/retail/pending', name: 'retail-pending', component: () => import('../views/retail/RetailPendingView.vue'), title: '未实销预警', description: '已锁定、已售或已交付但未完成实销的车辆清单（直接影响返利申报，必须预警）。', permission: 'IVS_READ' },
 
   // 政策与返利
   { path: '/policy/policies', name: 'policy', component: () => import('../views/policy/PolicyView.vue'), title: '政策管理', description: '政策手工录入：名目、车型多选、金额或比例、生效与失效日期、限制维度（时间/金额/条件）、参考时间、周期与截止日。', permission: 'IVS_POLICY_WRITE' },

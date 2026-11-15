@@ -14,17 +14,31 @@ import com.ivs.procurement.purchase.api.ProcurementApi;
 import com.ivs.sales.order.SalesOrderStatus;
 import com.ivs.sales.order.api.SalesApi;
 import com.ivs.sales.settlement.ReceivableStatus;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -61,7 +75,7 @@ class SalesSettlementIntegrationTest {
         MasterdataApi.ProductView product = createProduct("Q3 牵引车", vehicle.id(), "台", "某厂", "Q3", "T31",
                 new BigDecimal("430000"), new BigDecimal("460000"));
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-S1", "整车仓");
-        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.OEM);
+        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.VEHICLE_OEM);
         MasterdataApi.CustomerView customer = createCustomer("上海某物流有限公司", CustomerType.COMPANY,
                 new BigDecimal("5000000"), 30);
 
@@ -165,7 +179,7 @@ class SalesSettlementIntegrationTest {
         MasterdataApi.ProductView product = createProduct("Q3 后补VIN", vehicle.id(), "台", "某厂", "Q3", "T31",
                 new BigDecimal("430000"), new BigDecimal("460000"));
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-EDIT", "整车仓");
-        MasterdataApi.SupplierView oem = createSupplier("后补VIN整车厂", SupplierType.OEM);
+        MasterdataApi.SupplierView oem = createSupplier("后补VIN整车厂", SupplierType.VEHICLE_OEM);
         MasterdataApi.CustomerView customer = createCustomer("后补VIN客户", CustomerType.COMPANY,
                 new BigDecimal("5000000"), 30);
         MasterdataApi.SerialView serial = createSerial("LZZ1CLWB0NA900099", product.id());
@@ -277,7 +291,7 @@ class SalesSettlementIntegrationTest {
         MasterdataApi.ProductView product = createProduct("Q3 零价修复测试车", vehicle.id(), "台", "某厂", "Q3", "T31",
                 BigDecimal.ZERO, BigDecimal.ZERO);
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-ZERO", "零价修复仓");
-        MasterdataApi.SupplierView oem = createSupplier("零价修复整车厂", SupplierType.OEM);
+        MasterdataApi.SupplierView oem = createSupplier("零价修复整车厂", SupplierType.VEHICLE_OEM);
         MasterdataApi.CustomerView customer = createCustomer("零价修复客户", CustomerType.COMPANY,
                 new BigDecimal("5000000"), 30);
         MasterdataApi.SerialView serial = createSerial("LZZZEROPRICE000001", product.id());
@@ -542,4 +556,71 @@ class SalesSettlementIntegrationTest {
                 "lines", List.of(Map.of("orderLineId", order.lines().get(0).id().toString(),
                         "quantity", new BigDecimal(quantity)))), ProcurementApi.PurchaseReceiptView.class);
     }
-}
+
+    @Test
+    void 销项发票PDF按VIN关联销售订单并保存票面信息() throws Exception {
+        MasterdataApi.CategoryView vehicle = createCategory("VEHICLE-INV-PDF", "整车", TrackingMode.SERIAL,
+                "VEHICLE", "台");
+        MasterdataApi.ProductView product = createProduct("Q3 发票识别", vehicle.id(), "台", "某厂", "Q3", "T31",
+                new BigDecimal("430000"), new BigDecimal("460000"));
+        MasterdataApi.WarehouseView warehouse = createWarehouse("WH-INV-PDF", "整车仓");
+        MasterdataApi.SupplierView oem = createSupplier("发票识别整车厂", SupplierType.VEHICLE_OEM);
+        MasterdataApi.CustomerView customer = createCustomer("发票识别客户", CustomerType.COMPANY,
+                new BigDecimal("5000000"), 30);
+        MasterdataApi.SerialView serial = createSerial("LZZABC20260000001", product.id());
+        purchaseAndReceive(oem, warehouse, product, serial);
+        SalesApi.SalesOrderView order = createOrder(customer, warehouse,
+                List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), BigDecimal.ONE,
+                        new BigDecimal("460000"), List.of(serial.id()), null)));
+        order = post("/api/ivs/sales-orders/" + order.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
+        order = post("/api/ivs/sales-orders/" + order.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
+
+        byte[] pdf = salesInvoicePdf(serial.serialNo());
+        MultiValueMap<String, Object> multipart = new LinkedMultiValueMap<>();
+        multipart.add("file", new ByteArrayResource(pdf) {
+            @Override public String getFilename() { return "sales-invoice.pdf"; }
+        });
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        BillingApi.PdfExtractionView extracted = restTemplate.postForEntity(
+                "/api/ivs/sales-invoices/pdf/extract", new HttpEntity<>(multipart, headers),
+                BillingApi.PdfExtractionView.class).getBody();
+        assertThat(extracted).isNotNull();
+        assertThat(extracted.orderId()).isEqualTo(order.id());
+        assertThat(extracted.orderNo()).isEqualTo(order.orderNo());
+        assertThat(extracted.vinCandidates()).contains(serial.serialNo());
+
+        BillingApi.InvoiceView draft = post("/api/ivs/sales-invoices", Map.of(
+                "orderId", order.id().toString(), "amount", 460000, "taxRate", 0.13), BillingApi.InvoiceView.class);
+        Map<String, Object> issue = new HashMap<>();
+        issue.put("externalInvoiceNo", "SALES-PDF-0001");
+        issue.put("taxRate", 0.13);
+        issue.put("issuedAt", "2026-11-10T00:00:00Z");
+        issue.put("invoiceType", "电子发票（增值税专用发票）");
+        issue.put("pdfFileName", extracted.fileName());
+        issue.put("pdfStorageKey", extracted.storageKey());
+        issue.put("extractedText", extracted.rawText());
+        BillingApi.InvoiceView issued = post("/api/ivs/sales-invoices/" + draft.id() + "/issue", issue,
+                BillingApi.InvoiceView.class);
+        assertThat(issued.externalInvoiceNo()).isEqualTo("SALES-PDF-0001");
+        assertThat(issued.invoiceType()).isEqualTo("电子发票（增值税专用发票）");
+        assertThat(issued.pdfFileName()).isEqualTo("sales-invoice.pdf");
+        assertThat(issued.issuedAt()).isEqualTo(Instant.parse("2026-11-10T00:00:00Z"));
+    }
+
+    private byte[] salesInvoicePdf(String vin) throws Exception {
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+                stream.beginText();
+                stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                stream.newLineAtOffset(50, 700);
+                stream.showText("Sales Invoice VIN " + vin + " Amount 460000.00");
+                stream.endText();
+            }
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            document.save(output);
+            return output.toByteArray();
+        }
+    }}

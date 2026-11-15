@@ -414,7 +414,7 @@ class PurchaseOrderDetailIntegrationTest {
 
     private MasterdataApi.SupplierView createSupplier(String name) {
         return restTemplate.postForEntity("/api/ivs/suppliers", Map.of(
-                "name", name, "supplierType", SupplierType.OEM.name()
+                "name", name, "supplierType", SupplierType.VEHICLE_OEM.name()
         ), MasterdataApi.SupplierView.class).getBody();
     }
 

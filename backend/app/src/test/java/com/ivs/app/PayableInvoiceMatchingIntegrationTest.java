@@ -38,7 +38,7 @@ class PayableInvoiceMatchingIntegrationTest {
     @Test
     void 蓝字进项自动匹配多张应付并回写已开票未开票金额() {
         MasterdataApi.SupplierView supplier = post("/api/ivs/suppliers", Map.of(
-                "name", "进项匹配整车厂", "supplierType", SupplierType.OEM.name()), MasterdataApi.SupplierView.class);
+                "name", "进项匹配整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()), MasterdataApi.SupplierView.class);
         MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
                 "code", "MATCH-WH", "name", "匹配测试仓", "type", WarehouseType.MAIN.name()),
                 MasterdataApi.WarehouseView.class);

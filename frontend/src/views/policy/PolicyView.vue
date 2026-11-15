@@ -234,7 +234,7 @@ async function reload() {
 
 onMounted(async () => {
   try {
-    const [suppliers, products] = await Promise.all([supplierApi.list({ supplierType: 'OEM' }), productApi.list()])
+    const [suppliers, products] = await Promise.all([supplierApi.list({ supplierType: 'VEHICLE_OEM' }), productApi.list()])
     supplierOptions.value = suppliers.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
     productOptions.value = products.map((item) => ({ label: `${item.name}（${item.productNo}）`, value: item.id }))
   } catch { /* ignore */ }

@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-/** 已交付但尚未完成实销的车辆预警。 */
+/** 已锁定、已售或已交付但尚未完成实销的车辆预警。 */
 @RestController
 @RequestMapping("/api/ivs/retail-pending")
 public class RetailPendingController {
@@ -72,17 +72,19 @@ public class RetailPendingController {
         Instant now = Instant.now();
         for (MasterdataApi.SerialView serial : serialService.list(null, null, null)) {
             if (isBattery(serial.categoryCode(), serial.categoryName())) continue;
-            if (!Set.of(SerialStatus.DELIVERED, SerialStatus.SOLD).contains(serial.status())) continue;
+            if (!Set.of(SerialStatus.LOCKED, SerialStatus.DELIVERED, SerialStatus.SOLD).contains(serial.status())) continue;
             if (retailRepository.findByActiveSerialKey(serial.id()).isPresent()) continue;
             SalesOrder order = findOrder(serial.id());
             if (order == null) continue;
             SalesDelivery delivery = findDelivery(order, serial.id());
-            if (delivery == null) continue;
+            Instant pendingSince = delivery != null ? delivery.getDeliveredAt()
+                    : order.getLockedAt() != null ? order.getLockedAt() : order.getCreatedAt();
             ProcurementApi.PurchaseOrderLinkView purchaseOrder =
                     purchaseOrderService.findOrderBySerialNo(serial.serialNo());
-            long days = Math.max(0, Duration.between(delivery.getDeliveredAt(), now).toDays());
+            long days = Math.max(0, Duration.between(pendingSince, now).toDays());
             result.add(new PendingView(serial, order.getId(), order.getExternalOrderNo(),
-                    delivery.getId(), delivery.getDeliveryNo(), delivery.getDeliveredAt(), days,
+                    delivery == null ? null : delivery.getId(), delivery == null ? null : delivery.getDeliveryNo(),
+                    pendingSince, days,
                     productService.get(serial.productId()).series(),
                     order.getCustomerId(), customerService.find(order.getCustomerId()).getName(),
                     purchaseOrder == null ? null : purchaseOrder.orderId(),

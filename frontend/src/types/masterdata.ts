@@ -1,8 +1,8 @@
 export type TrackingMode = 'QUANTITY' | 'SERIAL'
 export type MasterStatus = 'ACTIVE' | 'DISABLED'
-export type WarehouseType = 'MAIN' | 'SHOP' | 'TRANSIT' | 'ASSET_POOL'
-export type SupplierType = 'OEM' | 'OTHER'
-export type CustomerType = 'INDIVIDUAL' | 'COMPANY' | 'FLEET'
+export type WarehouseType = 'MAIN' | 'STORE' | 'SECONDARY' | 'CUSTOMER' | 'TEMPORARY' | 'OTHER'
+export type SupplierType = 'VEHICLE_OEM' | 'BATTERY_OEM' | 'FRAME_OEM' | 'OTHER'
+export type CustomerType = 'INDIVIDUAL' | 'COMPANY' | 'FLEET' | 'SECONDARY' | 'OTHER'
 export type OwnershipType = 'OWNED' | 'LEASE_TO_OWN' | 'LEASED'
 export type SerialStatus =
   | 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'IN_STOCK' | 'LOCKED'
@@ -186,13 +186,17 @@ export const TRACKING_MODE_LABELS: Record<TrackingMode, string> = {
 
 export const WAREHOUSE_TYPE_LABELS: Record<WarehouseType, string> = {
   MAIN: '主仓',
-  SHOP: '门店仓',
-  TRANSIT: '在途仓',
-  ASSET_POOL: '资产池',
+  STORE: '门店仓',
+  SECONDARY: '二级仓',
+  CUSTOMER: '客户仓',
+  TEMPORARY: '临时仓',
+  OTHER: '其他',
 }
 
 export const SUPPLIER_TYPE_LABELS: Record<SupplierType, string> = {
-  OEM: '整车厂（OEM）',
+  VEHICLE_OEM: '整车厂',
+  BATTERY_OEM: '动力电池厂',
+  FRAME_OEM: '框架厂',
   OTHER: '其他',
 }
 
@@ -200,4 +204,6 @@ export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
   INDIVIDUAL: '个人',
   COMPANY: '单位',
   FLEET: '大客户/车队',
+  SECONDARY: '二级',
+  OTHER: '其他',
 }

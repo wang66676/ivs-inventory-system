@@ -160,7 +160,7 @@ class ClaimWorkflowIntegrationTest {
     }
 
     private UUID createSupplier(String name) {
-        return post("/api/ivs/suppliers", Map.of("name", name, "supplierType", SupplierType.OEM.name()),
+        return post("/api/ivs/suppliers", Map.of("name", name, "supplierType", SupplierType.VEHICLE_OEM.name()),
                 MasterdataApi.SupplierView.class).id();
     }
 

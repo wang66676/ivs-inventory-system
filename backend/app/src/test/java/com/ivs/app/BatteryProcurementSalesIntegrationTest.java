@@ -51,7 +51,7 @@ class BatteryProcurementSalesIntegrationTest {
                 "BATTERY", "动力电池", TrackingMode.SERIAL, "BATTERY", "组");
         MasterdataApi.ProductView battery = createProduct("282kWh 动力电池", batteryCategory.id());
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-BAT", "电池仓");
-        MasterdataApi.SupplierView supplier = createSupplier("动力电池厂", SupplierType.OEM);
+        MasterdataApi.SupplierView supplier = createSupplier("动力电池厂", SupplierType.BATTERY_OEM);
         MasterdataApi.CustomerView customer = createCustomer("电池客户", CustomerType.COMPANY);
         MasterdataApi.CategoryView vehicleCategory = createCategory(
                 "VEHICLE-SCOPE", "整车", TrackingMode.SERIAL, "VEHICLE", "台");

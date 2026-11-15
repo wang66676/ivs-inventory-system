@@ -53,7 +53,7 @@ class ProcurementInventoryIntegrationTest {
         MasterdataApi.CategoryView vehicle = createCategory("VEHICLE", "整车", TrackingMode.SERIAL, "VEHICLE", "台");
         MasterdataApi.ProductView product = createProduct("Q3 牵引车", vehicle.id(), "台", "某厂", "Q3", "T31");
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-01", "主仓");
-        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.OEM);
+        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.VEHICLE_OEM);
 
         // 采购前先建档（序列号档案由 M1 负责，采购收货只做状态流转与入库）
         MasterdataApi.SerialView serial1 = createSerial("LZZ1CLWB0NA100001", product.id());
@@ -185,7 +185,7 @@ class ProcurementInventoryIntegrationTest {
         MasterdataApi.CategoryView part = createCategory("PART", "配件", TrackingMode.QUANTITY, "SIMPLE", "件");
         MasterdataApi.ProductView bolt = createProduct("轮胎螺栓", part.id(), "件", null, null, "BOLT");
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-04", "主仓");
-        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.OEM);
+        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.VEHICLE_OEM);
 
         ProcurementApi.PurchaseOrderView order = createOrder(oem.id(), warehouse.id(), List.of(
                 new ProcurementApi.SavePurchaseOrderLineCommand(car.id(), new BigDecimal("2"), new BigDecimal("400000"), null, null),
@@ -284,7 +284,7 @@ class ProcurementInventoryIntegrationTest {
         MasterdataApi.CategoryView vehicle = createCategory("VEHICLE", "整车", TrackingMode.SERIAL, "VEHICLE", "台");
         MasterdataApi.ProductView product = createProduct("Q3 牵引车", vehicle.id(), "台", "某厂", "Q3", "T31");
         MasterdataApi.WarehouseView warehouse = createWarehouse("WH-06", "主仓");
-        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.OEM);
+        MasterdataApi.SupplierView oem = createSupplier("某整车厂", SupplierType.VEHICLE_OEM);
         createSerial("LZZ1CLWB0NA300001", product.id());
 
         ProcurementApi.PurchaseOrderView order = createOrder(oem.id(), warehouse.id(),

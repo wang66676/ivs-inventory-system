@@ -61,6 +61,17 @@ public class SalesInvoice {
 
     @Column(name = "external_invoice_no", length = 100)
     private String externalInvoiceNo;
+    @Column(name = "invoice_type", length = 100)
+    private String invoiceType;
+
+    @Column(name = "pdf_file_name", length = 255)
+    private String pdfFileName;
+
+    @Column(name = "pdf_storage_key", length = 500)
+    private String pdfStorageKey;
+
+    @Column(name = "extracted_text", columnDefinition = "text")
+    private String extractedText;
 
     @Column(name = "issued_at")
     private Instant issuedAt;
@@ -111,18 +122,22 @@ public class SalesInvoice {
         return money(grossAmount.subtract(net));
     }
 
-    public void issue(String externalInvoiceNo) {
+    public void issue(String externalInvoiceNo, Instant issuedAt, String invoiceType,
+                      String pdfFileName, String pdfStorageKey, String extractedText) {
         if (status != InvoiceStatus.DRAFT) {
             throw new IllegalStateException("仅草稿发票可以开具");
         }
         if (externalInvoiceNo == null || externalInvoiceNo.isBlank()) {
-            throw new IllegalArgumentException("外部发票号不能为空");
+            throw new IllegalArgumentException("发票号码不能为空");
         }
         this.status = InvoiceStatus.ISSUED;
         this.externalInvoiceNo = externalInvoiceNo.trim();
-        this.issuedAt = Instant.now();
+        this.invoiceType = normalize(invoiceType);
+        this.issuedAt = issuedAt == null ? Instant.now() : issuedAt;
+        this.pdfFileName = normalize(pdfFileName);
+        this.pdfStorageKey = normalize(pdfStorageKey);
+        this.extractedText = normalize(extractedText);
     }
-
     public void voidInvoice() {
         if (status == InvoiceStatus.VOID) {
             return;
@@ -186,6 +201,9 @@ public class SalesInvoice {
         updatedAt = Instant.now();
     }
 
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
     private static BigDecimal money(BigDecimal value) {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
@@ -203,6 +221,10 @@ public class SalesInvoice {
     public InvoiceStatus getStatus() { return status; }
     public UUID getOriginalInvoiceId() { return originalInvoiceId; }
     public String getExternalInvoiceNo() { return externalInvoiceNo; }
+    public String getInvoiceType() { return invoiceType; }
+    public String getPdfFileName() { return pdfFileName; }
+    public String getPdfStorageKey() { return pdfStorageKey; }
+    public String getExtractedText() { return extractedText; }
     public Instant getIssuedAt() { return issuedAt; }
     public String getRemark() { return remark; }
     public Instant getCreatedAt() { return createdAt; }

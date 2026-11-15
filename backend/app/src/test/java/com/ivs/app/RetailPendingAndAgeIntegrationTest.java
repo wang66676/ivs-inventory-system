@@ -60,7 +60,7 @@ class RetailPendingAndAgeIntegrationTest {
         MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
                 "code", "PA-WH", "name", "整车仓", "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);
         MasterdataApi.SupplierView supplier = post("/api/ivs/suppliers", Map.of(
-                "name", "预警整车厂", "supplierType", SupplierType.OEM.name()), MasterdataApi.SupplierView.class);
+                "name", "预警整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()), MasterdataApi.SupplierView.class);
         MasterdataApi.CustomerView customer = post("/api/ivs/customers", Map.of(
                 "name", "预警客户", "customerType", CustomerType.COMPANY.name(), "creditLimit", 5000000),
                 MasterdataApi.CustomerView.class);
@@ -96,6 +96,9 @@ class RetailPendingAndAgeIntegrationTest {
                 SalesApi.SalesOrderView.class);
         sales = post("/api/ivs/sales-orders/" + sales.id() + "/confirm", Map.of(), SalesApi.SalesOrderView.class);
         sales = post("/api/ivs/sales-orders/" + sales.id() + "/lock", Map.of(), SalesApi.SalesOrderView.class);
+        Map<?, ?>[] lockedPending = restTemplate.getForEntity("/api/ivs/retail-pending", Map[].class).getBody();
+        assertThat(lockedPending).isNotNull().singleElement().satisfies(row ->
+                assertThat(((Map<?, ?>) row.get("serial")).get("serialNo")).isEqualTo("LZZPA2026000001"));
         post("/api/ivs/sales-orders/" + sales.id() + "/deliver", Map.of(
                 "warehouseId", warehouse.id().toString(),
                 "lines", List.of(Map.of("orderLineId", sales.lines().get(0).id().toString(),

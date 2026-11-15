@@ -21,7 +21,7 @@ import type { Supplier } from '../../types/masterdata'
 
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_PRODUCT_MANAGE')
-const description = '供应商档案。整车厂标记为 OEM，是返利申报、红字发票与返利资金池的主体；系统自动生成内部供应商编码。'
+const description = '供应商类型：整车厂、动力电池厂、框架厂、其他。整车厂是返利申报、红字发票与返利资金池的主体；系统自动生成内部供应商编码。'
 
 const columns: CrudColumn[] = [
   { key: 'name', title: '名称', width: 220 },

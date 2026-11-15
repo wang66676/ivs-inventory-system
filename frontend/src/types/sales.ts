@@ -178,6 +178,8 @@ export interface Invoice {
   status: InvoiceStatus
   originalInvoiceId?: string
   externalInvoiceNo?: string
+  invoiceType?: string
+  pdfFileName?: string
   issuedAt?: string
   createdAt: string
   remark?: string
@@ -240,4 +242,29 @@ export const INVOICE_STATUS_COLORS: Record<InvoiceStatus, string> = {
 export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
   BLUE: '蓝票',
   RED: '红字发票',
+}
+export interface SalesInvoicePdfExtraction {
+  storageKey: string
+  fileName: string
+  rawText?: string
+  invoiceNo?: string
+  invoiceType?: string
+  type?: 'BLUE' | 'RED'
+  amount?: number
+  taxAmount?: number
+  taxRate?: number
+  issuedAt?: string
+  sellerName?: string
+  sellerTaxNo?: string
+  buyerName?: string
+  buyerTaxNo?: string
+  vinCandidates: string[]
+  orderNoCandidates: string[]
+  orderId?: string
+  orderNo?: string
+  customerId?: string
+  customerName?: string
+  confidence: number
+  textExtracted: boolean
+  warning: string
 }
