@@ -448,7 +448,7 @@ class LeaseIntegrationTest {
                 "code", "WH-" + prefix, "name", prefix + "仓", "type", WarehouseType.MAIN.name()),
                 MasterdataApi.WarehouseView.class);
         MasterdataApi.SupplierView supplier = post("/api/ivs/suppliers", Map.of(
-                "name", prefix + "供应商", "supplierType", SupplierType.OEM.name()), MasterdataApi.SupplierView.class);
+                "name", prefix + "供应商", "supplierType", SupplierType.VEHICLE_OEM.name()), MasterdataApi.SupplierView.class);
         MasterdataApi.CustomerView customer = post("/api/ivs/customers", Map.of(
                 "name", prefix + "客户", "customerType", CustomerType.COMPANY.name(), "creditLimit", 5000000),
                 MasterdataApi.CustomerView.class);

@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="warning" show-icon style="margin-bottom:12px"
-               message="已交付车辆如果未完成实销，会直接影响政策返利申报；超过 30 天提醒，超过 90 天标红预警。" />
+               message="所有已锁定、已售或已交付的车辆，只要尚未完成实销都会在此提醒；已实销完成的车辆自动移出。超过 30 天提醒，超过 90 天标红预警。" />
       <a-row :gutter="12" style="margin-bottom:12px">
         <a-col :xs="12" :md="8"><a-card size="small"><a-statistic title="待实销车辆" :value="filtered.length" suffix="台" /></a-card></a-col>
         <a-col :xs="12" :md="8"><a-card size="small"><a-statistic title="超过 30 天" :value="warningRows.length" suffix="台" /></a-card></a-col>
@@ -57,7 +57,7 @@ const columns = [
   { title: '客户', dataIndex: 'customerName', key: 'customerName', width: 190 },
   { title: '销售订单', dataIndex: 'orderNo', key: 'orderNo', width: 150 },
   { title: '出库单', dataIndex: 'deliveryNo', key: 'deliveryNo', width: 150 },
-  { title: '交付时间', key: 'deliveredAt', width: 120 },
+  { title: '锁定/交付时间', key: 'deliveredAt', width: 140 },
   { title: '待实销天数', key: 'pendingDays', width: 120 },
   { title: '预警级别', key: 'level', width: 110 },
   { title: '采购订单', dataIndex: 'purchaseOrderNo', key: 'purchaseOrderNo', width: 150 },
@@ -72,7 +72,7 @@ const filtered = computed(() => rows.value.filter((row) => {
 }))
 const warningRows = computed(() => filtered.value.filter((row) => row.pendingDays > 30))
 const criticalRows = computed(() => filtered.value.filter((row) => row.pendingDays > 90))
-function formatDate(value: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '-' }
+function formatDate(value?: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '-' }
 function levelLabel(days: number) { return days > 90 ? '严重' : days > 30 ? '警告' : '正常' }
 function reload() { retailApi.pending().then((items) => { rows.value = items }).catch((error) => message.error((error as Error).message)) }
 function goRetail() { router.push('/retail/records') }

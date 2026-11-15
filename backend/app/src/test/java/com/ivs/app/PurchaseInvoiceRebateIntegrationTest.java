@@ -40,7 +40,7 @@ class PurchaseInvoiceRebateIntegrationTest {
 
     @Test
     void 蓝字进项发票保存采购订单和多VIN联动信息() {
-        UUID supplier = post("/api/ivs/suppliers", Map.of("name", "蓝票整车厂", "supplierType", SupplierType.OEM.name()),
+        UUID supplier = post("/api/ivs/suppliers", Map.of("name", "蓝票整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()),
                 MasterdataApi.SupplierView.class).id();
         UUID orderId = UUID.randomUUID();
         PurchaseInvoiceApi.PurchaseInvoiceView blue = restTemplate.postForEntity(
@@ -59,7 +59,7 @@ class PurchaseInvoiceRebateIntegrationTest {
 
     @Test
     void 厂家红字发票登记后自动入池并可抵扣车款() {
-        UUID supplier = post("/api/ivs/suppliers", Map.of("name", "某整车厂", "supplierType", SupplierType.OEM.name()),
+        UUID supplier = post("/api/ivs/suppliers", Map.of("name", "某整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()),
                 MasterdataApi.SupplierView.class).id();
         UUID warehouse = post("/api/ivs/warehouses", Map.of("code", "WH-R1", "name", "整车仓",
                 "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class).id();

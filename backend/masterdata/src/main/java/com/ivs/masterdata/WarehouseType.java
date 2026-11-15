@@ -1,9 +1,11 @@
 package com.ivs.masterdata;
 
-/** 仓库类型：主仓、门店仓、在途仓、资产池（二期电池租赁）。 */
+/** 仓库类型：主仓、门店仓、二级仓、客户仓、临时仓、其他。 */
 public enum WarehouseType {
     MAIN,
-    SHOP,
-    TRANSIT,
-    ASSET_POOL
+    STORE,
+    SECONDARY,
+    CUSTOMER,
+    TEMPORARY,
+    OTHER
 }

@@ -27,7 +27,7 @@ test('登录、付款入口重定向和关键业务页面冒烟', async ({ page 
     '/procurement/invoices', '/procurement/payables', '/inventory/dashboard',
     '/inventory/vin', '/sales/orders', '/sales/deliveries', '/retail/records',
     '/policy/pre-entitlements', '/policy/entitlements', '/policy/claims',
-    '/policy/fund-pool', '/billing/refunds', '/reports/monthly', '/system/approval-tasks',
+    '/policy/fund-pool', '/billing/sales-invoices', '/billing/refunds', '/reports/monthly', '/system/approval-tasks',
     '/system/health',
   ]
   for (const route of routes) {
@@ -47,6 +47,14 @@ test('进项蓝字发票字段和日期选择可用', async ({ page }) => {
   await expect(page.getByTitle('发票金额（价税合计）', { exact: true })).toBeVisible()
   await expect(page.getByTitle('开票日期', { exact: true })).toBeVisible()
   await expect(page.getByPlaceholder('选择年月日')).toBeVisible()
+})
+
+test('销项发票支持 PDF 上传识别入口', async ({ page }) => {
+  await login(page)
+  await page.goto('/billing/sales-invoices')
+  await page.getByRole('button', { name: '开票', exact: true }).click()
+  await expect(page.getByRole('button', { name: '上传销项发票 PDF 并自动识别', exact: true })).toBeVisible()
+  await expect(page.getByText('销售订单', { exact: true })).toBeVisible()
 })
 
 test('系统健康检查可加载并执行备份恢复验证', async ({ page }) => {

@@ -13,6 +13,8 @@ import java.util.UUID;
 public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID> {
     Optional<SalesOrder> findByOrderNo(String orderNo);
 
+    Optional<SalesOrder> findByExternalOrderNo(String externalOrderNo);
+
     List<SalesOrder> findAllByOrderByCreatedAtDesc();
 
     List<SalesOrder> findByStatusOrderByCreatedAtDesc(SalesOrderStatus status);

@@ -60,7 +60,7 @@ class InstallmentPlanIntegrationTest {
         MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
                 "code", "IP-WH", "name", "整车仓", "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);
         MasterdataApi.SupplierView supplier = post("/api/ivs/suppliers", Map.of(
-                "name", "分期整车厂", "supplierType", SupplierType.OEM.name()), MasterdataApi.SupplierView.class);
+                "name", "分期整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()), MasterdataApi.SupplierView.class);
         MasterdataApi.CustomerView customer = post("/api/ivs/customers", Map.of(
                 "name", "分期客户", "customerType", CustomerType.COMPANY.name(), "creditLimit", 5000000),
                 MasterdataApi.CustomerView.class);

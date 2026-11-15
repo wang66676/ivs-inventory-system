@@ -1,7 +1,7 @@
 <template>
   <MasterDataCrudView
     title="客户"
-    description="客户档案：个人 / 单位 / 大客户（车队）。信用额度供销售与收款环节使用；系统自动生成内部客户编码。"
+    description="客户类型：个人、单位、大客户/车队、二级、其他。信用额度供销售与收款环节使用；系统自动生成内部客户编码。"
     :can-write="canWrite"
     :columns="columns"
     :fields="fields"

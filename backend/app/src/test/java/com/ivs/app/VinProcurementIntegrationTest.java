@@ -36,7 +36,7 @@ class VinProcurementIntegrationTest {
 
     @Test
     void 收货时自动建立VIN档案并按每台采购价入账() {
-        var supplier = post("/api/ivs/suppliers", Map.of("name", "VIN整车厂", "supplierType", SupplierType.OEM.name()),
+        var supplier = post("/api/ivs/suppliers", Map.of("name", "VIN整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()),
                 MasterdataApi.SupplierView.class);
         var warehouse = post("/api/ivs/warehouses", Map.of("code", "VINWH", "name", "VIN整车仓",
                 "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);
@@ -116,7 +116,7 @@ class VinProcurementIntegrationTest {
 
     @Test
     void 同一订单可无默认仓库并按VIN分仓且后补合格证日期() {
-        var supplier = post("/api/ivs/suppliers", Map.of("name", "分仓整车厂", "supplierType", SupplierType.OEM.name()),
+        var supplier = post("/api/ivs/suppliers", Map.of("name", "分仓整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()),
                 MasterdataApi.SupplierView.class);
         var firstWarehouse = post("/api/ivs/warehouses", Map.of("code", "VIN-SPLIT-A", "name", "分仓A",
                 "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);
@@ -208,7 +208,7 @@ class VinProcurementIntegrationTest {
 
     @Test
     void 已入库VIN可整单退回并修正后重新收货() {
-        var supplier = post("/api/ivs/suppliers", Map.of("name", "VIN退回整车厂", "supplierType", SupplierType.OEM.name()),
+        var supplier = post("/api/ivs/suppliers", Map.of("name", "VIN退回整车厂", "supplierType", SupplierType.VEHICLE_OEM.name()),
                 MasterdataApi.SupplierView.class);
         var warehouse = post("/api/ivs/warehouses", Map.of("code", "VIN-RET-WH", "name", "退回测试仓",
                 "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);

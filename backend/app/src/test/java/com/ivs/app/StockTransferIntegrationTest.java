@@ -122,7 +122,7 @@ class StockTransferIntegrationTest {
                 "type", WarehouseType.MAIN.name()), MasterdataApi.WarehouseView.class);
         MasterdataApi.WarehouseView to = post("/api/ivs/warehouses", Map.of(
                 "code", "WH-" + UUID.randomUUID().toString().substring(0, 6), "name", "调入仓",
-                "type", WarehouseType.SHOP.name()), MasterdataApi.WarehouseView.class);
+                "type", WarehouseType.STORE.name()), MasterdataApi.WarehouseView.class);
         MasterdataApi.SupplierView supplier = post("/api/ivs/suppliers", Map.of(
                 "name", "调拨供应商", "supplierType", SupplierType.OTHER.name()), MasterdataApi.SupplierView.class);
 

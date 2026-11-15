@@ -75,7 +75,7 @@ class ReturnsIntegrationTest {
                 "code", "SWH-" + UUID.randomUUID().toString().substring(0, 6), "name", "序列号退货仓",
                 "type", "MAIN"), com.ivs.masterdata.api.MasterdataApi.WarehouseView.class);
         var supplier = post("/api/ivs/suppliers", Map.of(
-                "name", "序列号退货供应商", "supplierType", "OEM"),
+                "name", "序列号退货供应商", "supplierType", "VEHICLE_OEM"),
                 com.ivs.masterdata.api.MasterdataApi.SupplierView.class);
         String serialNo = "UATRT" + UUID.randomUUID().toString().replace("-", "").substring(0, 14).toUpperCase();
         var serial = post("/api/ivs/product-serials", Map.of(

@@ -225,6 +225,8 @@ import { purchaseApi } from '../../api/procurement'
 import { productApi, supplierApi, warehouseApi } from '../../api/masterdata'
 import { policyApi } from '../../api/policy'
 import { useAuthStore } from '../../stores/auth'
+import { SUPPLIER_TYPE_LABELS } from '../../types/masterdata'
+import type { SupplierType } from '../../types/masterdata'
 import { PURCHASE_STATUS_COLORS, PURCHASE_STATUS_LABELS } from '../../types/procurement'
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus } from '../../types/procurement'
 import type { FundOffsetPreview, Policy } from '../../types/policy'
@@ -795,7 +797,7 @@ async function submitReceive() {
 onMounted(async () => {
   try {
     const [suppliers, warehouses, products, publishedPolicies] = await Promise.all([supplierApi.list(), warehouseApi.list(), productApi.list(), policyApi.list({ status: 'PUBLISHED' })])
-    supplierOptions.value = suppliers.map((item) => ({ label: `${item.name}${item.supplierType === 'OEM' ? '（整车厂）' : ''}`, value: item.id }))
+    supplierOptions.value = suppliers.map((item) => ({ label: `${item.name}${item.supplierType === 'VEHICLE_OEM' ? '（整车厂）' : ''}`, value: item.id }))
     warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id, name: item.name, code: item.code }))
     productOptions.value = products.map((item) => ({ label: item.name, value: item.id, productNo: item.productNo,
       name: item.name, series: item.series, model: item.model, categoryCode: item.categoryCode,

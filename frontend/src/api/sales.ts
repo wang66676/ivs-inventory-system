@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { AgingBucket, InstallmentPlan, Invoice, Receipt, Receivable, SalesDelivery, SalesOrder } from '../types/sales'
+import type { AgingBucket, InstallmentPlan, Invoice, Receipt, Receivable, SalesDelivery, SalesInvoicePdfExtraction, SalesOrder } from '../types/sales'
 
 export const salesApi = {
   orders: (params?: { keyword?: string; status?: string; customerId?: string }) =>
@@ -33,6 +33,16 @@ export const invoiceApi = {
   list: (params?: { orderId?: string; customerId?: string }) =>
     http.get<Invoice[]>('/ivs/sales-invoices', { params }).then((r) => r.data),
   create: (body: Record<string, unknown>) => http.post<Invoice>('/ivs/sales-invoices', body).then((r) => r.data),
+  extractPdf: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return http.post<SalesInvoicePdfExtraction>('/ivs/sales-invoices/pdf/extract', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    }).then((r) => r.data)
+  },
+  downloadPdf: (id: string) =>
+    http.get<Blob>(`/ivs/sales-invoices/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
   issue: (id: string, body: Record<string, unknown>) =>
     http.post<Invoice>(`/ivs/sales-invoices/${id}/issue`, body).then((r) => r.data),
   void: (id: string) => http.post<Invoice>(`/ivs/sales-invoices/${id}/void`).then((r) => r.data),

@@ -1,12 +1,15 @@
 package com.ivs.billing.invoice;
 
 import com.ivs.billing.invoice.api.BillingApi;
+import com.ivs.billing.purchase.PurchaseInvoicePdfService;
 import com.ivs.shared.error.ConflictException;
 import com.ivs.shared.error.NotFoundException;
 import com.ivs.shared.event.EventEnvelope;
 import com.ivs.shared.event.EventPublisher;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,13 +25,16 @@ public class SalesInvoiceApplicationService {
     private final SalesInvoiceRepository repository;
     private final BillingReferencePort referencePort;
     private final EventPublisher events;
+    private final PurchaseInvoicePdfService pdfService;
 
     public SalesInvoiceApplicationService(SalesInvoiceRepository repository,
                                           BillingReferencePort referencePort,
-                                          EventPublisher events) {
+                                          EventPublisher events,
+                                          PurchaseInvoicePdfService pdfService) {
         this.repository = repository;
         this.referencePort = referencePort;
         this.events = events;
+        this.pdfService = pdfService;
     }
 
     @Transactional(readOnly = true)
@@ -51,9 +57,7 @@ public class SalesInvoiceApplicationService {
         if (command.orderId() != null) {
             BillingReferencePort.OrderInfo order = referencePort.requireOrder(command.orderId());
             customerId = order.customerId();
-            if (amount == null) {
-                amount = order.deliveredAmount();
-            }
+            if (amount == null) amount = order.deliveredAmount();
         }
         if (customerId == null) {
             throw new ConflictException("INVOICE_CUSTOMER_REQUIRED", "开票必须指定客户或关联销售订单");
@@ -74,13 +78,46 @@ public class SalesInvoiceApplicationService {
             invoice.assignPricing(invoice.getAmount(), command.taxRate());
         }
         try {
-            invoice.issue(command == null ? null : command.externalInvoiceNo());
+            if (command != null && command.pdfStorageKey() != null && !command.pdfStorageKey().isBlank()) {
+                pdfService.validatedKey(command.pdfStorageKey());
+                pdfService.resource(command.pdfStorageKey());
+            }
+            invoice.issue(command == null ? null : command.externalInvoiceNo(),
+                    command == null ? null : command.issuedAt(), command == null ? null : command.invoiceType(),
+                    command == null ? null : command.pdfFileName(), command == null ? null : command.pdfStorageKey(),
+                    command == null ? null : command.extractedText());
         } catch (IllegalArgumentException | IllegalStateException exception) {
             throw new ConflictException("INVOICE_ISSUE_INVALID", exception.getMessage());
         }
         SalesInvoice saved = repository.save(invoice);
         publish(saved, "InvoiceIssued");
         return toView(saved);
+    }
+
+    public BillingApi.PdfExtractionView extractPdf(MultipartFile file) {
+        var parsed = pdfService.extract(file);
+        var order = referencePort.findOrderBySerialNumbers(parsed.vinCandidates());
+        if (order.isEmpty()) order = referencePort.findOrderByOrderNos(parsed.orderNoCandidates());
+        var matched = order.orElse(null);
+        return new BillingApi.PdfExtractionView(parsed.storageKey(), parsed.fileName(), parsed.rawText(),
+                parsed.invoiceNo(), parsed.invoiceType(), parsed.type(), parsed.amount(), parsed.taxAmount(),
+                parsed.taxRate(), parsed.issuedAt(), parsed.sellerName(), parsed.sellerTaxNo(), parsed.buyerName(),
+                parsed.buyerTaxNo(), parsed.vinCandidates(), parsed.orderNoCandidates(),
+                matched == null ? null : matched.orderId(), matched == null ? null : matched.orderNo(),
+                matched == null ? null : matched.customerId(), matched == null ? null : matched.customerName(),
+                parsed.confidence(), parsed.textExtracted(), parsed.warning());
+    }
+
+    @Transactional(readOnly = true)
+    public Resource pdf(UUID id) {
+        SalesInvoice invoice = find(id);
+        if (invoice.getPdfStorageKey() == null) throw new NotFoundException("销项发票 PDF", id);
+        return pdfService.resource(invoice.getPdfStorageKey());
+    }
+
+    @Transactional(readOnly = true)
+    public String pdfFileName(UUID id) {
+        return find(id).getPdfFileName();
     }
 
     @Transactional
@@ -129,7 +166,6 @@ public class SalesInvoiceApplicationService {
 
     private void publish(SalesInvoice invoice, String eventType) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        // 事件信封使用 Map.copyOf，null 值会直接抛异常，因此这里只放非空字段
         putIfPresent(payload, "invoiceNo", invoice.getInvoiceNo());
         putIfPresent(payload, "type", invoice.getType() == null ? null : invoice.getType().name());
         putIfPresent(payload, "amount", invoice.getAmount());
@@ -142,8 +178,6 @@ public class SalesInvoiceApplicationService {
     }
 
     private void putIfPresent(Map<String, Object> payload, String key, Object value) {
-        if (value != null) {
-            payload.put(key, value);
-        }
+        if (value != null) payload.put(key, value);
     }
 }

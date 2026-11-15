@@ -47,8 +47,8 @@ class RebateFundIntegrationTest {
 
     @Test
     void 入池按厂家分账且总余额等于各厂家之和() {
-        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
-        UUID supplierB = createSupplier("某整车厂 B", SupplierType.OEM);
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.VEHICLE_OEM);
+        UUID supplierB = createSupplier("某整车厂 B", SupplierType.VEHICLE_OEM);
 
         credit(supplierA, new BigDecimal("30000"), "OEM_REBATE", "REB-2026-10-A");
         RebateFundApi.PoolView pool = credit(supplierB, new BigDecimal("12000"), "RED_INVOICE", "INV-R-0001");
@@ -63,7 +63,7 @@ class RebateFundIntegrationTest {
 
     @Test
     void 入库单确认时抵扣且余额分批使用() {
-        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.VEHICLE_OEM);
         UUID warehouse = createWarehouse("WH-F1", "整车仓");
         UUID product = createQuantityProduct("配件", warehouse);
         credit(supplierA, new BigDecimal("30000"), "OEM_REBATE", "REB-2026-10-A");
@@ -95,7 +95,7 @@ class RebateFundIntegrationTest {
 
     @Test
     void 余额为零时不允许抵扣_不允许预抵扣() {
-        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.VEHICLE_OEM);
         UUID warehouse = createWarehouse("WH-F2", "整车仓");
         UUID product = createQuantityProduct("配件", warehouse);
 
@@ -108,8 +108,8 @@ class RebateFundIntegrationTest {
 
     @Test
     void 跨厂家不能使用别人的返利() {
-        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
-        UUID supplierB = createSupplier("某整车厂 B", SupplierType.OEM);
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.VEHICLE_OEM);
+        UUID supplierB = createSupplier("某整车厂 B", SupplierType.VEHICLE_OEM);
         UUID warehouse = createWarehouse("WH-F3", "整车仓");
         UUID product = createQuantityProduct("配件", warehouse);
         credit(supplierA, new BigDecimal("30000"), "OEM_REBATE", "REB-2026-10-A");
@@ -127,7 +127,7 @@ class RebateFundIntegrationTest {
 
     @Test
     void 取消抵扣回补余额与入池记录() {
-        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.VEHICLE_OEM);
         UUID warehouse = createWarehouse("WH-F4", "整车仓");
         UUID product = createQuantityProduct("配件", warehouse);
         credit(supplierA, new BigDecimal("30000"), "OEM_REBATE", "REB-2026-10-A");
@@ -165,7 +165,7 @@ class RebateFundIntegrationTest {
 
     @Test
     void 应付已付款时禁止取消返利抵扣() {
-        UUID supplierA = createSupplier("某整车厂 A", SupplierType.OEM);
+        UUID supplierA = createSupplier("某整车厂 A", SupplierType.VEHICLE_OEM);
         UUID warehouse = createWarehouse("WH-F5", "整车仓");
         UUID product = createQuantityProduct("配件", warehouse);
         credit(supplierA, new BigDecimal("10000"), "OEM_REBATE", "REB-2026-10-PAID");
@@ -193,7 +193,7 @@ class RebateFundIntegrationTest {
 
     @Test
     void 大额人工调整资金池需审批通过后入池() {
-        UUID supplierId = createSupplier("审批测试整车厂", SupplierType.OEM);
+        UUID supplierId = createSupplier("审批测试整车厂", SupplierType.VEHICLE_OEM);
         RebateFundApi.PoolView requested = post("/api/ivs/rebate-fund-pool/credits/request", Map.of(
                 "supplierId", supplierId.toString(), "amount", 15000,
                 "sourceType", "ADJUST_IN", "sourceNo", "ADJ-001", "remark", "厂家到账补充"),

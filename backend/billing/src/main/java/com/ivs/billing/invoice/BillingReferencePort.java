@@ -1,6 +1,8 @@
 package com.ivs.billing.invoice;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** 开票所需的销售侧只读信息（实现在 app 层）。 */
@@ -13,4 +15,8 @@ public interface BillingReferencePort {
     OrderInfo requireOrder(UUID orderId);
 
     String customerName(UUID customerId);
+
+    Optional<OrderInfo> findOrderBySerialNumbers(List<String> serialNos);
+
+    Optional<OrderInfo> findOrderByOrderNos(List<String> orderNos);
 }
