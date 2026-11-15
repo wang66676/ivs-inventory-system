@@ -40,6 +40,9 @@ public class SalesInvoice {
     @Column(name = "delivery_id")
     private UUID deliveryId;
 
+    @Column(name = "serial_nos", columnDefinition = "text")
+    private String serialNos;
+
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
 
@@ -175,6 +178,10 @@ public class SalesInvoice {
         this.issuedAt = Instant.now();
     }
 
+    public void assignSerialNos(String serialNos) {
+        this.serialNos = normalize(serialNos);
+    }
+
     public void assignPricing(BigDecimal grossAmount, BigDecimal rate) {
         this.amount = money(grossAmount);
         this.taxRate = rate;
@@ -214,6 +221,7 @@ public class SalesInvoice {
     public InvoiceType getType() { return type; }
     public UUID getOrderId() { return orderId; }
     public UUID getDeliveryId() { return deliveryId; }
+    public String getSerialNos() { return serialNos; }
     public UUID getCustomerId() { return customerId; }
     public BigDecimal getAmount() { return amount; }
     public BigDecimal getTaxRate() { return taxRate; }

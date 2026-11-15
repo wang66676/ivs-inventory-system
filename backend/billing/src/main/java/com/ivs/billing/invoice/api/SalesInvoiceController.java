@@ -54,6 +54,14 @@ public class SalesInvoiceController {
         return ResponseEntity.created(URI.create("/api/ivs/sales-invoices/" + view.id())).body(view);
     }
 
+    @PostMapping("/blue")
+    @PreAuthorize("hasAuthority('IVS_INVOICE_WRITE')")
+    public ResponseEntity<BillingApi.InvoiceView> registerBlue(
+            @Valid @RequestBody BillingApi.RegisterSalesInvoiceCommand command) {
+        BillingApi.InvoiceView view = service.registerBlue(command);
+        return ResponseEntity.created(URI.create("/api/ivs/sales-invoices/" + view.id())).body(view);
+    }
+
     @PostMapping(value = "/pdf/extract", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('IVS_INVOICE_WRITE')")
     public BillingApi.PdfExtractionView extractPdf(@RequestPart("file") MultipartFile file) {

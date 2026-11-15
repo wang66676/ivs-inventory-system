@@ -14,8 +14,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /** 销项发票：开票、作废、红冲（红字发票必须关联原蓝票）。 */
@@ -69,6 +71,57 @@ public class SalesInvoiceApplicationService {
                 "INV-%06d".formatted(repository.nextInvoiceSequence()), InvoiceDirection.OUT, InvoiceType.BLUE,
                 command.orderId(), command.deliveryId(), customerId, amount, command.taxRate(), command.remark());
         return toView(repository.save(invoice));
+    }
+
+    /** 直接登记销项蓝字发票，联动客户、销售订单、VIN/SN 与电子发票附件。 */
+    @Transactional
+    public BillingApi.InvoiceView registerBlue(BillingApi.RegisterSalesInvoiceCommand command) {
+        if (command == null || command.orderId() == null) {
+            throw new ConflictException("SALES_ORDER_REQUIRED", "请选择销售订单编号");
+        }
+        BillingReferencePort.OrderInfo order = referencePort.requireOrder(command.orderId());
+        if (command.customerId() != null && !command.customerId().equals(order.customerId())) {
+            throw new ConflictException("INVOICE_CUSTOMER_MISMATCH", "所选客户与销售订单客户不一致");
+        }
+        List<String> serialNos = normalizeSerialNos(command.serialNos());
+        if (serialNos.isEmpty()) {
+            throw new ConflictException("INVOICE_SERIAL_REQUIRED", "请至少选择一个 VIN/SN");
+        }
+        var serialOrder = referencePort.findOrderBySerialNumbers(serialNos);
+        if (serialOrder.isEmpty() || !serialOrder.get().orderId().equals(order.orderId())) {
+            throw new ConflictException("INVOICE_SERIAL_ORDER_MISMATCH", "所选 VIN/SN 不属于当前销售订单");
+        }
+        ensureSerialsNotInvoiced(order.orderId(), serialNos);
+        if (command.externalInvoiceNo() == null || command.externalInvoiceNo().isBlank()) {
+            throw new ConflictException("INVOICE_NUMBER_REQUIRED", "请填写发票号码");
+        }
+        if (command.invoiceType() == null || command.invoiceType().isBlank()) {
+            throw new ConflictException("INVOICE_TYPE_REQUIRED", "请填写发票类型");
+        }
+        if (command.issuedAt() == null) {
+            throw new ConflictException("INVOICE_DATE_REQUIRED", "请选择开票日期");
+        }
+        BigDecimal amount = command.amount() == null ? order.deliveredAmount() : command.amount();
+        if (amount == null || amount.signum() <= 0) {
+            throw new ConflictException("INVOICE_AMOUNT_REQUIRED", "发票金额必须大于 0");
+        }
+        SalesInvoice invoice = SalesInvoice.create(
+                "INV-%06d".formatted(repository.nextInvoiceSequence()), InvoiceDirection.OUT, InvoiceType.BLUE,
+                order.orderId(), null, order.customerId(), amount, command.taxRate(), command.remark());
+        invoice.assignSerialNos(String.join(",", serialNos));
+        try {
+            if (command.pdfStorageKey() != null && !command.pdfStorageKey().isBlank()) {
+                pdfService.validatedKey(command.pdfStorageKey());
+                pdfService.resource(command.pdfStorageKey());
+            }
+            invoice.issue(command.externalInvoiceNo(), command.issuedAt(), command.invoiceType(),
+                    command.pdfFileName(), command.pdfStorageKey(), command.extractedText());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ConflictException("INVOICE_REGISTER_INVALID", exception.getMessage());
+        }
+        SalesInvoice saved = repository.save(invoice);
+        publish(saved, "InvoiceRegistered");
+        return toView(saved);
     }
 
     @Transactional
@@ -148,6 +201,7 @@ public class SalesInvoiceApplicationService {
                 "INV-R-%06d".formatted(repository.nextInvoiceSequence()), InvoiceDirection.OUT, InvoiceType.RED,
                 original.getOrderId(), original.getDeliveryId(), original.getCustomerId(), original.getAmount(),
                 original.getTaxRate(), "红冲原发票 " + original.getInvoiceNo());
+        red.assignSerialNos(original.getSerialNos());
         red.markRedFlushOf(original.getId());
         SalesInvoice saved = repository.save(red);
         publish(original, "InvoiceRedFlushed");
@@ -168,6 +222,7 @@ public class SalesInvoiceApplicationService {
         Map<String, Object> payload = new LinkedHashMap<>();
         putIfPresent(payload, "invoiceNo", invoice.getInvoiceNo());
         putIfPresent(payload, "type", invoice.getType() == null ? null : invoice.getType().name());
+        putIfPresent(payload, "serialNos", invoice.getSerialNos());
         putIfPresent(payload, "amount", invoice.getAmount());
         putIfPresent(payload, "taxAmount", invoice.getTaxAmount());
         putIfPresent(payload, "status", invoice.getStatus() == null ? null : invoice.getStatus().name());
@@ -175,6 +230,31 @@ public class SalesInvoiceApplicationService {
         putIfPresent(payload, "externalInvoiceNo", invoice.getExternalInvoiceNo());
         events.publish(new EventEnvelope(UUID.randomUUID(), eventType, "SalesInvoice", invoice.getId(),
                 invoice.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
+    }
+
+    private List<String> normalizeSerialNos(List<String> serialNos) {
+        if (serialNos == null) return List.of();
+        return new LinkedHashSet<>(serialNos.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toUpperCase())
+                .toList()).stream().toList();
+    }
+
+    private void ensureSerialsNotInvoiced(UUID orderId, List<String> serialNos) {
+        Set<String> requested = new LinkedHashSet<>(serialNos);
+        Set<String> existing = new LinkedHashSet<>();
+        for (SalesInvoice invoice : repository.findByOrderIdOrderByCreatedAtDesc(orderId)) {
+            if (invoice.getType() != InvoiceType.BLUE || invoice.getStatus() == InvoiceStatus.VOID
+                    || invoice.getSerialNos() == null || invoice.getSerialNos().isBlank()) continue;
+            for (String value : invoice.getSerialNos().split(",")) {
+                if (!value.isBlank()) existing.add(value.trim().toUpperCase());
+            }
+        }
+        requested.retainAll(existing);
+        if (!requested.isEmpty()) {
+            throw new ConflictException("INVOICE_SERIAL_ALREADY_USED",
+                    "以下 VIN/SN 已登记销项发票：" + String.join("、", requested));
+        }
     }
 
     private void putIfPresent(Map<String, Object> payload, String key, Object value) {

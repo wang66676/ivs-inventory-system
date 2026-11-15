@@ -170,6 +170,7 @@ export interface Invoice {
   orderId?: string
   orderNo?: string
   deliveryId?: string
+  serialNos: string[]
   customerId: string
   customerName: string
   amount: number
