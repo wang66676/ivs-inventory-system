@@ -17,21 +17,36 @@ public final class BillingApi {
 
     public record InvoiceView(
             UUID id, String invoiceNo, InvoiceDirection direction, InvoiceType type, UUID orderId, String orderNo,
-            UUID deliveryId, UUID customerId, String customerName, BigDecimal amount, BigDecimal taxRate,
-            BigDecimal taxAmount, InvoiceStatus status, UUID originalInvoiceId, String externalInvoiceNo,
+            UUID deliveryId, java.util.List<String> serialNos, UUID customerId, String customerName,
+            BigDecimal amount, BigDecimal taxRate, BigDecimal taxAmount, InvoiceStatus status,
+            UUID originalInvoiceId, String externalInvoiceNo,
             String invoiceType, String pdfFileName, Instant issuedAt, Instant createdAt, String remark
     ) {
         public static InvoiceView from(SalesInvoice invoice, String orderNo, String customerName) {
             return new InvoiceView(invoice.getId(), invoice.getInvoiceNo(), invoice.getDirection(), invoice.getType(),
-                    invoice.getOrderId(), orderNo, invoice.getDeliveryId(), invoice.getCustomerId(), customerName,
-                    invoice.getAmount(), invoice.getTaxRate(), invoice.getTaxAmount(), invoice.getStatus(),
+                    invoice.getOrderId(), orderNo, invoice.getDeliveryId(), serialNos(invoice), invoice.getCustomerId(),
+                    customerName, invoice.getAmount(), invoice.getTaxRate(), invoice.getTaxAmount(), invoice.getStatus(),
                     invoice.getOriginalInvoiceId(), invoice.getExternalInvoiceNo(), invoice.getInvoiceType(),
                     invoice.getPdfFileName(), invoice.getIssuedAt(), invoice.getCreatedAt(), invoice.getRemark());
+        }
+
+        private static java.util.List<String> serialNos(SalesInvoice invoice) {
+            String value = invoice.getSerialNos();
+            if (value == null || value.isBlank()) return java.util.List.of();
+            return java.util.Arrays.stream(value.split(",")).map(String::trim)
+                    .filter(item -> !item.isBlank()).toList();
         }
     }
 
     public record CreateInvoiceCommand(
             UUID orderId, UUID deliveryId, UUID customerId, BigDecimal amount, BigDecimal taxRate, String remark
+    ) {
+    }
+
+    public record RegisterSalesInvoiceCommand(
+            UUID customerId, UUID orderId, java.util.List<String> serialNos, String invoiceType,
+            String externalInvoiceNo, BigDecimal amount, BigDecimal taxRate, Instant issuedAt,
+            String pdfFileName, String pdfStorageKey, String extractedText, String remark
     ) {
     }
 

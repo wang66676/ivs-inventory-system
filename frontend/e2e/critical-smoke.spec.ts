@@ -55,7 +55,8 @@ test('销项发票支持 PDF 上传识别入口', async ({ page }) => {
   await page.getByRole('button', { name: /^开\s*票$/ }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.locator('button').filter({ hasText: '上传销项发票 PDF 并自动识别' })).toBeVisible()
-  await expect(dialog.getByText('销售订单', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('销售订单编号', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('VIN/SN（可多选）', { exact: true })).toBeVisible()
 })
 
 test('系统健康检查可加载并执行备份恢复验证', async ({ page }) => {

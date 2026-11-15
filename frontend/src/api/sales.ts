@@ -33,6 +33,8 @@ export const invoiceApi = {
   list: (params?: { orderId?: string; customerId?: string }) =>
     http.get<Invoice[]>('/ivs/sales-invoices', { params }).then((r) => r.data),
   create: (body: Record<string, unknown>) => http.post<Invoice>('/ivs/sales-invoices', body).then((r) => r.data),
+  registerBlue: (body: Record<string, unknown>) =>
+    http.post<Invoice>('/ivs/sales-invoices/blue', body).then((r) => r.data),
   extractPdf: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)

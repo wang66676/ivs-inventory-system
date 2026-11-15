@@ -590,22 +590,31 @@ class SalesSettlementIntegrationTest {
         assertThat(extracted.orderNo()).isEqualTo(order.orderNo());
         assertThat(extracted.vinCandidates()).contains(serial.serialNo());
 
-        BillingApi.InvoiceView draft = post("/api/ivs/sales-invoices", Map.of(
-                "orderId", order.id().toString(), "amount", 460000, "taxRate", 0.13), BillingApi.InvoiceView.class);
-        Map<String, Object> issue = new HashMap<>();
-        issue.put("externalInvoiceNo", "SALES-PDF-0001");
-        issue.put("taxRate", 0.13);
-        issue.put("issuedAt", "2026-11-10T00:00:00Z");
-        issue.put("invoiceType", "电子发票（增值税专用发票）");
-        issue.put("pdfFileName", extracted.fileName());
-        issue.put("pdfStorageKey", extracted.storageKey());
-        issue.put("extractedText", extracted.rawText());
-        BillingApi.InvoiceView issued = post("/api/ivs/sales-invoices/" + draft.id() + "/issue", issue,
+        Map<String, Object> register = new HashMap<>();
+        register.put("customerId", customer.id().toString());
+        register.put("orderId", order.id().toString());
+        register.put("serialNos", List.of(serial.serialNo()));
+        register.put("amount", 460000);
+        register.put("taxRate", 0.13);
+        register.put("externalInvoiceNo", "SALES-PDF-0001");
+        register.put("issuedAt", "2026-11-10T00:00:00Z");
+        register.put("invoiceType", "电子发票（增值税专用发票）");
+        register.put("pdfFileName", extracted.fileName());
+        register.put("pdfStorageKey", extracted.storageKey());
+        register.put("extractedText", extracted.rawText());
+        BillingApi.InvoiceView issued = post("/api/ivs/sales-invoices/blue", register,
                 BillingApi.InvoiceView.class);
+        assertThat(issued.orderId()).isEqualTo(order.id());
+        assertThat(issued.customerId()).isEqualTo(customer.id());
+        assertThat(issued.serialNos()).containsExactly(serial.serialNo());
         assertThat(issued.externalInvoiceNo()).isEqualTo("SALES-PDF-0001");
         assertThat(issued.invoiceType()).isEqualTo("电子发票（增值税专用发票）");
         assertThat(issued.pdfFileName()).isEqualTo("sales-invoice.pdf");
         assertThat(issued.issuedAt()).isEqualTo(Instant.parse("2026-11-10T00:00:00Z"));
+
+        ResponseEntity<BillingApi.InvoiceView> duplicate = restTemplate.postForEntity(
+                "/api/ivs/sales-invoices/blue", register, BillingApi.InvoiceView.class);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
 
     private byte[] salesInvoicePdf(String vin) throws Exception {
