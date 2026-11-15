@@ -16,6 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -184,6 +185,38 @@ class RetailIntegrationTest {
 
     private UUID candidateSerialId(Map<?, ?> candidate) {
         return UUID.fromString(((Map<?, ?>) candidate.get("serial")).get("id").toString());
+    }
+
+    @Test
+    void 同一发票时间可批量登记多个VIN并按顺序写入车牌() {
+        MasterdataApi.CategoryView vehicle = createCategory("VEHICLE-BATCH", "整车批量", TrackingMode.SERIAL);
+        MasterdataApi.ProductView product = createProduct("Q3 批量实销", vehicle.id());
+        MasterdataApi.SerialView first = createSerial("LZZBATCH2026000001", product.id());
+        MasterdataApi.SerialView second = createSerial("LZZBATCH2026000002", product.id());
+        MasterdataApi.CustomerView customer = post("/api/ivs/customers", Map.of(
+                "name", "批量实销客户", "customerType", "COMPANY"), MasterdataApi.CustomerView.class);
+
+        ResponseEntity<RetailApi.RetailView[]> response = restTemplate.postForEntity(
+                "/api/ivs/retails/batch", Map.of(
+                        "retailDate", "2026-10-05",
+                        "invoiceIssuedAt", "2026-10-01T02:00:00Z",
+                        "serialIds", List.of(first.id().toString(), second.id().toString()),
+                        "orderIds", List.of(),
+                        "customerId", customer.id().toString(),
+                        "userName", "批量使用人",
+                        "userMobile", "13800000000",
+                        "plateNos", "津A10001,津A10002",
+                        "salePrice", 450000), RetailApi.RetailView[].class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        RetailApi.RetailView[] created = response.getBody();
+        assertThat(created).isNotNull().hasSize(2);
+        assertThat(created[0].serialNo()).isEqualTo(first.serialNo());
+        assertThat(created[0].plateNo()).isEqualTo("津A10001");
+        assertThat(created[1].serialNo()).isEqualTo(second.serialNo());
+        assertThat(created[1].plateNo()).isEqualTo("津A10002");
+        assertThat(created[0].invoiceIssuedAt()).isEqualTo(created[1].invoiceIssuedAt());
+        assertThat(created[0].customerId()).isEqualTo(customer.id());
+        assertThat(created[1].customerId()).isEqualTo(customer.id());
     }
 
     @Test

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +89,40 @@ public class RetailApplicationService {
         publish(saved, "RetailRegistered", Map.of("retailNo", saved.getRetailNo(),
                 "serialNo", saved.getSerialNo(), "retailDate", saved.getRetailDate().toString()));
         return toView(saved);
+    }
+
+    /** 同一客户、同一发票开票时间下批量登记多个 VIN/SN。 */
+    @Transactional
+    public List<RetailApi.RetailView> createBatch(RetailApi.SaveRetailBatchCommand command) {
+        List<UUID> serialIds = command.serialIds() == null ? List.of() : command.serialIds().stream()
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (serialIds.isEmpty()) {
+            throw new ConflictException("RETAIL_SERIAL_REQUIRED", "请至少选择一个 VIN/SN");
+        }
+        if (command.serialIds().size() != serialIds.size()) {
+            throw new ConflictException("RETAIL_SERIAL_DUPLICATE", "同一 VIN/SN 不能重复选择");
+        }
+        List<String> plateNos = splitPlateNos(command.plateNos());
+        if (plateNos.size() > serialIds.size()) {
+            throw new ConflictException("RETAIL_PLATE_COUNT_INVALID", "车牌号数量不能多于所选 VIN/SN 数量");
+        }
+        List<UUID> orderIds = command.orderIds() == null ? List.of() : command.orderIds();
+        List<RetailApi.RetailView> views = new ArrayList<>();
+        for (int i = 0; i < serialIds.size(); i++) {
+            UUID orderId = i < orderIds.size() ? orderIds.get(i) : null;
+            String plateNo = i < plateNos.size() ? plateNos.get(i) : null;
+            views.add(create(new RetailApi.SaveRetailCommand(
+                    command.retailDate(), command.invoiceIssuedAt(), command.registerDate(), command.deliveryDate(),
+                    serialIds.get(i), command.customerId(), orderId, command.userName(), command.userMobile(),
+                    plateNo, command.salePrice(), command.remark())));
+        }
+        return views;
+    }
+
+    private List<String> splitPlateNos(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return List.of(value.split("[,，、]+")).stream()
+                .map(String::trim).filter(item -> !item.isBlank()).toList();
     }
 
     @Transactional

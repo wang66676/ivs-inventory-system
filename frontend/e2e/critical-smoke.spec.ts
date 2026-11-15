@@ -59,6 +59,16 @@ test('销项发票支持 PDF 上传识别入口', async ({ page }) => {
   await expect(dialog.getByText('VIN/SN（可多选）', { exact: true })).toBeVisible()
 })
 
+test('实销登记支持同一次选择多个 VIN/SN', async ({ page }) => {
+  await login(page)
+  await page.goto('/retail/records')
+  await page.getByRole('button', { name: /^登\s*记\s*实\s*销$/ }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('一张终端发票对应多台车时可一次选择多个 VIN/SN', { exact: true })).toBeVisible()
+  await expect(dialog.locator('.ant-select-multiple')).toBeVisible()
+  await expect(dialog.getByPlaceholder('多台车按 VIN/SN 顺序填写，用逗号分隔')).toBeVisible()
+})
+
 test('系统健康检查可加载并执行备份恢复验证', async ({ page }) => {
   test.setTimeout(120000)
   await login(page)
