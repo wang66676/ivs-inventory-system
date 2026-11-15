@@ -29,18 +29,27 @@ public class PurchaseInvoicePdfParser {
             "(?:发票号码|发票号)[:：\\s]*([0-9A-Z]{8,24})", Pattern.CASE_INSENSITIVE);
     private static final Pattern INVOICE_NO_AFTER = Pattern.compile(
             "([0-9A-Z]{8,24})\\s*发票号码", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INVOICE_NO_ANY = Pattern.compile("(?<!\\d)(\\d{20})(?!\\d)");
     private static final Pattern INVOICE_TYPE = Pattern.compile(
             "电\\s*子\\s*发\\s*票\\s*[（(]\\s*([^）)\\r\\n]{2,60})\\s*[）)]");
     private static final Pattern ELECTRONIC_INVOICE_LABEL = Pattern.compile("电\\s*子\\s*发\\s*票");
     private static final String DATE_VALUE =
-            "((?:\\d{4}[年./-]\\d{1,2}[月./-]\\d{1,2}日?)(?:\\s*\\d{1,2}[:：]\\d{2}(?::\\d{2})?)?)";
+            "((?:\\d{4}\\s*[年./-]\\s*\\d{1,2}\\s*[月./-]\\s*\\d{1,2}\\s*日?)"
+                    + "(?:\\s*\\d{1,2}[:：]\\d{2}(?::\\d{2})?)?)";
     private static final Pattern ISSUED_AT = Pattern.compile(
             "(?:开票日期|开票时间)[:：\\s]*" + DATE_VALUE);
     private static final Pattern ISSUED_AT_AFTER = Pattern.compile(
             DATE_VALUE + "\\s*(?:开票日期|开票时间)");
+    private static final Pattern ISSUED_AT_NEAR = Pattern.compile(
+            "(?:开票日期|开票时间)[\\s\\S]{0,100}?" + DATE_VALUE);
+    private static final Pattern DATE_ANY = Pattern.compile(DATE_VALUE);
     private static final Pattern AMOUNT = Pattern.compile(
-            "(?:价税合计[\\s\\S]{0,80}?[（(]\\s*小写\\s*[）)]|价税合计|[（(]\\s*小写\\s*[）)]|小写)"
+            "(?:价税合计[\\s\\S]{0,120}?[（(]\\s*小写\\s*[）)]|价税合计|[（(]\\s*小写\\s*[）)]|小写)"
                     + "[:：\\s]*[¥￥]?\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
+    private static final Pattern AMOUNT_LOOSE = Pattern.compile(
+            "(?:价税合计|小写)[\\s\\S]{0,180}?[¥￥]?\\s*(-?[0-9,]+\\.[0-9]{2})");
+    private static final Pattern CURRENCY_AMOUNT = Pattern.compile(
+            "[¥￥]\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
     private static final Pattern TAX_AMOUNT = Pattern.compile(
             "(?:合计税额|税额)[:：\\s]*[¥￥]?\\s*(-?[0-9,]+(?:\\.[0-9]{1,2})?)");
     private static final Pattern TAX_RATE = Pattern.compile(
@@ -76,13 +85,19 @@ public class PurchaseInvoicePdfParser {
 
     public ParsedInvoice parseText(String text) {
         String raw = normalize(text);
-        String invoiceNo = firstNonBlank(match(INVOICE_NO, raw), match(INVOICE_NO_AFTER, raw));
+        String numeric = compactNumericWhitespace(raw);
+        String compactAmount = compactAmountWhitespace(raw);
+        String invoiceNo = firstNonBlank(match(INVOICE_NO, raw), match(INVOICE_NO_AFTER, raw),
+                match(INVOICE_NO_ANY, raw), match(INVOICE_NO, numeric), match(INVOICE_NO_AFTER, numeric),
+                match(INVOICE_NO_ANY, numeric));
         String invoiceType = invoiceType(raw);
-        String amountText = match(AMOUNT, raw);
-        String taxText = match(TAX_AMOUNT, raw);
+        String amountText = firstNonBlank(match(AMOUNT, compactAmount), match(AMOUNT_LOOSE, compactAmount));
+        String taxText = match(TAX_AMOUNT, compactAmount);
         String rateText = firstNonBlank(match(TAX_RATE, raw), match(TAX_RATE_FALLBACK, raw));
-        String issuedText = firstNonBlank(match(ISSUED_AT, raw), match(ISSUED_AT_AFTER, raw));
+        String issuedText = firstNonBlank(match(ISSUED_AT, raw), match(ISSUED_AT_AFTER, raw),
+                match(ISSUED_AT_NEAR, raw), match(DATE_ANY, raw));
         BigDecimal amount = decimal(amountText);
+        if (amount == null) amount = maxCurrencyAmount(compactAmount);
         BigDecimal taxRate = rateText == null ? null
                 : decimal(rateText).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
         BigDecimal taxAmount = decimal(taxText);
@@ -118,13 +133,36 @@ public class PurchaseInvoicePdfParser {
         return value == null ? "" : value.replace('\u00A0', ' ').replaceAll("[\\t\\x0B\\f\\r]+", " ");
     }
 
+    private static String compactNumericWhitespace(String text) {
+        return text.replaceAll("(?<=\\d)[\\t \\u00A0]+(?=\\d)", "");
+    }
+
+    private static String compactAmountWhitespace(String text) {
+        return text.replaceAll("(?<=[\\d,.])[\\t \\u00A0]+(?=\\d)", "");
+    }
+
+    private static BigDecimal maxCurrencyAmount(String text) {
+        BigDecimal maximum = null;
+        Matcher matcher = CURRENCY_AMOUNT.matcher(text);
+        while (matcher.find()) {
+            BigDecimal value = decimal(matcher.group(1));
+            if (value == null) continue;
+            value = value.abs();
+            if (maximum == null || value.compareTo(maximum) > 0) maximum = value;
+        }
+        return maximum;
+    }
+
     private static String match(Pattern pattern, String text) {
         Matcher matcher = pattern.matcher(text);
         return matcher.find() ? matcher.group(1).trim() : null;
     }
 
-    private static String firstNonBlank(String first, String second) {
-        return first != null && !first.isBlank() ? first : (second != null && !second.isBlank() ? second : null);
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
     }
 
     private static BigDecimal taxAmountOf(BigDecimal gross, BigDecimal rate) {
@@ -164,7 +202,8 @@ public class PurchaseInvoicePdfParser {
     private static Instant issuedAt(String value) {
         if (value == null || value.isBlank()) return null;
         Matcher matcher = Pattern.compile(
-                "(\\d{4})[年./-](\\d{1,2})[月./-](\\d{1,2})日?(?:\\s*(\\d{1,2})[:：](\\d{2})(?::(\\d{2}))?)?")
+                "(\\d{4})\\s*[年./-]\\s*(\\d{1,2})\\s*[月./-]\\s*(\\d{1,2})\\s*日?"
+                        + "(?:\\s*(\\d{1,2})[:：](\\d{2})(?::(\\d{2}))?)?")
                 .matcher(value);
         if (!matcher.find()) return null;
         LocalDate date = LocalDate.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)),

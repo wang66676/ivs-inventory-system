@@ -6,6 +6,7 @@ import com.ivs.retail.retail.RetailStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /** 实销模块对外契约。 */
@@ -37,6 +38,14 @@ public final class RetailApi {
             LocalDate retailDate, Instant invoiceIssuedAt, LocalDate registerDate, LocalDate deliveryDate,
             UUID serialId, UUID customerId, UUID orderId, String userName, String userMobile,
             String plateNo, BigDecimal salePrice, String remark
+    ) {
+    }
+
+    /** 同一客户、同一终端发票开票时间下批量登记多台 VIN/SN。 */
+    public record SaveRetailBatchCommand(
+            LocalDate retailDate, Instant invoiceIssuedAt, LocalDate registerDate, LocalDate deliveryDate,
+            List<UUID> serialIds, List<UUID> orderIds, UUID customerId, String userName, String userMobile,
+            String plateNos, BigDecimal salePrice, String remark
     ) {
     }
 

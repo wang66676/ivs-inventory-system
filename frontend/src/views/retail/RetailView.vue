@@ -53,9 +53,11 @@
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item label="序列号 VIN / 电池 SN" required>
-              <a-select v-model:value="form.serialId" :options="serialOptions" show-search
-                        :disabled="!!editingId" placeholder="选择尚未核销的 VIN / SN"
-                        @change="onSerialChange" />
+              <a-select v-if="editingId" v-model:value="form.serialId" :options="serialOptions" show-search
+                        disabled placeholder="编辑时不可更换 VIN / SN" @change="onSerialChange" />
+              <a-select v-else v-model:value="form.serialIds" mode="multiple" :options="serialOptions" show-search
+                        allow-clear placeholder="可多选同一发票开票时间下的 VIN / SN" @change="onSerialChange" />
+              <div v-if="!editingId" class="hint">一张终端发票对应多台车时可一次选择多个 VIN/SN</div>
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -87,7 +89,10 @@
             <a-form-item label="手机号" required><a-input v-model:value="form.userMobile" /></a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="车牌照号"><a-input v-model:value="form.plateNo" placeholder="选填" /></a-form-item>
+            <a-form-item label="车牌照号">
+              <a-input v-model:value="form.plateNo"
+                       :placeholder="editingId ? '选填' : '多台车按 VIN/SN 顺序填写，用逗号分隔'" />
+            </a-form-item>
           </a-col>
           <a-col :span="12">
             <a-form-item label="成交价"><MoneyInput v-model:value="form.salePrice" :min="0" :precision="2" style="width:100%" /></a-form-item>
@@ -410,6 +415,7 @@ function resetForm() {
   form.retailDate = dayjs()
   form.invoiceIssuedAt = dayjs()
   form.salePrice = 0
+  form.serialIds = []
 }
 
 async function refreshCandidates() {
@@ -425,9 +431,12 @@ async function refreshEntitlements() {
 }
 
 function onSerialChange() {
-  const selected = serials.value.find((item) => item.id === form.serialId)
-  form.orderId = selected?.orderId
-  form.orderNo = selected?.purchaseOrderNo || selected?.orderNo
+  const serialIds: string[] = editingId.value ? [form.serialId].filter(Boolean) : (form.serialIds || [])
+  const selected = serials.value.filter((item) => serialIds.includes(item.id))
+  const orderIds = [...new Set(selected.map((item) => item.orderId).filter(Boolean))] as string[]
+  form.orderId = orderIds.length === 1 ? orderIds[0] : undefined
+  const purchaseNos = [...new Set(selected.map((item) => item.purchaseOrderNo || item.orderNo).filter(Boolean))]
+  form.orderNo = purchaseNos.length === 1 ? purchaseNos[0] : (purchaseNos.length > 1 ? '多个订单' : undefined)
 }
 
 function salesOrderNoOf(orderId?: string) {
@@ -462,6 +471,7 @@ function openEdit(record: RetailRecord) {
   Object.keys(form).forEach((key) => delete form[key])
   Object.assign(form, {
     serialId: record.serialId,
+    serialIds: [record.serialId],
     customerId: record.customerId,
     retailDate: dayjs(record.retailDate),
     invoiceIssuedAt: dayjs(record.invoiceIssuedAt),
@@ -478,12 +488,10 @@ function openEdit(record: RetailRecord) {
   formOpen.value = true
 }
 
-function payload() {
-  if (!form.serialId) throw new Error('请选择序列号')
+function commonPayload() {
   if (!form.retailDate || !form.invoiceIssuedAt) throw new Error('请填写实销日期与开票时间')
   if (!form.userName || !form.userMobile) throw new Error('请填写车辆使用人与手机号')
   return {
-    serialId: form.serialId,
     customerId: form.customerId || null,
     retailDate: (form.retailDate as Dayjs).format('YYYY-MM-DD'),
     invoiceIssuedAt: (form.invoiceIssuedAt as Dayjs).toISOString(),
@@ -491,17 +499,37 @@ function payload() {
     deliveryDate: null,
     userName: form.userName,
     userMobile: form.userMobile,
-    plateNo: form.plateNo || null,
     salePrice: form.salePrice ?? null,
-    orderId: form.orderId || null,
     remark: form.remark || null,
+  }
+}
+
+function payload() {
+  if (!form.serialId) throw new Error('请选择序列号')
+  return {
+    ...commonPayload(),
+    serialId: form.serialId,
+    plateNo: form.plateNo || null,
+    orderId: form.orderId || null,
+  }
+}
+
+function batchPayload() {
+  const serialIds: string[] = form.serialIds || []
+  if (!serialIds.length) throw new Error('请至少选择一个 VIN/SN')
+  const selected = serials.value.filter((item) => serialIds.includes(item.id))
+  return {
+    ...commonPayload(),
+    serialIds,
+    orderIds: selected.map((item) => item.orderId || null),
+    plateNos: form.plateNo || null,
   }
 }
 
 async function save() {
   saving.value = true
   try {
-    const body = payload()
+    const body = editingId.value ? payload() : batchPayload()
     if (customerMode.value === 'MANUAL') {
       const customer = await customerApi.create({
         name: body.userName,
@@ -513,9 +541,13 @@ async function save() {
       body.customerId = customer.id
       customerOptions.value.unshift({ label: `${customer.name}（${customer.code}）`, value: customer.id })
     }
-    if (editingId.value) await retailApi.update(editingId.value, body)
-    else await retailApi.create(body)
-    message.success('实销记录已保存')
+    if (editingId.value) {
+      await retailApi.update(editingId.value, body)
+      message.success('实销记录已保存')
+    } else {
+      const created = await retailApi.createBatch(body)
+      message.success(`已批量登记 ${created.length} 台实销记录`)
+    }
     formOpen.value = false
     await Promise.all([reload(), refreshCandidates()])
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }

@@ -130,6 +130,34 @@ class PurchaseInvoicePdfParserIntegrationTest {
     }
 
     @Test
+    void 标签与数值分行且数字含空格时仍能识别发票号码金额和开票日期() {
+        String text = """
+                机动车 电子发票（增值税专用发票）
+                发票号码：
+                开票日期：
+                购买方信息
+                销售方信息
+                项目名称 车辆识别代号/车架号码 单位 数量 单价 金额 税率/征收率 税额
+                机动车
+                2611 2000 0000 1234 5678
+                2026 年 11 月 14 日
+                名称:天津容大汽车贸易有限公司
+                名称:比亚迪汽车工业有限公司
+                *机动车*纯电动运输车 LPEKMDBD2TD000093 辆 1 353982.30 353982.30 13% 46017.70
+                价税合计（大写）捌拾贰万圆整（小写）
+                ￥ 820,000.00
+                销售订单编号：XS20261114001
+                """;
+        PurchaseInvoicePdfParser.ParsedInvoice parsed = parser.parseText(text);
+        assertThat(parsed.invoiceNo()).isEqualTo("26112000000012345678");
+        assertThat(parsed.amount()).isEqualByComparingTo("820000.00");
+        assertThat(parsed.issuedAt()).isEqualTo(LocalDateTime.of(2026, 11, 14, 0, 0)
+                .atZone(ZoneId.of("Asia/Shanghai")).toInstant());
+        assertThat(parsed.vinCandidates()).contains("LPEKMDBD2TD000093");
+        assertThat(parsed.orderNoCandidates()).contains("XS20261114001");
+    }
+
+    @Test
     void 拒绝非PDF扩展名上传() {
         MockMultipartFile file = new MockMultipartFile("file", "invoice.exe", "application/pdf",
                 "%PDF-1.4 test".getBytes(java.nio.charset.StandardCharsets.UTF_8));

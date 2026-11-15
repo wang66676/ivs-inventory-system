@@ -54,6 +54,14 @@ public class RetailController {
         return ResponseEntity.created(URI.create("/api/ivs/retails/" + view.id())).body(view);
     }
 
+    @PostMapping("/batch")
+    @PreAuthorize("hasAuthority('IVS_RETAIL_WRITE')")
+    public ResponseEntity<List<RetailApi.RetailView>> createBatch(
+            @Valid @RequestBody RetailApi.SaveRetailBatchCommand command) {
+        List<RetailApi.RetailView> views = service.createBatch(command);
+        return ResponseEntity.created(URI.create("/api/ivs/retails/batch")).body(views);
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('IVS_RETAIL_WRITE')")
     public RetailApi.RetailView update(@PathVariable("id") UUID id,
