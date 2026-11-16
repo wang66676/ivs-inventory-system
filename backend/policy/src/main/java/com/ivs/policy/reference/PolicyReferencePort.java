@@ -18,6 +18,7 @@ public interface PolicyReferencePort {
                       BigDecimal salePrice, LocalDate retailDate, Instant invoiceIssuedAt, UUID storeId) {
     }
 
-    record PurchaseOrderInfo(UUID orderId, String orderNo, String externalOrderNo, BigDecimal purchasePrice) {
+    record PurchaseOrderInfo(UUID orderId, String orderNo, String externalOrderNo, BigDecimal purchasePrice,
+                              UUID purchaseReceiptId) {
     }
 }

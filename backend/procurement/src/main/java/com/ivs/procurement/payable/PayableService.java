@@ -70,6 +70,42 @@ public class PayableService {
         repository.delete(payable);
     }
 
+    /** 按 VIN/SN 对应的采购订单逐笔冲减应付；找不到对应未付应付的金额退回资金池。 */
+    @Transactional
+    public RebateCreditResult applyRebateCredit(UUID supplierId, List<RebateCreditLine> lines) {
+        BigDecimal totalApplied = BigDecimal.ZERO.setScale(2);
+        BigDecimal totalUnapplied = BigDecimal.ZERO.setScale(2);
+        if (lines == null) return new RebateCreditResult(totalApplied, totalUnapplied);
+        for (RebateCreditLine line : lines) {
+            BigDecimal remaining = line.amount() == null ? BigDecimal.ZERO
+                    : line.amount().setScale(2, java.math.RoundingMode.HALF_UP);
+            if (remaining.signum() <= 0) continue;
+            List<Payable> candidates = repository.findOutstandingForUpdate(supplierId).stream()
+                    .filter(payable -> line.purchaseReceiptId() != null
+                            ? line.purchaseReceiptId().equals(payable.getPurchaseReceiptId())
+                            : line.purchaseOrderId() != null
+                            && line.purchaseOrderId().equals(payable.getPurchaseOrderId()))
+                    .toList();
+            for (Payable payable : candidates) {
+                if (remaining.signum() <= 0) break;
+                BigDecimal reduce = payable.applyRebateCredit(remaining);
+                if (reduce.signum() <= 0) continue;
+                repository.save(payable);
+                totalApplied = totalApplied.add(reduce);
+                remaining = remaining.subtract(reduce);
+            }
+            totalUnapplied = totalUnapplied.add(remaining);
+        }
+        return new RebateCreditResult(totalApplied.setScale(2), totalUnapplied.setScale(2));
+    }
+
+    public record RebateCreditLine(String serialNo, UUID purchaseOrderId, UUID purchaseReceiptId,
+                                   BigDecimal amount) {
+    }
+
+    public record RebateCreditResult(BigDecimal appliedAmount, BigDecimal unappliedAmount) {
+    }
+
     @Transactional(readOnly = true)
     public List<PayableApi.PayableView> list(UUID supplierId, PayableStatus status) {
         List<Payable> rows = supplierId == null ? repository.findAllByOrderByCreatedAtDesc()

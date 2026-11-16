@@ -29,7 +29,7 @@
           <template v-else-if="column.key === 'gross'">
             <span :class="Number(record.grossProfit) >= 0 ? 'positive' : 'negative'">{{ money(record.grossProfit) }}</span>
           </template>
-          <template v-else-if="column.key === 'rebate'">{{ money(record.rebateCost) }}</template>
+          <template v-else-if="column.key === 'rebate'">{{ money(record.rebateIncome) }}</template>
           <template v-else-if="column.key === 'transfer'">
             {{ money(record.transferOutAmount) }} / {{ money(record.transferInAmount) }}
           </template>
@@ -60,7 +60,7 @@ const columns = [
   { title: '净销售', key: 'netSales', width: 130 },
   { title: '销售成本', key: 'cost', width: 130 },
   { title: '毛利', key: 'gross', width: 130 },
-  { title: '政策返利成本', key: 'rebate', width: 150 },
+  { title: '厂家返利收入', key: 'rebate', width: 150 },
   { title: '调拨出/入', key: 'transfer', width: 180 },
   { title: '期末库存资金', key: 'stock', width: 150 },
 ]
@@ -84,9 +84,9 @@ async function reload() {
 }
 
 function exportCsv() {
-  const header = ['期间','采购入库','采购退货','净采购','销售出库','销售退货','净销售','销售成本','毛利','政策返利成本','调拨出','调拨入','期末库存资金']
+  const header = ['期间','采购入库','采购退货','净采购','销售出库','销售退货','净销售','销售成本','毛利','厂家返利收入','调拨出','调拨入','期末库存资金']
   const lines = rows.value.map((r) => [r.period, r.purchaseAmount, r.purchaseReturnAmount, r.netPurchaseAmount,
-    r.salesAmount, r.salesReturnAmount, r.netSalesAmount, r.costAmount, r.grossProfit, r.rebateCost,
+    r.salesAmount, r.salesReturnAmount, r.netSalesAmount, r.costAmount, r.grossProfit, r.rebateIncome,
     r.transferOutAmount, r.transferInAmount, r.stockValue])
   downloadCsv('进销存月报.csv', [header, ...lines])
 }

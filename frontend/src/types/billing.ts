@@ -10,6 +10,8 @@ export interface PurchaseRedInvoice {
   amount: number
   matchedAmount?: number
   unmatchedAmount?: number
+  payableAppliedAmount?: number
+  fundPoolAmount?: number
   taxRate?: number
   taxAmount?: number
   status: string

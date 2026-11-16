@@ -6,10 +6,17 @@ import java.util.UUID;
 /** 申报单结算端口：由 app 层适配政策模块，billing 不直接依赖 policy。 */
 public interface ClaimInvoicePort {
 
-    ClaimInvoiceInfo validateForInvoice(UUID claimId, UUID supplierId, BigDecimal amount);
+    ClaimInvoiceInfo validateForInvoice(UUID claimId, UUID supplierId, BigDecimal amount,
+                                        java.util.List<String> serialNos);
 
     void settleFromInvoice(UUID claimId, UUID invoiceId, String invoiceNo);
 
-    record ClaimInvoiceInfo(UUID claimId, String claimNo, UUID supplierId, BigDecimal confirmedAmount) {
+    record ClaimInvoiceInfo(UUID claimId, String claimNo, UUID supplierId, BigDecimal confirmedAmount,
+                            java.util.List<ClaimRebateAllocation> allocations) {
+    }
+
+    record ClaimRebateAllocation(UUID claimLineId, UUID entitlementId, String serialNo,
+                                 UUID purchaseOrderId, UUID purchaseReceiptId,
+                                 BigDecimal confirmedAmount) {
     }
 }

@@ -15,6 +15,8 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'purchaseQuantity'">{{ quantity(record.purchaseQuantity) }}</template>
           <template v-else-if="column.key === 'amount'">{{ money(record.amount) }}</template>
+          <template v-else-if="column.key === 'rebateCredit'">{{ money(record.rebateCreditAmount) }}</template>
+          <template v-else-if="column.key === 'netAmount'">{{ money(record.netAmount) }}</template>
           <template v-else-if="column.key === 'invoiced'">{{ money(record.invoiceMatchedAmount) }}</template>
           <template v-else-if="column.key === 'uninvoiced'">{{ money(record.uninvoicedAmount) }}</template>
           <template v-else-if="column.key === 'paid'">{{ money(record.paidAmount) }}</template>
@@ -63,7 +65,9 @@ const columns = [
   { title: '供应商', key: 'supplierName', dataIndex: 'supplierName', width: 190 },
   { title: '采购订单编号', key: 'orderNo', dataIndex: 'orderNo', width: 160 },
   { title: '采购数量', key: 'purchaseQuantity', width: 110, align: 'right' },
-  { title: '应付金额', key: 'amount', width: 130 },
+  { title: '采购应付', key: 'amount', width: 130 },
+  { title: '返利冲减', key: 'rebateCredit', width: 130 },
+  { title: '应付净额', key: 'netAmount', width: 130 },
   { title: '已开票', key: 'invoiced', width: 130 },
   { title: '未开票', key: 'uninvoiced', width: 130 },
   { title: '已付', key: 'paid', width: 130 },

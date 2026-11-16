@@ -15,7 +15,7 @@ public final class ReportApi {
             String period, BigDecimal purchaseAmount, BigDecimal purchaseReturnAmount, BigDecimal netPurchaseAmount,
             BigDecimal salesAmount, BigDecimal salesReturnAmount, BigDecimal netSalesAmount,
             BigDecimal costAmount, BigDecimal salesReturnCostAmount, BigDecimal grossProfit,
-            BigDecimal rebateCost, BigDecimal transferOutAmount, BigDecimal transferInAmount, BigDecimal stockValue
+            BigDecimal rebateIncome, BigDecimal transferOutAmount, BigDecimal transferInAmount, BigDecimal stockValue
     ) {
     }
 
@@ -23,8 +23,8 @@ public final class ReportApi {
             UUID productId, String productNo, String productName, BigDecimal salesQuantity,
             BigDecimal salesAmount, BigDecimal salesReturnAmount, BigDecimal netSalesAmount,
             BigDecimal costAmount, BigDecimal salesReturnCostAmount, BigDecimal netCostAmount,
-            BigDecimal grossProfit, BigDecimal grossMargin, BigDecimal rebateCost,
-            BigDecimal netProfit, BigDecimal netMargin
+            BigDecimal grossProfit, BigDecimal grossMargin, BigDecimal rebateIncome,
+            BigDecimal profitIncludingRebate, BigDecimal profitMarginIncludingRebate
     ) {
     }
 

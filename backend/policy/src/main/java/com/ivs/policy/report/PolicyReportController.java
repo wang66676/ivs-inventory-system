@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
-/** 政策成本与返利报表。 */
+/** 厂家返利与资金池报表。 */
 @RestController
 @RequestMapping("/api/ivs/policies/reports")
 public class PolicyReportController {
@@ -46,10 +46,11 @@ public class PolicyReportController {
         return service.unitCost(periodCode);
     }
 
-    @GetMapping("/cost-rate")
+    @GetMapping("/rebate-summary")
     @PreAuthorize("hasAuthority('IVS_FINANCE_READ')")
-    public List<PolicyReportApi.CostRateRow> costRate(@RequestParam(required = false) String periodCode) {
-        return service.costRate(periodCode);
+    public List<PolicyReportApi.RebateSummaryRow> rebateSummary(
+            @RequestParam(required = false) String periodCode) {
+        return service.rebateSummary(periodCode);
     }
 
     @GetMapping("/claim-differences")

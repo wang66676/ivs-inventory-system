@@ -82,6 +82,12 @@ public final class ClaimApi {
     }
 
     public record ClaimSettlementInfo(UUID claimId, String claimNo, UUID supplierId,
-                                      BigDecimal confirmedAmount, String status) {
+                                      BigDecimal confirmedAmount, String status,
+                                      List<ClaimRebateAllocation> allocations) {
+    }
+
+    public record ClaimRebateAllocation(UUID claimLineId, UUID entitlementId, String serialNo,
+                                        UUID purchaseOrderId, UUID purchaseReceiptId,
+                                        BigDecimal confirmedAmount) {
     }
 }

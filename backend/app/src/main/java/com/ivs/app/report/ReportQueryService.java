@@ -158,13 +158,13 @@ public class ReportQueryService {
             }
         }
         Map<UUID, Product> products = productMap();
-        Map<UUID, BigDecimal> rebateCosts = new HashMap<>();
+        Map<UUID, BigDecimal> rebateIncomes = new HashMap<>();
         for (PolicyCostAllocation cost : policyCostRepository.findAllByOrderByCreatedAtDesc()) {
             LocalDate date = cost.getCreatedAt().atZone(ZONE).toLocalDate();
             if (date.isBefore(from) || date.isAfter(to)) continue;
             PolicyEntitlement entitlement = entitlementRepository.findById(cost.getEntitlementId()).orElse(null);
             if (entitlement != null) {
-                rebateCosts.merge(entitlement.getProductId(), cost.getAmount(), BigDecimal::add);
+                rebateIncomes.merge(entitlement.getProductId(), cost.getAmount(), BigDecimal::add);
             }
         }
         List<ReportApi.GrossProfitRow> rows = new ArrayList<>();
@@ -174,12 +174,13 @@ public class ReportQueryService {
             BigDecimal netSales = money(agg.salesAmount.subtract(agg.salesReturnAmount));
             BigDecimal netCost = money(agg.costAmount.subtract(agg.returnCostAmount));
             BigDecimal gross = money(netSales.subtract(netCost));
-            BigDecimal rebate = money(rebateCosts.getOrDefault(entry.getKey(), BigDecimal.ZERO));
-            BigDecimal netProfit = money(gross.subtract(rebate));
+            BigDecimal rebate = money(rebateIncomes.getOrDefault(entry.getKey(), BigDecimal.ZERO));
+            BigDecimal profitIncludingRebate = money(gross.add(rebate));
             rows.add(new ReportApi.GrossProfitRow(entry.getKey(), product == null ? null : product.getProductNo(),
                     product == null ? null : product.getName(), qty(agg.salesQuantity), money(agg.salesAmount),
                     money(agg.salesReturnAmount), netSales, money(agg.costAmount), money(agg.returnCostAmount),
-                    netCost, gross, ratio(gross, netSales), rebate, netProfit, ratio(netProfit, netSales)));
+                    netCost, gross, ratio(gross, netSales), rebate, profitIncludingRebate,
+                    ratio(profitIncludingRebate, netSales)));
         }
         rows.sort(Comparator.comparing(ReportApi.GrossProfitRow::netSalesAmount,
                 Comparator.nullsLast(Comparator.reverseOrder())));

@@ -78,7 +78,7 @@ const modulePages: MenuPage[] = [
   { path: '/policy/claims', name: 'oem-claim', component: () => import('../views/policy/ClaimView.vue'), title: '申报单', description: '按厂家 + 政策 + 周期生成（可单张或合并），提交与差异登记。', permission: 'IVS_CLAIM_SUBMIT' },
   { path: '/policy/oem-confirm', name: 'oem-confirm', component: () => import('../views/policy/ClaimView.vue'), title: '厂家确认', description: '厂家确认结果登记与申报差异处置。', permission: 'IVS_CLAIM_CONFIRM', hideable: true },
   { path: '/policy/fund-pool', name: 'fund-pool', component: () => import('../views/policy/FundPoolView.vue'), title: '返利资金池', description: '一个资金池按厂家分账；入库单确认时抵扣同一厂家车款，余额分批使用，不允许预抵扣。', permission: 'IVS_FUND_POOL_VIEW' },
-  { path: '/policy/reports', name: 'policy-report', component: () => import('../views/policy/PolicyReportView.vue'), title: '政策报表', description: '返利应收账龄、额度池进度、资金池台账、单车政策成本与申报差异。', permission: 'IVS_FINANCE_READ' },
+  { path: '/policy/reports', name: 'policy-report', component: () => import('../views/policy/PolicyReportView.vue'), title: '政策报表', description: '厂家返利应收账龄、返利汇总、单车返利、资金池余额与申报差异。', permission: 'IVS_FINANCE_READ' },
 
   // 票据资金
   { path: '/billing/sales-invoices', name: 'sales-invoice', component: () => import('../views/billing/InvoiceView.vue'), title: '销项发票', description: '开票、作废与红冲（一期整车按全价开票）。', permission: 'IVS_INVOICE_WRITE' },
@@ -87,8 +87,8 @@ const modulePages: MenuPage[] = [
 
   // 报表
   { path: '/reports/monthly', name: 'report-monthly', component: () => import('../views/reports/MonthlyReportView.vue'), title: '进销存月报', description: '采购、销售、库存、返利月度汇总。', permission: 'IVS_FINANCE_READ' },
-  { path: '/reports/gross-profit', name: 'report-gross-profit', component: () => import('../views/reports/GrossProfitView.vue'), title: '毛利分析', description: '按车型/订单/期间的毛利与政策成本率。', permission: 'IVS_FINANCE_READ' },
-  { path: '/reports/unit-policy-cost', name: 'report-unit-policy-cost', component: () => import('../views/policy/PolicyReportView.vue'), title: '单车政策成本', description: '每台车：成交价、命中政策明细、返利合计、净车价。', permission: 'IVS_FINANCE_READ' },
+  { path: '/reports/gross-profit', name: 'report-gross-profit', component: () => import('../views/reports/GrossProfitView.vue'), title: '毛利分析', description: '按车型/订单/期间计算销售毛利，并单独列示厂家政策返利收入。', permission: 'IVS_FINANCE_READ' },
+  { path: '/reports/unit-policy-cost', name: 'report-unit-policy-cost', component: () => import('../views/policy/PolicyReportView.vue'), title: '单车厂家返利', description: '每台车对应的采购订单、政策、厂家确认返利、申报单和红字发票。', permission: 'IVS_FINANCE_READ' },
   { path: '/reports/stock-funds', name: 'report-stock-funds', component: () => import('../views/reports/StockFundsView.vue'), title: '库存资金占用', description: '库存资金占用与周转分析。', permission: 'IVS_FINANCE_READ' },
 ]
 

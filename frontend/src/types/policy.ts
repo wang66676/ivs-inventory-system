@@ -275,20 +275,25 @@ export interface UnitCostRow {
   purchaseOrderId?: string
   purchaseOrderNo?: string
   invoiceIssuedAt?: string
-  salePrice?: number
-  purchaseCost?: number
-  policyCost: number
-  netPrice?: number
+  claimedAmount?: number
+  confirmedAmount?: number
+  settledAmount?: number
+  claimNo?: string
+  redInvoiceNo?: string
 }
 
-export interface CostRateRow {
+export interface RebateSummaryRow {
   periodCode: string
-  productId?: string
-  productNo?: string
-  productName?: string
-  policyCost: number
-  salesRevenue: number
-  costRate: number
+  supplierId?: string
+  supplierName?: string
+  policyId?: string
+  policyName?: string
+  entitlementCount: number
+  faceAmount: number
+  claimedAmount: number
+  confirmedAmount: number
+  settledAmount: number
+  outstandingAmount: number
 }
 
 export interface ClaimDifferenceRow {

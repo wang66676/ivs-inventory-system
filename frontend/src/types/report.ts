@@ -9,7 +9,7 @@ export interface MonthlyReportRow {
   costAmount: number
   salesReturnCostAmount: number
   grossProfit: number
-  rebateCost: number
+  rebateIncome: number
   transferOutAmount: number
   transferInAmount: number
   stockValue: number
@@ -34,9 +34,9 @@ export interface GrossProfitRow {
   netCostAmount: number
   grossProfit: number
   grossMargin: number
-  rebateCost: number
-  netProfit: number
-  netMargin: number
+  rebateIncome: number
+  profitIncludingRebate: number
+  profitMarginIncludingRebate: number
 }
 
 export interface GrossProfitReport {

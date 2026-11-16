@@ -8,6 +8,7 @@ import com.ivs.shared.event.EventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,26 +16,32 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 进项（厂家）红字发票登记：登记后自动把金额写入返利资金池，
- * 形成「厂家红字 → 返利入池 → 入库单抵扣车款」的闭环。
+ * 进项（厂家）红字发票登记：先冲减对应厂家应付，未冲减完的余额再进入返利资金池，
+ * 后续可用于其他采购收货抵扣。
  */
 @Service
 public class PurchaseInvoiceApplicationService {
 
     private final PurchaseInvoiceRepository repository;
     private final RebateCreditPort rebateCreditPort;
+    private final PayableCreditPort payableCreditPort;
     private final ClaimInvoicePort claimInvoicePort;
+    private final PurchaseInvoiceRebateLineRepository rebateLineRepository;
     private final PurchaseInvoicePdfService pdfService;
     private final EventPublisher events;
 
     public PurchaseInvoiceApplicationService(PurchaseInvoiceRepository repository,
                                              RebateCreditPort rebateCreditPort,
+                                             PayableCreditPort payableCreditPort,
                                              ClaimInvoicePort claimInvoicePort,
+                                             PurchaseInvoiceRebateLineRepository rebateLineRepository,
                                              PurchaseInvoicePdfService pdfService,
                                              EventPublisher events) {
         this.repository = repository;
         this.rebateCreditPort = rebateCreditPort;
+        this.payableCreditPort = payableCreditPort;
         this.claimInvoicePort = claimInvoicePort;
+        this.rebateLineRepository = rebateLineRepository;
         this.pdfService = pdfService;
         this.events = events;
     }
@@ -52,22 +59,26 @@ public class PurchaseInvoiceApplicationService {
                 .orElseThrow(() -> new NotFoundException("进项发票", id));
     }
 
-    /** 登记厂家红字发票，并自动入池（同一事务：入池失败则发票登记回滚）。 */
+    /** 登记厂家红字发票：先自动冲减应付，剩余部分进入返利资金池。 */
     @Transactional
     public PurchaseInvoiceApi.PurchaseInvoiceView registerRed(
             PurchaseInvoiceApi.RegisterRedInvoiceCommand command) {
         if (command.supplierId() == null) {
             throw new ConflictException("SUPPLIER_REQUIRED", "请指定开票厂家");
         }
-        if (command.claimId() != null) {
-            claimInvoicePort.validateForInvoice(command.claimId(), command.supplierId(), command.amount());
-        }
+        List<String> serialNos = command.serialNos() == null ? List.of() : command.serialNos().stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toUpperCase()).distinct().toList();
+        ClaimInvoicePort.ClaimInvoiceInfo claimInfo = command.claimId() == null ? null
+                : claimInvoicePort.validateForInvoice(command.claimId(), command.supplierId(), command.amount(),
+                serialNos);
         PurchaseInvoice invoice;
         try {
             invoice = PurchaseInvoice.registerRed(
                     "PINV-R-%06d".formatted(repository.nextInvoiceSequence()), command.supplierId(),
                     command.amount(), command.taxRate(), command.originalInvoiceNo(),
-                    command.externalInvoiceNo(), command.claimId(), command.issuedAt(), command.remark());
+                    command.externalInvoiceNo(), String.join(",", serialNos), command.claimId(),
+                    command.issuedAt(), command.remark());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("PURCHASE_INVOICE_INVALID", exception.getMessage());
         }
@@ -77,12 +88,33 @@ public class PurchaseInvoiceApplicationService {
         if (saved.getClaimId() != null) {
             claimInvoicePort.settleFromInvoice(saved.getClaimId(), saved.getId(), saved.getInvoiceNo());
         }
-        rebateCreditPort.credit(saved.getSupplierId(), saved.getAmount(), "RED_INVOICE", saved.getInvoiceNo(),
-                saved.getId(), "厂家红字发票入池");
+        List<PayableCreditPort.RebateLine> rebateLines = claimInfo == null ? List.of()
+                : claimInfo.allocations().stream().map(item -> new PayableCreditPort.RebateLine(
+                        item.serialNo(), item.purchaseOrderId(), item.purchaseReceiptId(), item.confirmedAmount())).toList();
+        if (claimInfo != null) {
+            UUID invoiceId = saved.getId();
+            UUID claimId = saved.getClaimId();
+            rebateLineRepository.saveAll(claimInfo.allocations().stream()
+                    .map(item -> PurchaseInvoiceRebateLine.create(invoiceId, claimId, item.claimLineId(),
+                            item.entitlementId(), item.serialNo(), item.purchaseOrderId(), item.purchaseReceiptId(),
+                            item.confirmedAmount())).toList());
+        }
+        PayableCreditPort.CreditResult credit = rebateLines.isEmpty()
+                ? new PayableCreditPort.CreditResult(BigDecimal.ZERO.setScale(2), saved.getAmount())
+                : payableCreditPort.apply(saved.getSupplierId(), rebateLines, saved.getClaimId(),
+                saved.getInvoiceNo());
+        if (credit.unappliedAmount().signum() > 0) {
+            rebateCreditPort.credit(saved.getSupplierId(), credit.unappliedAmount(), "RED_INVOICE",
+                    saved.getInvoiceNo(), saved.getId(), "政策红字冲减应付后的剩余返利入池");
+        }
+        saved.recordSettlement(credit.appliedAmount(), credit.unappliedAmount());
+        saved = repository.save(saved);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("invoiceNo", saved.getInvoiceNo());
         payload.put("supplierId", saved.getSupplierId().toString());
         payload.put("amount", saved.getAmount());
+        payload.put("payableAppliedAmount", saved.getPayableAppliedAmount());
+        payload.put("fundPoolAmount", saved.getFundPoolAmount());
         payload.put("taxAmount", saved.getTaxAmount());
         events.publish(new EventEnvelope(UUID.randomUUID(), "PurchaseInvoiceRegistered", "PurchaseInvoice",
                 saved.getId(), saved.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));

@@ -14,8 +14,8 @@ public final class PurchaseInvoiceApi {
     public record PurchaseInvoiceView(
             UUID id, String invoiceNo, String direction, String type, String invoiceType, UUID supplierId, UUID purchaseOrderId,
             java.util.List<String> serialNos, BigDecimal amount,
-            BigDecimal matchedAmount, BigDecimal unmatchedAmount, BigDecimal taxRate, BigDecimal taxAmount,
-            String status, String originalInvoiceNo,
+            BigDecimal matchedAmount, BigDecimal unmatchedAmount, BigDecimal payableAppliedAmount,
+            BigDecimal fundPoolAmount, BigDecimal taxRate, BigDecimal taxAmount, String status, String originalInvoiceNo,
             String externalInvoiceNo, UUID claimId, Instant issuedAt, Instant createdAt,
             String pdfFileName, String extractedText, String remark
     ) {
@@ -26,8 +26,9 @@ public final class PurchaseInvoiceApi {
                             : java.util.Arrays.stream(invoice.getSerialNos().split(","))
                             .map(String::trim).filter(value -> !value.isBlank()).toList(),
                     invoice.getAmount(),
-                    invoice.getMatchedAmount(), invoice.getUnmatchedAmount(), invoice.getTaxRate(),
-                    invoice.getTaxAmount(), invoice.getStatus(), invoice.getOriginalInvoiceNo(),
+                    invoice.getMatchedAmount(), invoice.getUnmatchedAmount(), invoice.getPayableAppliedAmount(),
+                    invoice.getFundPoolAmount(), invoice.getTaxRate(), invoice.getTaxAmount(),
+                    invoice.getStatus(), invoice.getOriginalInvoiceNo(),
                     invoice.getExternalInvoiceNo(), invoice.getClaimId(), invoice.getIssuedAt(),
                     invoice.getCreatedAt(), invoice.getPdfFileName(), invoice.getExtractedText(), invoice.getRemark());
         }
@@ -35,7 +36,7 @@ public final class PurchaseInvoiceApi {
 
     public record RegisterRedInvoiceCommand(
             UUID supplierId, BigDecimal amount, BigDecimal taxRate, String originalInvoiceNo,
-            String externalInvoiceNo, UUID claimId, Instant issuedAt,
+            String externalInvoiceNo, java.util.List<String> serialNos, UUID claimId, Instant issuedAt,
             String pdfFileName, String pdfStorageKey, String extractedText, String remark
     ) {
     }
