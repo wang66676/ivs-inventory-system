@@ -1,7 +1,7 @@
 import { http } from './http'
 import type {
-  ClaimDifferenceRow, CostRateRow, Entitlement, FundLedgerReport, FundOffset, FundOffsetPreview, FundPool, FundTxn,
-  OemClaim, Policy, PoolProgressRow, PreEntitlement, ReceivableAgingRow, UnitCostRow,
+  ClaimDifferenceRow, Entitlement, FundLedgerReport, FundOffset, FundOffsetPreview, FundPool, FundTxn,
+  OemClaim, Policy, PoolProgressRow, PreEntitlement, ReceivableAgingRow, RebateSummaryRow, UnitCostRow,
 } from '../types/policy'
 
 export const policyApi = {
@@ -67,8 +67,8 @@ export const policyApi = {
     http.get<FundLedgerReport>('/ivs/policies/reports/fund-ledger', { params }).then((r) => r.data),
   reportUnitCost: (params?: { periodCode?: string }) =>
     http.get<UnitCostRow[]>('/ivs/policies/reports/unit-cost', { params }).then((r) => r.data),
-  reportCostRate: (params?: { periodCode?: string }) =>
-    http.get<CostRateRow[]>('/ivs/policies/reports/cost-rate', { params }).then((r) => r.data),
+  reportRebateSummary: (params?: { periodCode?: string }) =>
+    http.get<RebateSummaryRow[]>('/ivs/policies/reports/rebate-summary', { params }).then((r) => r.data),
   reportClaimDifferences: (params?: { supplierId?: string }) =>
     http.get<ClaimDifferenceRow[]>('/ivs/policies/reports/claim-differences', { params }).then((r) => r.data),
 }

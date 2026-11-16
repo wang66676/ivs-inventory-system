@@ -3,12 +3,14 @@ package com.ivs.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivs.billing.purchase.api.PurchaseInvoiceApi;
 import com.ivs.masterdata.SupplierType;
+import com.ivs.masterdata.product.TrackingMode;
 import com.ivs.masterdata.api.MasterdataApi;
 import com.ivs.policy.claim.api.ClaimApi;
 import com.ivs.policy.fund.api.RebateFundApi;
 import com.ivs.policy.policy.api.EntitlementApi;
 import com.ivs.policy.policy.api.PolicyApi;
 import com.ivs.policy.report.PolicyReportApi;
+import com.ivs.procurement.purchase.api.ProcurementApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,8 +49,9 @@ class ClaimWorkflowIntegrationTest {
     void 权益归集申报_厂家差异确认_红字结算入池并更新政策成本() {
         UUID supplierId = createSupplier("某整车厂 A");
         PolicyApi.PolicyView policy = publish(createPolicy(supplierId, "阶段性补贴", "10000", "100000", "MONTHLY"));
-        UUID orderId = UUID.randomUUID();
-        UUID retailId = createRetail(new BigDecimal("450000"));
+        VehicleFixture vehicle = createVehicleFixture(supplierId);
+        UUID orderId = vehicle.purchaseOrderId();
+        UUID retailId = vehicle.retailId();
         applyPre(orderId, UUID.randomUUID(), UUID.randomUUID(), List.of(policy.id()));
 
         EntitlementApi[] entitlements = generate(orderId, retailId);
@@ -86,22 +89,44 @@ class ClaimWorkflowIntegrationTest {
         assertThat(confirmed.differences().get(0).disposition()).isEqualTo("SELF_BORNE");
         assertThat(confirmed.lines().get(0).dispositionTime()).isNotNull();
 
+        Map<String, Object> mismatchBody = new HashMap<>();
+        mismatchBody.put("supplierId", supplierId.toString());
+        mismatchBody.put("amount", 9500);
+        mismatchBody.put("claimId", claim.id().toString());
+        mismatchBody.put("serialNos", List.of("LZZWRONG0000000001"));
+        var mismatch = restTemplate.postForEntity("/api/ivs/purchase-invoices/red", mismatchBody, Map.class);
+        assertThat(mismatch.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(mismatch.getBody().get("code")).isEqualTo("CLAIM_SERIAL_MISMATCH");
+
         Map<String, Object> redBody = new HashMap<>();
         redBody.put("supplierId", supplierId.toString());
         redBody.put("amount", 9500);
         redBody.put("taxRate", 0.13);
         redBody.put("externalInvoiceNo", "RED-CLAIM-001");
         redBody.put("claimId", claim.id().toString());
+        redBody.put("serialNos", List.of(vehicle.serialNo()));
         PurchaseInvoiceApi.PurchaseInvoiceView red = post("/api/ivs/purchase-invoices/red", redBody,
                 PurchaseInvoiceApi.PurchaseInvoiceView.class);
         assertThat(red.claimId()).isEqualTo(claim.id());
+        assertThat(red.serialNos()).containsExactly(vehicle.serialNo());
+        assertThat(red.payableAppliedAmount()).isEqualByComparingTo("9500.00");
+        assertThat(red.fundPoolAmount()).isEqualByComparingTo("0.00");
+
+        com.ivs.procurement.payable.api.PayableApi.PayableView[] payables = get(
+                "/api/ivs/payables?supplierId=" + supplierId,
+                com.ivs.procurement.payable.api.PayableApi.PayableView[].class);
+        assertThat(payables).hasSize(1);
+        assertThat(payables[0].amount()).isEqualByComparingTo("420000.00");
+        assertThat(payables[0].rebateCreditAmount()).isEqualByComparingTo("9500.00");
+        assertThat(payables[0].netAmount()).isEqualByComparingTo("410500.00");
+        assertThat(payables[0].outstanding()).isEqualByComparingTo("410500.00");
 
         ClaimApi.ClaimView settled = get("/api/ivs/oem-claims/" + claim.id(), ClaimApi.ClaimView.class);
         assertThat(settled.status()).isEqualTo("SETTLED");
         assertThat(settled.invoiceNo()).isEqualTo(red.invoiceNo());
 
         RebateFundApi.PoolView pool = get("/api/ivs/rebate-fund-pool", RebateFundApi.PoolView.class);
-        assertThat(pool.balanceAmount()).isEqualByComparingTo("9500.00");
+        assertThat(pool.balanceAmount()).isEqualByComparingTo("0.00");
 
         EntitlementApi entitlement = get("/api/ivs/entitlements?retailId=" + retailId,
                 EntitlementApi[].class)[0];
@@ -112,14 +137,18 @@ class ClaimWorkflowIntegrationTest {
         PolicyReportApi.UnitCostRow[] unitCosts = get("/api/ivs/policies/reports/unit-cost",
                 PolicyReportApi.UnitCostRow[].class);
         assertThat(unitCosts).hasSize(1);
-        assertThat(unitCosts[0].salePrice()).isEqualByComparingTo("450000.00");
-        assertThat(unitCosts[0].policyCost()).isEqualByComparingTo("9500.00");
-        assertThat(unitCosts[0].netPrice()).isEqualByComparingTo("440500.00");
+        assertThat(unitCosts[0].claimedAmount()).isEqualByComparingTo("10000.00");
+        assertThat(unitCosts[0].confirmedAmount()).isEqualByComparingTo("9500.00");
+        assertThat(unitCosts[0].settledAmount()).isEqualByComparingTo("9500.00");
+        assertThat(unitCosts[0].claimNo()).isEqualTo(claim.claimNo());
+        assertThat(unitCosts[0].redInvoiceNo()).isEqualTo(red.invoiceNo());
 
-        PolicyReportApi.CostRateRow[] rates = get("/api/ivs/policies/reports/cost-rate",
-                PolicyReportApi.CostRateRow[].class);
-        assertThat(rates).hasSize(1);
-        assertThat(rates[0].costRate()).isEqualByComparingTo("2.11");
+        PolicyReportApi.RebateSummaryRow[] summaries = get("/api/ivs/policies/reports/rebate-summary",
+                PolicyReportApi.RebateSummaryRow[].class);
+        assertThat(summaries).hasSize(1);
+        assertThat(summaries[0].faceAmount()).isEqualByComparingTo("10000.00");
+        assertThat(summaries[0].confirmedAmount()).isEqualByComparingTo("9500.00");
+        assertThat(summaries[0].settledAmount()).isEqualByComparingTo("9500.00");
 
         PolicyReportApi.ClaimDifferenceRow[] differences = get(
                 "/api/ivs/policies/reports/claim-differences", PolicyReportApi.ClaimDifferenceRow[].class);
@@ -157,6 +186,40 @@ class ClaimWorkflowIntegrationTest {
                 invalidConfirm, Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().get("code")).isEqualTo("CLAIM_CONFIRM_INVALID");
+    }
+
+    private VehicleFixture createVehicleFixture(UUID supplierId) {
+        String code = "CLAIM-" + UUID.randomUUID().toString().substring(0, 8);
+        MasterdataApi.CategoryView category = post("/api/ivs/product-categories", Map.of(
+                "code", code, "name", "申报红字整车", "trackingMode", TrackingMode.SERIAL.name(),
+                "statusTemplate", "VEHICLE", "unit", "台", "sortOrder", 0), MasterdataApi.CategoryView.class);
+        MasterdataApi.ProductView product = post("/api/ivs/products", Map.of(
+                "name", "申报红字整车", "categoryId", category.id().toString(), "unit", "台",
+                "minPrice", 300000, "salePriceGuide", 450000), MasterdataApi.ProductView.class);
+        MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
+                "code", "WH-" + code, "name", "申报红字仓", "type", "MAIN"), MasterdataApi.WarehouseView.class);
+        String serialNo = "LZZCLAIM" + UUID.randomUUID().toString().replace("-", "").substring(0, 9).toUpperCase();
+        MasterdataApi.SerialView serial = post("/api/ivs/product-serials", Map.of(
+                "serialNo", serialNo, "productId", product.id().toString()), MasterdataApi.SerialView.class);
+        ProcurementApi.PurchaseOrderView order = post("/api/ivs/purchase-orders", Map.of(
+                "supplierId", supplierId.toString(), "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("productId", product.id().toString(), "quantity", 1,
+                        "unitPrice", 420000))), ProcurementApi.PurchaseOrderView.class);
+        order = post("/api/ivs/purchase-orders/" + order.id() + "/approve", Map.of(),
+                ProcurementApi.PurchaseOrderView.class);
+        post("/api/ivs/purchase-orders/" + order.id() + "/receive", Map.of(
+                "warehouseId", warehouse.id().toString(),
+                "lines", List.of(Map.of("orderLineId", order.lines().get(0).id().toString(),
+                        "serialNos", List.of(serial.serialNo())))), ProcurementApi.PurchaseReceiptView.class);
+        com.ivs.retail.api.RetailApi.RetailView retail = post("/api/ivs/retails", Map.of(
+                "retailDate", "2026-10-15", "invoiceIssuedAt", "2026-10-15T02:00:00Z",
+                "serialId", serial.id().toString(), "userName", "政策红字测试用户",
+                "userMobile", "13800000000", "salePrice", 450000),
+                com.ivs.retail.api.RetailApi.RetailView.class);
+        return new VehicleFixture(order.id(), retail.id(), serial.serialNo());
+    }
+
+    private record VehicleFixture(UUID purchaseOrderId, UUID retailId, String serialNo) {
     }
 
     private UUID createSupplier(String name) {

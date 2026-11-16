@@ -25,6 +25,8 @@ public class Payable {
     @Column(name = "paid_amount", nullable = false, precision = 18, scale = 2) private BigDecimal paidAmount;
     @Column(name = "invoice_matched_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal invoiceMatchedAmount;
+    @Column(name = "rebate_credit_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal rebateCreditAmount;
     @Column(name = "due_date") private LocalDate dueDate;
     @Column(name = "last_payment_date") private LocalDate lastPaymentDate;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PayableStatus status;
@@ -51,6 +53,7 @@ public class Payable {
         value.amount = money(amount);
         value.paidAmount = money(BigDecimal.ZERO);
         value.invoiceMatchedAmount = money(BigDecimal.ZERO);
+        value.rebateCreditAmount = money(BigDecimal.ZERO);
         value.dueDate = dueDate;
         value.status = PayableStatus.OPEN;
         value.createdAt = Instant.now();
@@ -67,6 +70,7 @@ public class Payable {
         value.amount = money(amount);
         value.paidAmount = money(paidAmount);
         value.invoiceMatchedAmount = money(BigDecimal.ZERO);
+        value.rebateCreditAmount = money(BigDecimal.ZERO);
         value.purchaseQuantity = qty(BigDecimal.ZERO);
         if (value.amount.signum() <= 0) throw new IllegalArgumentException("期初应付金额必须大于 0");
         if (value.paidAmount.signum() < 0 || value.paidAmount.compareTo(value.amount) > 0) {
@@ -99,8 +103,8 @@ public class Payable {
     public void applyReturn(BigDecimal value) {
         BigDecimal reduce = money(value);
         if (reduce.signum() <= 0) return;
-        BigDecimal next = money(amount.subtract(reduce));
-        if (next.compareTo(paidAmount) < 0) next = money(paidAmount);
+        BigDecimal minimumAmount = money(paidAmount.add(rebateCreditAmount));
+        BigDecimal next = money(amount.subtract(reduce)).max(minimumAmount);
         this.amount = next;
         refreshStatus();
     }
@@ -125,6 +129,23 @@ public class Payable {
         this.remark = value == null || value.isBlank() ? null : value.trim();
     }
 
+    /** 用厂家政策红字冲减应付净额，返回本次实际冲减金额。 */
+    public BigDecimal applyRebateCredit(BigDecimal value) {
+        BigDecimal requested = money(value);
+        BigDecimal reduce = requested.min(outstanding());
+        if (reduce.signum() <= 0) return money(BigDecimal.ZERO);
+        this.rebateCreditAmount = money(rebateCreditAmount.add(reduce));
+        if (invoiceMatchedAmount.compareTo(netAmount()) > 0) {
+            invoiceMatchedAmount = netAmount();
+        }
+        refreshStatus();
+        return reduce;
+    }
+
+    public BigDecimal netAmount() {
+        return money(amount.subtract(rebateCreditAmount).max(BigDecimal.ZERO));
+    }
+
     public void matchInvoice(BigDecimal value) {
         BigDecimal target = money(value);
         if (target.signum() <= 0 || target.compareTo(uninvoicedAmount()) > 0) {
@@ -142,15 +163,16 @@ public class Payable {
     }
 
     public BigDecimal uninvoicedAmount() {
-        return money(amount.subtract(invoiceMatchedAmount).max(BigDecimal.ZERO));
+        return money(netAmount().subtract(invoiceMatchedAmount).max(BigDecimal.ZERO));
     }
 
     public BigDecimal outstanding() {
-        return money(amount.subtract(paidAmount).max(BigDecimal.ZERO));
+        return money(netAmount().subtract(paidAmount).max(BigDecimal.ZERO));
     }
 
     private void refreshStatus() {
-        this.status = paidAmount.compareTo(amount) >= 0 ? PayableStatus.SETTLED
+        int comparison = paidAmount.compareTo(netAmount());
+        this.status = comparison >= 0 ? PayableStatus.SETTLED
                 : paidAmount.signum() > 0 ? PayableStatus.PARTIALLY_PAID : PayableStatus.OPEN;
     }
 
@@ -161,6 +183,7 @@ public class Payable {
         if (amount == null) amount = money(BigDecimal.ZERO);
         if (paidAmount == null) paidAmount = money(BigDecimal.ZERO);
         if (invoiceMatchedAmount == null) invoiceMatchedAmount = money(BigDecimal.ZERO);
+        if (rebateCreditAmount == null) rebateCreditAmount = money(BigDecimal.ZERO);
         if (status == null) status = PayableStatus.OPEN;
         if (createdAt == null) createdAt = now;
         updatedAt = now;
@@ -185,6 +208,8 @@ public class Payable {
     public BigDecimal getPurchaseQuantity() { return purchaseQuantity == null ? qty(BigDecimal.ZERO) : purchaseQuantity; }
     public BigDecimal getAmount() { return amount; }
     public BigDecimal getPaidAmount() { return paidAmount; }
+    public BigDecimal getRebateCreditAmount() { return rebateCreditAmount == null ? money(BigDecimal.ZERO) : rebateCreditAmount; }
+    public BigDecimal getNetAmount() { return netAmount(); }
     public BigDecimal getInvoiceMatchedAmount() {
         return invoiceMatchedAmount == null ? money(BigDecimal.ZERO) : invoiceMatchedAmount;
     }

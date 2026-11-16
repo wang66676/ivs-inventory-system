@@ -9,7 +9,7 @@
 
     <a-card :bordered="false" style="margin-top:16px">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="资金池只接受已到账返利：厂家红字发票登记后自动入池；只能抵扣同一厂家车款，不允许预抵扣。" />
+               message="资金池只保留政策红字发票冲减应付后的剩余返利额度；只能抵扣同一厂家车款，不允许预抵扣。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="supplierId" :options="supplierOptions" allow-clear show-search

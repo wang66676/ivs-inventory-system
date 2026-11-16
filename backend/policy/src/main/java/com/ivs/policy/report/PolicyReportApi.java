@@ -43,14 +43,15 @@ public final class PolicyReportApi {
             UUID entitlementId, String entitlementNo, String status, String periodCode,
             UUID retailId, String retailNo, UUID serialId, String serialNo, String productNo, String productName,
             UUID policyId, String policyName, UUID purchaseOrderId, String purchaseOrderNo,
-            Instant invoiceIssuedAt, BigDecimal salePrice, BigDecimal purchaseCost, BigDecimal policyCost,
-            BigDecimal netPrice
+            Instant invoiceIssuedAt, BigDecimal claimedAmount, BigDecimal confirmedAmount,
+            BigDecimal settledAmount, String claimNo, String redInvoiceNo
     ) {
     }
 
-    public record CostRateRow(
-            String periodCode, UUID productId, String productNo, String productName,
-            BigDecimal policyCost, BigDecimal salesRevenue, BigDecimal costRate
+    public record RebateSummaryRow(
+            String periodCode, UUID supplierId, String supplierName, UUID policyId, String policyName,
+            int entitlementCount, BigDecimal faceAmount, BigDecimal claimedAmount,
+            BigDecimal confirmedAmount, BigDecimal settledAmount, BigDecimal outstandingAmount
     ) {
     }
 

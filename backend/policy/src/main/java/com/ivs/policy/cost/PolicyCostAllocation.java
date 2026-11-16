@@ -7,7 +7,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.UUID;
 
-/** 单车政策成本分摊：权益生成时按面值落账，厂家确认后按确认额校正。 */
+/** 单车厂家返利分摊：权益生成时按面值落账，厂家确认后按确认额校正。 */
 @Entity
 @Table(name = "policy_cost_allocation", schema = "ivs")
 public class PolicyCostAllocation {

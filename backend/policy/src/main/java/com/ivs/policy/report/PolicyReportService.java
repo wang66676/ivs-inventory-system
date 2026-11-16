@@ -3,6 +3,8 @@ package com.ivs.policy.report;
 import com.ivs.policy.claim.OemClaim;
 import com.ivs.policy.claim.OemClaimDifference;
 import com.ivs.policy.claim.OemClaimDifferenceRepository;
+import com.ivs.policy.claim.OemClaimLine;
+import com.ivs.policy.claim.OemClaimLineRepository;
 import com.ivs.policy.claim.OemClaimRepository;
 import com.ivs.policy.cost.PolicyCostAllocation;
 import com.ivs.policy.cost.PolicyCostAllocationRepository;
@@ -27,7 +29,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
-/** 返利应收、额度池、资金池、单车政策成本与申报差异报表。 */
+/** 厂家返利应收、返利汇总、单车返利、资金池与申报差异报表。 */
 @Service
 public class PolicyReportService {
 
@@ -40,6 +42,7 @@ public class PolicyReportService {
     private final PolicySubsidyPoolUsageRepository poolUsageRepository;
     private final PolicyCostAllocationRepository costRepository;
     private final OemClaimRepository claimRepository;
+    private final OemClaimLineRepository claimLineRepository;
     private final OemClaimDifferenceRepository differenceRepository;
     private final RebateFundService fundService;
     private final PolicyReferencePort references;
@@ -50,6 +53,7 @@ public class PolicyReportService {
                                PolicySubsidyPoolUsageRepository poolUsageRepository,
                                PolicyCostAllocationRepository costRepository,
                                OemClaimRepository claimRepository,
+                               OemClaimLineRepository claimLineRepository,
                                OemClaimDifferenceRepository differenceRepository,
                                RebateFundService fundService,
                                PolicyReferencePort references) {
@@ -59,6 +63,7 @@ public class PolicyReportService {
         this.poolUsageRepository = poolUsageRepository;
         this.costRepository = costRepository;
         this.claimRepository = claimRepository;
+        this.claimLineRepository = claimLineRepository;
         this.differenceRepository = differenceRepository;
         this.fundService = fundService;
         this.references = references;
@@ -132,8 +137,8 @@ public class PolicyReportService {
             PolicyReferencePort.RetailInfo retail = references.retail(cost.getRetailId());
             PolicyReferencePort.PurchaseOrderInfo purchaseOrder = retail == null ? null
                     : references.purchaseOrderBySerialNo(retail.serialNo());
-            BigDecimal sale = retail == null ? null : retail.salePrice();
-            BigDecimal net = sale == null ? null : sale.subtract(cost.getAmount()).setScale(2, RoundingMode.HALF_UP);
+            OemClaimLine claimLine = claimLineRepository.findByEntitlementId(cost.getEntitlementId()).orElse(null);
+            OemClaim claim = claimLine == null ? null : claimRepository.findById(claimLine.getClaimId()).orElse(null);
             rows.add(new PolicyReportApi.UnitCostRow(cost.getEntitlementId(),
                     entitlement == null ? null : entitlement.getEntitlementNo(),
                     entitlement == null ? null : entitlement.getStatus(), cost.getPeriodCode(), cost.getRetailId(),
@@ -145,41 +150,43 @@ public class PolicyReportService {
                     purchaseOrder == null ? null
                             : purchaseOrder.externalOrderNo() != null ? purchaseOrder.externalOrderNo()
                             : purchaseOrder.orderNo(),
-                    retail == null ? null : retail.invoiceIssuedAt(), sale,
-                    purchaseOrder == null ? null : purchaseOrder.purchasePrice(), cost.getAmount(), net));
+                    retail == null ? null : retail.invoiceIssuedAt(),
+                    entitlement == null ? null : entitlement.getClaimedAmount(),
+                    entitlement == null ? null : entitlement.getConfirmedAmount(),
+                    entitlement == null ? null : entitlement.getSettledAmount(),
+                    claim == null ? null : claim.getClaimNo(),
+                    claim == null ? null : claim.getInvoiceNo()));
         }
         return rows;
     }
 
     @Transactional(readOnly = true)
-    public List<PolicyReportApi.CostRateRow> costRate(String periodCode) {
+    public List<PolicyReportApi.RebateSummaryRow> rebateSummary(String periodCode) {
         Map<UUID, PromotionPolicy> policies = policyMap();
-        Map<CostGroupKey, CostAggregate> groups = new LinkedHashMap<>();
-        for (PolicyCostAllocation cost : costRepository.findAllByOrderByCreatedAtDesc()) {
-            if (periodCode != null && !periodCode.isBlank() && !periodCode.equals(cost.getPeriodCode())) continue;
-            PolicyEntitlement entitlement = entitlementRepository.findById(cost.getEntitlementId()).orElse(null);
-            if (entitlement == null) continue;
-            PolicyReferencePort.RetailInfo retail = references.retail(cost.getRetailId());
-            UUID productId = entitlement.getProductId();
-            CostGroupKey key = new CostGroupKey(cost.getPeriodCode(), productId,
-                    retail == null ? null : retail.productNo(), retail == null ? null : retail.productName());
-            CostAggregate aggregate = groups.computeIfAbsent(key, ignored -> new CostAggregate());
-            aggregate.policyCost = aggregate.policyCost.add(cost.getAmount());
-            if (cost.getRetailId() != null && retail != null && retail.salePrice() != null
-                    && aggregate.retailIds.add(cost.getRetailId())) {
-                aggregate.revenue = aggregate.revenue.add(retail.salePrice());
-            }
+        Map<SummaryKey, List<PolicyEntitlement>> groups = new LinkedHashMap<>();
+        for (PolicyEntitlement entitlement : entitlementRepository.findAllByOrderByCreatedAtDesc()) {
+            if (periodCode != null && !periodCode.isBlank() && !periodCode.equals(entitlement.getPeriodCode())) continue;
+            SummaryKey key = new SummaryKey(entitlement.getSupplierId(), entitlement.getPolicyId(),
+                    entitlement.getPeriodCode());
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(entitlement);
         }
-        List<PolicyReportApi.CostRateRow> rows = new ArrayList<>();
-        for (Map.Entry<CostGroupKey, CostAggregate> entry : groups.entrySet()) {
-            CostGroupKey key = entry.getKey();
-            CostAggregate aggregate = entry.getValue();
-            rows.add(new PolicyReportApi.CostRateRow(key.periodCode(), key.productId(), key.productNo(),
-                    key.productName(), money(aggregate.policyCost), money(aggregate.revenue),
-                    ratio(aggregate.policyCost, aggregate.revenue)));
+        List<PolicyReportApi.RebateSummaryRow> rows = new ArrayList<>();
+        for (Map.Entry<SummaryKey, List<PolicyEntitlement>> entry : groups.entrySet()) {
+            SummaryKey key = entry.getKey();
+            PromotionPolicy policy = policies.get(key.policyId());
+            BigDecimal face = sum(entry.getValue(), PolicyEntitlement::getFaceAmount);
+            BigDecimal claimed = sum(entry.getValue(), PolicyEntitlement::getClaimedAmount);
+            BigDecimal confirmed = sum(entry.getValue(), PolicyEntitlement::getConfirmedAmount);
+            BigDecimal settled = sum(entry.getValue(), PolicyEntitlement::getSettledAmount);
+            BigDecimal outstanding = face.subtract(settled).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+            rows.add(new PolicyReportApi.RebateSummaryRow(key.periodCode(), key.supplierId(),
+                    references.supplierName(key.supplierId()), key.policyId(),
+                    policy == null ? null : policy.getName(), entry.getValue().size(), face, claimed,
+                    confirmed, settled, outstanding));
         }
-        rows.sort(Comparator.comparing(PolicyReportApi.CostRateRow::periodCode).thenComparing(
-                PolicyReportApi.CostRateRow::productNo, Comparator.nullsLast(String::compareTo)));
+        rows.sort(Comparator.comparing(PolicyReportApi.RebateSummaryRow::periodCode)
+                .thenComparing(PolicyReportApi.RebateSummaryRow::supplierName,
+                        Comparator.nullsLast(String::compareTo)));
         return rows;
     }
 
@@ -243,12 +250,6 @@ public class PolicyReportService {
     private record GroupKey(UUID supplierId, UUID policyId, String periodCode) {
     }
 
-    private record CostGroupKey(String periodCode, UUID productId, String productNo, String productName) {
-    }
-
-    private static final class CostAggregate {
-        private BigDecimal policyCost = BigDecimal.ZERO;
-        private BigDecimal revenue = BigDecimal.ZERO;
-        private final Set<UUID> retailIds = new HashSet<>();
+    private record SummaryKey(UUID supplierId, UUID policyId, String periodCode) {
     }
 }

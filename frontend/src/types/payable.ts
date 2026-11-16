@@ -10,6 +10,8 @@ export interface Payable {
   receiptNo?: string
   purchaseQuantity: number
   amount: number
+  rebateCreditAmount: number
+  netAmount: number
   invoiceMatchedAmount?: number
   uninvoicedAmount?: number
   paidAmount: number

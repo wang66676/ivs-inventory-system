@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.web.multipart.MultipartFile;
 
-/** 进项发票：登记厂家红字（登记即入返利资金池）。 */
+/** 进项发票：政策红字按 VIN/SN 冲减厂家应付，剩余额度入返利资金池。 */
 @RestController
 @RequestMapping("/api/ivs/purchase-invoices")
 public class PurchaseInvoiceController {

@@ -84,7 +84,7 @@ public class PolicyReferenceAdapter implements PolicyReferencePort {
             PurchaseOrder order = purchaseOrderRepository.findById(orderLine.getOrderId()).orElse(null);
             if (order != null) {
                 return new PurchaseOrderInfo(order.getId(), order.getOrderNo(), order.getExternalOrderNo(),
-                        receiptLine.getUnitPrice());
+                        receiptLine.getUnitPrice(), receiptLine.getReceiptId());
             }
         }
         return null;

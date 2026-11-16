@@ -24,7 +24,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 
-/** 实销后兑现申请、申报单归集、厂家确认、差异处置与红字结算。 */
+/** 实销后兑现申请、申报单归集、厂家确认、差异处置与按 VIN/SN 红字结算。 */
 @Service
 public class ClaimApplicationService {
 
@@ -181,7 +181,7 @@ public class ClaimApplicationService {
         return view;
     }
 
-    /** 厂家确认：逐行登记确认额；差异行强制原因与处置，并同步政策成本。 */
+    /** 厂家确认：逐行登记确认额；差异行强制原因与处置，并同步厂家返利金额。 */
     @Transactional
     public ClaimApi.ClaimView confirm(UUID id, ClaimApi.ConfirmClaimCommand command) {
         OemClaim claim = find(id);
@@ -276,7 +276,8 @@ public class ClaimApplicationService {
 
     /** 红字登记前校验：申报单已确认、厂家一致、红字金额等于厂家确认额。 */
     @Transactional(readOnly = true)
-    public ClaimApi.ClaimSettlementInfo validateForInvoice(UUID claimId, UUID supplierId, BigDecimal amount) {
+    public ClaimApi.ClaimSettlementInfo validateForInvoice(UUID claimId, UUID supplierId, BigDecimal amount,
+                                                            List<String> serialNos) {
         OemClaim claim = find(claimId);
         if (!claim.getSupplierId().equals(supplierId)) {
             throw new ConflictException("CLAIM_SUPPLIER_MISMATCH", "红字发票厂家与申报单厂家不一致");
@@ -289,11 +290,39 @@ public class ClaimApplicationService {
             throw new ConflictException("CLAIM_INVOICE_AMOUNT_MISMATCH",
                     "红字发票金额必须等于厂家确认额 " + claim.getConfirmedAmount());
         }
+        List<ClaimApi.ClaimRebateAllocation> allocations = new ArrayList<>();
+        LinkedHashSet<String> expectedSerials = new LinkedHashSet<>();
+        for (OemClaimLine line : lineRepository.findByClaimIdOrderByCreatedAtAsc(claimId)) {
+            if (line.getConfirmedAmount().signum() <= 0 || line.getRetailId() == null) continue;
+            PolicyReferencePort.RetailInfo retail = references.retail(line.getRetailId());
+            if (retail == null || retail.serialNo() == null || retail.serialNo().isBlank()) {
+                throw new ConflictException("CLAIM_SERIAL_MISSING", "申报明细缺少对应 VIN/SN，不能红冲");
+            }
+            PolicyReferencePort.PurchaseOrderInfo order = references.purchaseOrderBySerialNo(retail.serialNo());
+            String serialNo = retail.serialNo().trim().toUpperCase();
+            expectedSerials.add(serialNo);
+            allocations.add(new ClaimApi.ClaimRebateAllocation(line.getId(), line.getEntitlementId(),
+                    serialNo, order == null ? null : order.orderId(),
+                    order == null ? null : order.purchaseReceiptId(), line.getConfirmedAmount()));
+        }
+        LinkedHashSet<String> requestedSerials = new LinkedHashSet<>();
+        if (serialNos != null) {
+            for (String serialNo : serialNos) {
+                if (serialNo != null && !serialNo.isBlank()) requestedSerials.add(serialNo.trim().toUpperCase());
+            }
+        }
+        if (expectedSerials.isEmpty() || requestedSerials.isEmpty()) {
+            throw new ConflictException("CLAIM_SERIAL_REQUIRED", "政策红字必须按申报单对应 VIN/SN 冲红");
+        }
+        if (!expectedSerials.equals(requestedSerials)) {
+            throw new ConflictException("CLAIM_SERIAL_MISMATCH",
+                    "红字发票 VIN/SN 必须与申报单全部确认 VIN/SN 一致");
+        }
         return new ClaimApi.ClaimSettlementInfo(claim.getId(), claim.getClaimNo(), claim.getSupplierId(),
-                claim.getConfirmedAmount(), claim.getStatus());
+                claim.getConfirmedAmount(), claim.getStatus(), List.copyOf(allocations));
     }
 
-    /** 红字发票登记后：权益已兑现、成本按确认额落账、申报单转已结算。 */
+    /** 红字发票登记后：权益已兑现、厂家返利按确认额落账、申报单转已结算。 */
     @Transactional
     public void settleFromInvoice(UUID claimId, UUID invoiceId, String invoiceNo) {
         OemClaim claim = find(claimId);

@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="warning" show-icon style="margin-bottom:12px"
-               message="厂家红字发票登记后自动进入返利资金池。关联申报单时，红字金额必须等于厂家确认额，登记成功后申报单与权益同步结算。" />
+               message="政策红字发票登记后先自动冲减对应厂家的应付账款；没有可冲减余额的剩余部分才进入返利资金池。关联申报单时，红字金额必须等于厂家确认额。" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">登记厂家红字</a-button>
         <a-button @click="reload">刷新</a-button>
@@ -14,11 +14,19 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'supplier'">{{ supplierName(record.supplierId) }}</template>
           <template v-else-if="column.key === 'amount'">{{ money(record.amount) }}</template>
+          <template v-else-if="column.key === 'payableApplied'">{{ money(record.payableAppliedAmount) }}</template>
+          <template v-else-if="column.key === 'fundPool'">{{ money(record.fundPoolAmount) }}</template>
           <template v-else-if="column.key === 'tax'">{{ money(record.taxAmount) }}（{{ rate(record.taxRate) }}）</template>
           <template v-else-if="column.key === 'type'"><a-tag color="red">进项红字</a-tag></template>
           <template v-else-if="column.key === 'claim'">
             <span v-if="record.claimId">{{ claimLabel(record.claimId) }}</span>
             <span v-else class="sub">未关联申报单</span>
+          </template>
+          <template v-else-if="column.key === 'serialNos'">
+            <a-space v-if="record.serialNos?.length" wrap size="small">
+              <a-tag v-for="serialNo in record.serialNos" :key="serialNo">{{ serialNo }}</a-tag>
+            </a-space>
+            <span v-else>-</span>
           </template>
           <template v-else-if="column.key === 'issuedAt'">{{ formatDate(record.issuedAt) }}</template>
           <template v-else-if="column.key === 'pdf'">
@@ -32,7 +40,7 @@
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="formOpen" title="登记厂家红字发票" :confirm-loading="saving" ok-text="登记并自动入池"
+    <a-modal v-model:open="formOpen" title="登记厂家红字发票" :confirm-loading="saving" ok-text="登记并冲减应付"
              cancel-text="取消" width="680px" @ok="save">
       <a-form layout="vertical">
         <a-upload :before-upload="extractPdf" :show-upload-list="false" accept=".pdf,application/pdf"
@@ -46,6 +54,12 @@
             <a-form-item label="关联申报单">
               <a-select v-model:value="form.claimId" :options="claimOptions" allow-clear show-search
                         placeholder="可选：选择后自动带出确认额" @change="onClaimChange" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="24">
+            <a-form-item label="VIN/SN（按对应 VIN 冲减采购应付）" required>
+              <a-select v-model:value="form.serialNos" mode="tags" :options="claimSerialOptions"
+                        :disabled="!!form.claimId" show-search placeholder="选择申报单或手工输入 VIN/SN" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -101,14 +115,30 @@ const claimOptions = computed(() => claims.value.filter((claim) => ["CONFIRMED",
   label: `${claim.claimNo} · ${claim.supplierName || ''} · ${money(claim.confirmedAmount)}`,
   value: claim.id,
 })))
+const claimSerialOptions = computed(() => {
+  const claim = claims.value.find((item) => item.id === form.claimId)
+  if (!claim) return []
+  const values = new Map<string, number>()
+  for (const line of claim.lines || []) {
+    if (!line.serialNo || Number(line.confirmedAmount || 0) <= 0) continue
+    values.set(line.serialNo, (values.get(line.serialNo) || 0) + Number(line.confirmedAmount || 0))
+  }
+  return [...values.entries()].map(([serialNo, amount]) => ({
+    label: `${serialNo}（确认返利 ${money(amount)}）`,
+    value: serialNo,
+  }))
+})
 const columns = [
   { title: '内部发票号', key: 'invoiceNo', dataIndex: 'invoiceNo', width: 150 },
   { title: '类型', key: 'type', width: 100 },
   { title: '厂家', key: 'supplier', width: 190 },
-  { title: '金额', key: 'amount', width: 130 },
+  { title: '红字金额', key: 'amount', width: 130 },
+  { title: '冲减应付', key: 'payableApplied', width: 130 },
+  { title: '剩余入池', key: 'fundPool', width: 130 },
   { title: '税额', key: 'tax', width: 170 },
   { title: '原蓝票号', key: 'originalInvoiceNo', dataIndex: 'originalInvoiceNo', width: 150 },
   { title: '外部票号', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 150 },
+  { title: 'VIN/SN', key: 'serialNos', width: 240 },
   { title: '关联申报单', key: 'claim', width: 180 },
   { title: '状态', key: 'status', dataIndex: 'status', width: 100 },
   { title: '开票日期', key: 'issuedAt', width: 130 },
@@ -125,7 +155,7 @@ function formatTime(value: string) { return value ? value.replace('T', ' ').slic
 
 function openCreate() {
   Object.keys(form).forEach((key) => delete form[key])
-  Object.assign(form, { taxRate: 0.13, amount: 0, issuedAt: dayjs() })
+  Object.assign(form, { taxRate: 0.13, amount: 0, issuedAt: dayjs(), serialNos: [] })
   pdfExtraction.value = undefined
   formOpen.value = true
 }
@@ -135,6 +165,10 @@ function onClaimChange(claimId?: string) {
   if (!claim) return
   form.supplierId = claim.supplierId
   form.amount = Number(claim.confirmedAmount)
+  form.serialNos = [...new Set((claim.lines || [])
+    .filter((line) => Number(line.confirmedAmount || 0) > 0)
+    .map((line) => line.serialNo)
+    .filter(Boolean))]
 }
 
 async function extractPdf(file: File) {
@@ -181,6 +215,7 @@ async function save() {
   if (!form.supplierId || !form.amount || Number(form.amount) <= 0) {
     message.warning('请选择厂家并填写红字金额'); return
   }
+  if (!form.serialNos?.length) { message.warning('请至少选择一个对应 VIN/SN'); return }
   if (!form.issuedAt) { message.warning('请选择开票日期'); return }
   if (form.claimId) {
     const claim = claims.value.find((item) => item.id === form.claimId)
@@ -193,6 +228,7 @@ async function save() {
     const invoice = await purchaseInvoiceApi.registerRed({
       supplierId: form.supplierId, amount: form.amount, taxRate: form.taxRate,
       originalInvoiceNo: form.originalInvoiceNo || null, externalInvoiceNo: form.externalInvoiceNo || null,
+      serialNos: form.serialNos,
       claimId: form.claimId || null,
       issuedAt: dayjs(form.issuedAt).startOf('day').toDate().toISOString(),
       pdfFileName: form.pdfFileName || null,
@@ -200,7 +236,7 @@ async function save() {
       extractedText: form.extractedText || null,
       remark: form.remark || null,
     })
-    message.success(`红字 ${invoice.invoiceNo} 已登记并入池 ${money(invoice.amount)}`)
+    message.success(`红字 ${invoice.invoiceNo} 已登记：冲减应付 ${money(invoice.payableAppliedAmount)}，剩余入池 ${money(invoice.fundPoolAmount)}`)
     formOpen.value = false
     await reload()
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }

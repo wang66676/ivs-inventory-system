@@ -10,10 +10,10 @@
         <a-col :span="6"><a-card size="small"><a-statistic title="销售收入" :value="totals.sales" :precision="2" prefix="¥" /></a-card></a-col>
         <a-col :span="6"><a-card size="small"><a-statistic title="销售成本" :value="totals.cost" :precision="2" prefix="¥" /></a-card></a-col>
         <a-col :span="6"><a-card size="small"><a-statistic title="毛利" :value="totals.gross" :precision="2" prefix="¥" /></a-card></a-col>
-        <a-col :span="6"><a-card size="small"><a-statistic title="政策后净利" :value="totals.netProfit" :precision="2" prefix="¥" /></a-card></a-col>
+        <a-col :span="6"><a-card size="small"><a-statistic title="含厂家返利利润" :value="totals.netProfit" :precision="2" prefix="¥" /></a-card></a-col>
       </a-row>
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="毛利按商品汇总销售出库与销售退货，成本来自库存结转；政策后净利扣除本期间政策返利成本。" />
+               message="销售毛利只按销售出库与销售退货计算；厂家政策返利作为单独收入加计，不冲减销售金额或成交价。" />
       <a-table :data-source="rows" :columns="columns" row-key="productId" size="middle"
                :pagination="{ pageSize: 20 }" :scroll="{ x: 1700 }">
         <template #bodyCell="{ column, record }">
@@ -29,9 +29,9 @@
               {{ Number(record.grossMargin).toFixed(2) }}%
             </a-tag>
           </template>
-          <template v-else-if="column.key === 'rebate'">{{ money(record.rebateCost) }}</template>
-          <template v-else-if="column.key === 'netProfit'">{{ money(record.netProfit) }}</template>
-          <template v-else-if="column.key === 'netMargin'">{{ Number(record.netMargin).toFixed(2) }}%</template>
+          <template v-else-if="column.key === 'rebate'">{{ money(record.rebateIncome) }}</template>
+          <template v-else-if="column.key === 'netProfit'">{{ money(record.profitIncludingRebate) }}</template>
+          <template v-else-if="column.key === 'netMargin'">{{ Number(record.profitMarginIncludingRebate).toFixed(2) }}%</template>
         </template>
       </a-table>
     </a-card>
@@ -56,15 +56,15 @@ const columns = [
   { title: '净成本', key: 'cost', width: 130 },
   { title: '毛利', key: 'gross', width: 130 },
   { title: '毛利率', key: 'margin', width: 100 },
-  { title: '政策返利成本', key: 'rebate', width: 150 },
-  { title: '政策后净利', key: 'netProfit', width: 140 },
-  { title: '净利率', key: 'netMargin', width: 100 },
+  { title: '厂家返利收入', key: 'rebate', width: 150 },
+  { title: '含返利利润', key: 'netProfit', width: 140 },
+  { title: '含返利率', key: 'netMargin', width: 100 },
 ]
 const totals = computed(() => rows.value.reduce((acc, row) => ({
   sales: acc.sales + Number(row.netSalesAmount),
   cost: acc.cost + Number(row.netCostAmount),
   gross: acc.gross + Number(row.grossProfit),
-  netProfit: acc.netProfit + Number(row.netProfit),
+  netProfit: acc.netProfit + Number(row.profitIncludingRebate),
 }), { sales: 0, cost: 0, gross: 0, netProfit: 0 }))
 
 function money(value?: number) { return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
@@ -79,10 +79,10 @@ async function reload() {
 }
 
 function exportCsv() {
-  const header = ['商品编码','商品名称','销售数量','销售金额','退货金额','净销售','净成本','毛利','毛利率%','政策返利成本','政策后净利','净利率%']
+  const header = ['商品编码','商品名称','销售数量','销售金额','退货金额','净销售','净成本','毛利','毛利率%','厂家返利收入','含返利利润','含返利率%']
   const lines = rows.value.map((r) => [r.productNo, r.productName, r.salesQuantity, r.salesAmount,
-    r.salesReturnAmount, r.netSalesAmount, r.netCostAmount, r.grossProfit, r.grossMargin, r.rebateCost,
-    r.netProfit, r.netMargin])
+    r.salesReturnAmount, r.netSalesAmount, r.netCostAmount, r.grossProfit, r.grossMargin, r.rebateIncome,
+    r.profitIncludingRebate, r.profitMarginIncludingRebate])
   const csv = [header, ...lines].map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
   const link = document.createElement('a')

@@ -26,6 +26,10 @@ public class PurchaseInvoice {
     @Column(name = "tax_rate", precision = 8, scale = 4) private BigDecimal taxRate;
     @Column(name = "tax_amount", precision = 18, scale = 2) private BigDecimal taxAmount;
     @Column(nullable = false, length = 20) private String status;
+    @Column(name = "payable_applied_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal payableAppliedAmount;
+    @Column(name = "fund_pool_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal fundPoolAmount;
     @Column(name = "claim_id") private UUID claimId;
     @Column(name = "external_invoice_no", length = 100) private String externalInvoiceNo;
     @Column(name = "issued_at") private Instant issuedAt;
@@ -42,7 +46,7 @@ public class PurchaseInvoice {
 
     public static PurchaseInvoice registerRed(String invoiceNo, UUID supplierId, BigDecimal amount,
                                               BigDecimal taxRate, String originalInvoiceNo, String externalInvoiceNo,
-                                              UUID claimId, Instant issuedAt, String remark) {
+                                              String serialNos, UUID claimId, Instant issuedAt, String remark) {
         PurchaseInvoice invoice = new PurchaseInvoice();
         invoice.id = UUID.randomUUID();
         invoice.invoiceNo = invoiceNo;
@@ -56,6 +60,9 @@ public class PurchaseInvoice {
         invoice.taxRate = taxRate;
         invoice.taxAmount = taxAmountOf(invoice.amount, taxRate);
         invoice.status = "ISSUED";
+        invoice.payableAppliedAmount = money(BigDecimal.ZERO);
+        invoice.fundPoolAmount = money(BigDecimal.ZERO);
+        invoice.serialNos = serialNos == null || serialNos.isBlank() ? null : serialNos.trim();
         invoice.originalInvoiceNo = originalInvoiceNo;
         invoice.externalInvoiceNo = externalInvoiceNo;
         invoice.claimId = claimId;
@@ -84,12 +91,19 @@ public class PurchaseInvoice {
         invoice.taxAmount = taxAmountOf(invoice.amount, taxRate);
         invoice.status = "ISSUED";
         invoice.matchedAmount = money(BigDecimal.ZERO);
+        invoice.payableAppliedAmount = money(BigDecimal.ZERO);
+        invoice.fundPoolAmount = money(BigDecimal.ZERO);
         invoice.externalInvoiceNo = externalInvoiceNo;
         invoice.issuedAt = issuedAt == null ? Instant.now() : issuedAt;
         invoice.remark = remark;
         invoice.createdAt = Instant.now();
         invoice.updatedAt = invoice.createdAt;
         return invoice;
+    }
+
+    public void recordSettlement(BigDecimal payableAppliedAmount, BigDecimal fundPoolAmount) {
+        this.payableAppliedAmount = money(payableAppliedAmount);
+        this.fundPoolAmount = money(fundPoolAmount);
     }
 
     public void attachPdf(String fileName, String storageKey, String extractedText) {
@@ -130,6 +144,8 @@ public class PurchaseInvoice {
         if (id == null) id = UUID.randomUUID();
         if (status == null) status = "ISSUED";
         if (matchedAmount == null) matchedAmount = money(BigDecimal.ZERO);
+        if (payableAppliedAmount == null) payableAppliedAmount = money(BigDecimal.ZERO);
+        if (fundPoolAmount == null) fundPoolAmount = money(BigDecimal.ZERO);
         if (createdAt == null) createdAt = now;
         updatedAt = now;
     }
@@ -151,6 +167,8 @@ public class PurchaseInvoice {
     public BigDecimal getTaxRate() { return taxRate; }
     public BigDecimal getTaxAmount() { return taxAmount; }
     public String getStatus() { return status; }
+    public BigDecimal getPayableAppliedAmount() { return payableAppliedAmount == null ? money(BigDecimal.ZERO) : payableAppliedAmount; }
+    public BigDecimal getFundPoolAmount() { return fundPoolAmount == null ? money(BigDecimal.ZERO) : fundPoolAmount; }
     public UUID getClaimId() { return claimId; }
     public String getExternalInvoiceNo() { return externalInvoiceNo; }
     public Instant getIssuedAt() { return issuedAt; }

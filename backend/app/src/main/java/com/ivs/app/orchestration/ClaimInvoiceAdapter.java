@@ -19,9 +19,13 @@ public class ClaimInvoiceAdapter implements ClaimInvoicePort {
     }
 
     @Override
-    public ClaimInvoiceInfo validateForInvoice(UUID claimId, UUID supplierId, BigDecimal amount) {
-        ClaimApi.ClaimSettlementInfo info = claimService.validateForInvoice(claimId, supplierId, amount);
-        return new ClaimInvoiceInfo(info.claimId(), info.claimNo(), info.supplierId(), info.confirmedAmount());
+    public ClaimInvoiceInfo validateForInvoice(UUID claimId, UUID supplierId, BigDecimal amount,
+                                                java.util.List<String> serialNos) {
+        ClaimApi.ClaimSettlementInfo info = claimService.validateForInvoice(claimId, supplierId, amount, serialNos);
+        return new ClaimInvoiceInfo(info.claimId(), info.claimNo(), info.supplierId(), info.confirmedAmount(),
+                info.allocations().stream().map(item -> new ClaimRebateAllocation(item.claimLineId(),
+                        item.entitlementId(), item.serialNo(), item.purchaseOrderId(), item.purchaseReceiptId(),
+                        item.confirmedAmount())).toList());
     }
 
     @Override
