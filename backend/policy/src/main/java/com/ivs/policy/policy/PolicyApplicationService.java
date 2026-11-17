@@ -90,34 +90,69 @@ public class PolicyApplicationService {
 
     @Transactional
     public PolicyApi.PolicyView create(PolicyApi.SavePolicyCommand command) {
-        if (command.effFrom() == null || command.effTo() == null) {
-            throw new ConflictException("POLICY_EFFECTIVE_REQUIRED", "请填写政策生效与失效日期");
-        }
-        if (command.effTo().isBefore(command.effFrom())) {
-            throw new ConflictException("POLICY_EFFECTIVE_INVALID", "失效日期不能早于生效日期");
-        }
+        validatePolicyCommand(command);
         String policyNo = "POL-%06d".formatted(policyRepository.nextPolicySequence());
         PromotionPolicy policy = PromotionPolicy.create(policyNo, requireText(command.name(), "政策名称不能为空"),
                 defaultValue(command.policyType(), "PHASE_SUBSIDY"), command.categoryId(), command.supplierId(),
                 productIdsJson(command.productIds()), defaultValue(command.benefitType(), "AMOUNT"),
                 requireAmount(command.benefitValue(), "政策金额/比例不能为空"), command.maxAmount(),
                 command.effFrom(), command.effTo(), defaultValue(command.referenceDateType(), "RETAIL_DATE"),
-                defaultValue(command.claimCycle(), "MONTHLY"),
+                normalizeClaimCycle(command.claimCycle()),
                 command.claimCutoffDay() == null ? 5 : command.claimCutoffDay(),
                 command.priority() == null ? 0 : command.priority(),
                 defaultValue(command.stackingRule(), "ADDITIVE"), "OEM", "PURCHASE_COST", command.remark());
         PromotionPolicy saved = policyRepository.save(policy);
-        LimitType limitType = command.limitType() == null ? LimitType.AMOUNT : command.limitType();
-        if (limitType == LimitType.AMOUNT || limitType == LimitType.AMOUNT_AND_CONDITION) {
-            if (command.totalAmount() == null || command.totalAmount().signum() <= 0) {
-                throw new ConflictException("POOL_TOTAL_REQUIRED", "金额限制的政策必须填写额度池总额");
-            }
-        }
+        LimitType limitType = normalizedLimitType(command);
+        validatePoolConfiguration(command, limitType);
         PolicySubsidyPool pool = PolicySubsidyPool.create(saved.getId(), limitType, command.totalAmount(),
                 command.perUnitAmount(), command.conditionDesc(), command.poolEffectiveFrom(),
                 command.poolEffectiveTo());
         poolRepository.save(pool);
-        return PolicyApi.PolicyView.from(saved, pool);
+        return toView(saved);
+    }
+
+    /** 草稿政策可编辑；保存时同步更新政策与额度池，并取消旧的发布审批待办。 */
+    @Transactional
+    public PolicyApi.PolicyView update(UUID id, PolicyApi.SavePolicyCommand command) {
+        validatePolicyCommand(command);
+        PromotionPolicy policy = find(id);
+        if (policy.getStatus() != PolicyStatus.DRAFT) {
+            throw new ConflictException("POLICY_STATUS_INVALID", "只有草稿政策可以编辑");
+        }
+        LimitType limitType = normalizedLimitType(command);
+        validatePoolConfiguration(command, limitType);
+        try {
+            policy.updateDraft(requireText(command.name(), "政策名称不能为空"),
+                    defaultValue(command.policyType(), "PHASE_SUBSIDY"), command.categoryId(), command.supplierId(),
+                    productIdsJson(command.productIds()), defaultValue(command.benefitType(), "AMOUNT"),
+                    requireAmount(command.benefitValue(), "政策金额/比例不能为空"), command.maxAmount(),
+                    command.effFrom(), command.effTo(), defaultValue(command.referenceDateType(), "RETAIL_DATE"),
+                    normalizeClaimCycle(command.claimCycle()),
+                    command.claimCutoffDay() == null ? 5 : command.claimCutoffDay(),
+                    command.priority() == null ? 0 : command.priority(),
+                    defaultValue(command.stackingRule(), "ADDITIVE"), command.remark());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ConflictException("POLICY_UPDATE_INVALID", exception.getMessage());
+        }
+        PromotionPolicy saved = policyRepository.save(policy);
+        PolicySubsidyPool pool = poolRepository.findByPolicyIdForUpdate(id).orElse(null);
+        if (pool == null) {
+            pool = PolicySubsidyPool.create(id, limitType, command.totalAmount(), command.perUnitAmount(),
+                    command.conditionDesc(), command.poolEffectiveFrom(), command.poolEffectiveTo());
+        } else {
+            try {
+                pool.updateDraftConfiguration(limitType, command.totalAmount(), command.perUnitAmount(),
+                        command.conditionDesc(), command.poolEffectiveFrom(), command.poolEffectiveTo());
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                throw new ConflictException("POLICY_POOL_UPDATE_INVALID", exception.getMessage());
+            }
+        }
+        poolRepository.save(pool);
+        approval.cancel(id);
+        events.publish(new EventEnvelope(UUID.randomUUID(), "PolicyDraftUpdated", "PromotionPolicy", id,
+                saved.getVersion(), null, UUID.randomUUID(), Instant.now(),
+                Map.of("policyNo", saved.getPolicyNo(), "name", saved.getName())));
+        return toView(saved);
     }
 
     @Transactional
@@ -155,7 +190,7 @@ public class PolicyApplicationService {
         } catch (IllegalStateException exception) {
             throw new ConflictException("POLICY_STATUS_INVALID", exception.getMessage());
         }
-        return PolicyApi.PolicyView.from(policyRepository.save(policy), poolOf(policy.getId()));
+        return toView(policyRepository.save(policy));
     }
 
     @Transactional
@@ -164,7 +199,7 @@ public class PolicyApplicationService {
         policy.cancel();
         PromotionPolicy saved = policyRepository.save(policy);
         approval.cancel(id);
-        return PolicyApi.PolicyView.from(saved, poolOf(id));
+        return toView(saved);
     }
 
     /** 条件类政策：业务人工标记「条件已达成」后，预享受才能通过。 */
@@ -591,10 +626,13 @@ public class PolicyApplicationService {
                 retail == null ? null : retail.invoiceIssuedAt());
     }
 
-    /** 按政策申报周期与实销日期生成归期编码：2026-10 / 2026Q4 / 2026。 */
+    /** 按政策申报周期与实销日期生成归期编码：2026-10 / 2026Q4 / 2026H2 / 2026。 */
     private String periodCode(String claimCycle, LocalDate retailDate) {
         if ("QUARTERLY".equals(claimCycle)) {
             return retailDate.getYear() + "Q" + ((retailDate.getMonthValue() - 1) / 3 + 1);
+        }
+        if ("HALF_YEARLY".equals(claimCycle)) {
+            return retailDate.getYear() + "H" + (retailDate.getMonthValue() <= 6 ? 1 : 2);
         }
         if ("ANNUAL".equals(claimCycle)) {
             return String.valueOf(retailDate.getYear());
@@ -626,7 +664,19 @@ public class PolicyApplicationService {
     }
 
     private PolicyApi.PolicyView toView(PromotionPolicy policy) {
-        return PolicyApi.PolicyView.from(policy, poolOf(policy.getId()));
+        return PolicyApi.PolicyView.from(policy, poolOf(policy.getId()), parseProductIds(policy.getModelList()));
+    }
+
+    private List<UUID> parseProductIds(String modelList) {
+        if (modelList == null || modelList.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(modelList, new TypeReference<List<UUID>>() {
+            });
+        } catch (Exception exception) {
+            return List.of();
+        }
     }
 
     private PolicyApi.PreEntitlementView toPreView(PolicyPreEntitlement pre, PromotionPolicy policy) {
@@ -691,6 +741,42 @@ public class PolicyApplicationService {
     private record PreKey(UUID orderLineId, UUID policyId) {
     }
 
+    private void validatePolicyCommand(PolicyApi.SavePolicyCommand command) {
+        if (command == null) {
+            throw new ConflictException("POLICY_COMMAND_REQUIRED", "政策数据不能为空");
+        }
+        if (command.effFrom() == null || command.effTo() == null) {
+            throw new ConflictException("POLICY_EFFECTIVE_REQUIRED", "请填写政策生效与失效日期");
+        }
+        if (command.effTo().isBefore(command.effFrom())) {
+            throw new ConflictException("POLICY_EFFECTIVE_INVALID", "失效日期不能早于生效日期");
+        }
+        if (command.benefitValue() == null) {
+            throw new ConflictException("POLICY_INVALID", "政策金额/比例不能为空");
+        }
+        if (command.claimCutoffDay() != null && (command.claimCutoffDay() < 0 || command.claimCutoffDay() > 31)) {
+            throw new ConflictException("POLICY_CUTOFF_INVALID", "申报截止日必须在 0 到 31 之间");
+        }
+    }
+
+    private LimitType normalizedLimitType(PolicyApi.SavePolicyCommand command) {
+        return command.limitType() == null ? LimitType.AMOUNT : command.limitType();
+    }
+
+    private void validatePoolConfiguration(PolicyApi.SavePolicyCommand command, LimitType limitType) {
+        if ((limitType == LimitType.AMOUNT || limitType == LimitType.AMOUNT_AND_CONDITION)
+                && (command.totalAmount() == null || command.totalAmount().signum() <= 0)) {
+            throw new ConflictException("POOL_TOTAL_REQUIRED", "金额限制的政策必须填写额度池总额");
+        }
+    }
+
+    private String normalizeClaimCycle(String value) {
+        String cycle = defaultValue(value, "MONTHLY");
+        if (!Set.of("MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL").contains(cycle)) {
+            throw new ConflictException("POLICY_CLAIM_CYCLE_INVALID", "申报周期仅支持月度、季度、半年或年度");
+        }
+        return cycle;
+    }
     private String requireText(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new ConflictException("POLICY_INVALID", message);

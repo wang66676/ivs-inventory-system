@@ -72,6 +72,33 @@ test('政策红字发票按 VIN/SN 冲减应付入口可用', async ({ page }) =
   await expect(page.getByText('政策返利红字发票', { exact: true })).toBeVisible()
 })
 
+test('政策草稿支持编辑并按月度季度半年年度选择周期', async ({ page }) => {
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const name = `E2E-政策-${Date.now()}`
+  const today = new Date()
+  const from = today.toISOString().slice(0, 10)
+  const to = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10)
+  const created = await page.request.post('/api/ivs/policies', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      name, policyType: 'PHASE_SUBSIDY', benefitType: 'AMOUNT', benefitValue: 1000,
+      effFrom: from, effTo: to, referenceDateType: 'RETAIL_DATE', claimCycle: 'MONTHLY',
+      claimCutoffDay: 5, priority: 0, stackingRule: 'ADDITIVE', limitType: 'AMOUNT', totalAmount: 10000,
+    },
+  })
+  expect(created.ok()).toBeTruthy()
+  await page.goto('/policy/policies')
+  const row = page.getByRole('row').filter({ hasText: name })
+  await expect(row).toBeVisible()
+  await row.getByRole('button', { name: /^编\s*辑$/ }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('编辑政策草稿', { exact: true })).toBeVisible()
+  const cycleItem = dialog.locator('.ant-form-item').filter({ hasText: '申报周期' })
+  await cycleItem.locator('.ant-select').click()
+  const options = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content')
+  await expect(options).toContainText(['月度', '季度', '半年', '年度'])
+})
 test('实销登记支持同一次选择多个 VIN/SN', async ({ page }) => {
   await login(page)
   await page.goto('/retail/records')

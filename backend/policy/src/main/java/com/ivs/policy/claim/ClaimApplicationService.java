@@ -412,6 +412,10 @@ public class ClaimApplicationService {
             int quarter = Integer.parseInt(periodCode.substring(5));
             end = LocalDate.of(year, quarter * 3, 1).withDayOfMonth(
                     LocalDate.of(year, quarter * 3, 1).lengthOfMonth());
+        } else if (periodCode.contains("H")) {
+            int year = Integer.parseInt(periodCode.substring(0, 4));
+            int half = Integer.parseInt(periodCode.substring(5));
+            end = half == 1 ? LocalDate.of(year, 6, 30) : LocalDate.of(year, 12, 31);
         } else if (periodCode.length() == 4) {
             end = LocalDate.of(Integer.parseInt(periodCode), 12, 31);
         } else {
