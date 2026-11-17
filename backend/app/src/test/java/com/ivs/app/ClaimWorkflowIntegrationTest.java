@@ -112,6 +112,14 @@ class ClaimWorkflowIntegrationTest {
         assertThat(red.payableAppliedAmount()).isEqualByComparingTo("9500.00");
         assertThat(red.fundPoolAmount()).isEqualByComparingTo("0.00");
 
+        PurchaseInvoiceApi.PurchaseInvoiceView[] rebateRedInvoices = get(
+                "/api/ivs/rebate-offset-workspace/red-invoices?supplierId=" + supplierId,
+                PurchaseInvoiceApi.PurchaseInvoiceView[].class);
+        assertThat(rebateRedInvoices).hasSize(1);
+        assertThat(rebateRedInvoices[0].invoiceNo()).isEqualTo(red.invoiceNo());
+        assertThat(rebateRedInvoices[0].payableAppliedAmount()).isEqualByComparingTo("9500.00");
+        assertThat(rebateRedInvoices[0].fundPoolAmount()).isEqualByComparingTo("0.00");
+
         com.ivs.procurement.payable.api.PayableApi.PayableView[] payables = get(
                 "/api/ivs/payables?supplierId=" + supplierId,
                 com.ivs.procurement.payable.api.PayableApi.PayableView[].class);

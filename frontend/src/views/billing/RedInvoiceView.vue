@@ -4,7 +4,7 @@
       <a-alert type="warning" show-icon style="margin-bottom:12px"
                message="政策红字发票登记后先自动冲减对应厂家的应付账款；没有可冲减余额的剩余部分才进入返利资金池。关联申报单时，红字金额必须等于厂家确认额。" />
       <a-space wrap style="margin-bottom:12px">
-        <a-button v-if="canWrite" type="primary" @click="openCreate">登记厂家红字</a-button>
+        <a-button v-if="canWrite" type="primary" @click="openCreate">登记返利红字</a-button>
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="supplierId" :options="supplierOptions" allow-clear show-search
                   placeholder="按厂家筛选" style="width:240px" @change="reload" />
@@ -40,7 +40,7 @@
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="formOpen" title="登记厂家红字发票" :confirm-loading="saving" ok-text="登记并冲减应付"
+    <a-modal v-model:open="formOpen" title="登记返利红字发票" :confirm-loading="saving" ok-text="登记并冲减应付"
              cancel-text="取消" width="680px" @ok="save">
       <a-form layout="vertical">
         <a-upload :before-upload="extractPdf" :show-upload-list="false" accept=".pdf,application/pdf"
