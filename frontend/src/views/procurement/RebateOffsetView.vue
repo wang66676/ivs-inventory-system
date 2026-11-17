@@ -4,17 +4,30 @@
       <div class="hero-row">
         <div>
           <a-tag color="blue">采购收货联动</a-tag>
-          <div class="hero-title">返利抵扣工作台</div>
+          <div class="hero-title">返利折扣工作台</div>
           <div class="hero-note">
-            抵扣由采购收货发起；本页负责追溯返利来源、查看关联订单，并在取消时同步恢复采购应付。
+            政策红字先按 VIN/SN 冲减厂家应付，剩余返利进入资金池，再用于采购收货抵扣。
           </div>
         </div>
         <a-space wrap>
           <a-button @click="router.push('/policy/fund-pool')">查看资金池</a-button>
+          <a-button @click="router.push('/procurement/red-invoices')">去开具返利红字</a-button>
           <a-button type="primary" @click="router.push('/procurement/receipts')">去采购收货发起抵扣</a-button>
         </a-space>
       </div>
     </a-card>
+
+    <a-row :gutter="16" class="stats-row">
+      <a-col :xs="24" :sm="12" :lg="8">
+        <a-card :bordered="false"><a-statistic title="政策红字返利合计" :value="redInvoiceTotal" :precision="2" prefix="¥" /></a-card>
+      </a-col>
+      <a-col :xs="24" :sm="12" :lg="8">
+        <a-card :bordered="false"><a-statistic title="已冲减厂家应付" :value="payableAppliedTotal" :precision="2" prefix="¥" /></a-card>
+      </a-col>
+      <a-col :xs="24" :sm="12" :lg="8">
+        <a-card :bordered="false"><a-statistic title="剩余进入资金池" :value="fundPoolTotal" :precision="2" prefix="¥" /></a-card>
+      </a-col>
+    </a-row>
 
     <a-row :gutter="16" class="stats-row">
       <a-col :xs="24" :sm="12" :lg="6">
@@ -46,6 +59,30 @@
         <a-button @click="exportRows">导出</a-button>
       </div>
 
+    </a-card>
+
+    <a-card :bordered="false" title="政策返利红字发票">
+      <a-alert type="info" show-icon class="policy-note"
+               message="红字发票按对应 VIN/SN 冲减该车采购应付；只有未冲减完的剩余金额才进入返利资金池。" />
+      <a-table v-resizable-columns :data-source="filteredRedInvoices" :columns="redInvoiceColumns"
+               row-key="id" size="middle" :loading="loading" :pagination="{ pageSize: 10 }" :scroll="{ x: 1600 }">
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'supplier'">{{ supplierNames[record.supplierId] || record.supplierId }}</template>
+          <template v-else-if="column.key === 'serialNos'">
+            <a-space v-if="record.serialNos?.length" wrap size="small">
+              <a-tag v-for="serialNo in record.serialNos" :key="serialNo">{{ serialNo }}</a-tag>
+            </a-space>
+            <span v-else>-</span>
+          </template>
+          <template v-else-if="column.key === 'amount'">{{ money(record.amount) }}</template>
+          <template v-else-if="column.key === 'payableApplied'">{{ money(record.payableAppliedAmount) }}</template>
+          <template v-else-if="column.key === 'fundPool'">{{ money(record.fundPoolAmount) }}</template>
+          <template v-else-if="column.key === 'issuedAt'">{{ formatTime(record.issuedAt) }}</template>
+        </template>
+      </a-table>
+    </a-card>
+
+    <a-card :bordered="false">
       <a-alert type="info" show-icon class="policy-note"
                message="取消抵扣会同时回补返利余额、恢复采购收货抵扣额和应付金额；已付款或已匹配进项发票的抵扣不可直接取消。" />
 
@@ -166,6 +203,7 @@ import { purchaseApi } from '../../api/procurement'
 import { supplierApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
 import type { FundOffset } from '../../types/policy'
+import type { PurchaseRedInvoice } from '../../types/billing'
 import type { PurchaseOrder } from '../../types/procurement'
 import { PURCHASE_STATUS_LABELS } from '../../types/procurement'
 import { exportCsv, exportTimestamp } from '../../utils/csvExport'
@@ -181,6 +219,7 @@ const auth = useAuthStore()
 const canOffset = auth.can('IVS_FUND_OFFSET')
 const loading = ref(false)
 const offsets = ref<FundOffset[]>([])
+const redInvoices = ref<PurchaseRedInvoice[]>([])
 const supplierNames = ref<Record<string, string>>({})
 const supplierOptions = ref<{ label: string; value: string }[]>([])
 const purchaseOrders = ref<Record<string, PurchaseOrder>>({})
@@ -196,6 +235,17 @@ const orderDetail = ref<PurchaseOrder>()
 const statusOptions = [
   { label: '有效', value: 'ACTIVE' },
   { label: '已取消', value: 'CANCELLED' },
+]
+
+const redInvoiceColumns = [
+  { title: '红字发票号', key: 'invoiceNo', dataIndex: 'invoiceNo', width: 150 },
+  { title: '外部发票号', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 160 },
+  { title: '厂家', key: 'supplier', width: 190 },
+  { title: 'VIN/SN', key: 'serialNos', width: 260 },
+  { title: '红字金额', key: 'amount', width: 140, align: 'right' },
+  { title: '冲减厂家应付', key: 'payableApplied', width: 150, align: 'right' },
+  { title: '剩余入池', key: 'fundPool', width: 130, align: 'right' },
+  { title: '开票日期', key: 'issuedAt', width: 130 },
 ]
 
 const columns = [
@@ -235,6 +285,26 @@ const filteredRows = computed(() => {
       .some((value) => (value || '').toLowerCase().includes(text))
   })
 })
+
+const filteredRedInvoices = computed(() => {
+  const text = keyword.value.trim().toLowerCase()
+  return redInvoices.value.filter((row) => {
+    if (supplierId.value && row.supplierId !== supplierId.value) return false
+    if (dateRange.value?.length === 2) {
+      const date = (row.issuedAt || row.createdAt).slice(0, 10)
+      if (date < dateRange.value[0] || date > dateRange.value[1]) return false
+    }
+    if (!text) return true
+    return [row.invoiceNo, row.externalInvoiceNo, row.claimId, row.supplierId,
+      ...(row.serialNos || [])].some((value) => String(value || '').toLowerCase().includes(text))
+  })
+})
+const redInvoiceTotal = computed(() => filteredRedInvoices.value
+  .reduce((sum, row) => sum + Number(row.amount || 0), 0))
+const payableAppliedTotal = computed(() => filteredRedInvoices.value
+  .reduce((sum, row) => sum + Number(row.payableAppliedAmount || 0), 0))
+const fundPoolTotal = computed(() => filteredRedInvoices.value
+  .reduce((sum, row) => sum + Number(row.fundPoolAmount || 0), 0))
 
 const activeAmount = computed(() => filteredRows.value
   .filter((row) => row.status === 'ACTIVE')
@@ -326,7 +396,12 @@ function exportRows() {
 async function reload() {
   loading.value = true
   try {
-    offsets.value = await policyApi.fundOffsets({ supplierId: supplierId.value })
+    const [offsetRows, redRows] = await Promise.all([
+      policyApi.fundOffsets({ supplierId: supplierId.value }),
+      policyApi.rebateRedInvoices({ supplierId: supplierId.value }),
+    ])
+    offsets.value = offsetRows
+    redInvoices.value = redRows
   } catch (error) {
     message.error((error as Error).message)
   } finally {

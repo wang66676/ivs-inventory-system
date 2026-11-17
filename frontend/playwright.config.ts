@@ -12,7 +12,7 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:8090',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: process.env.E2E_RECORD_VIDEO === 'true' ? 'retain-on-failure' : 'off',
   },
   projects: [{
     name: 'chromium',

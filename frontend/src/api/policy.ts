@@ -1,4 +1,5 @@
 import { http } from './http'
+import type { PurchaseRedInvoice } from '../types/billing'
 import type {
   ClaimDifferenceRow, Entitlement, FundLedgerReport, FundOffset, FundOffsetPreview, FundPool, FundTxn,
   OemClaim, Policy, PoolProgressRow, PreEntitlement, ReceivableAgingRow, RebateSummaryRow, UnitCostRow,
@@ -58,6 +59,8 @@ export const policyApi = {
     http.post<FundPool>('/ivs/rebate-fund-pool/credits', body).then((r) => r.data),
   requestCreditFund: (body: Record<string, unknown>) =>
     http.post<FundPool>('/ivs/rebate-fund-pool/credits/request', body).then((r) => r.data),
+  rebateRedInvoices: (params?: { supplierId?: string }) =>
+    http.get<PurchaseRedInvoice[]>('/ivs/rebate-offset-workspace/red-invoices', { params }).then((r) => r.data),
 
   reportAging: (params?: { supplierId?: string; periodCode?: string }) =>
     http.get<ReceivableAgingRow[]>('/ivs/policies/reports/receivable-aging', { params }).then((r) => r.data),

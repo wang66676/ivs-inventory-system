@@ -34,7 +34,8 @@ const modulePages: MenuPage[] = [
   { path: '/procurement/battery-returns', name: 'purchase-return-battery', component: () => import('../views/procurement/PurchaseReturnView.vue'), title: '电池采购退货', scope: 'BATTERY', description: '动力电池采购退货与应付冲减。', permission: 'IVS_READ' },
   { path: '/procurement/invoices', name: 'purchase-invoice', component: () => import('../views/procurement/PurchaseInvoiceView.vue'), title: '进项发票', description: '厂家进项蓝字与红字发票；蓝字自动匹配供应商应付。', permission: 'IVS_FINANCE_READ' },
   { path: '/procurement/payables', name: 'supplier-payable', component: () => import('../views/procurement/PayableView.vue'), title: '供应商应付', description: '按收货单生成应付，支持发票匹配与付款核销。', permission: 'IVS_FINANCE_READ' },
-  { path: '/procurement/offsets', name: 'rebate-offset', component: () => import('../views/procurement/RebateOffsetView.vue'), title: '返利抵扣', description: '返利抵扣工作台：按厂家查询抵扣单、追溯返利来源、联动采购订单并安全取消抵扣。', permission: 'IVS_FUND_OFFSET' },
+  { path: '/procurement/red-invoices', name: 'purchase-red-invoice', component: () => import('../views/billing/RedInvoiceView.vue'), title: '返利红字发票', description: '厂家返利审批后，我方按对应 VIN/SN 开具红字发票并冲减厂家应付。', permission: 'IVS_INVOICE_REDFLUSH' },
+  { path: '/procurement/offsets', name: 'rebate-offset', component: () => import('../views/procurement/RebateOffsetView.vue'), title: '返利折扣', description: '政策红字冲减应付、剩余返利入池及采购收货抵扣的统一工作台。', permission: 'IVS_FUND_OFFSET' },
 
   // 库存
   { path: '/inventory/dashboard', name: 'inventory-dashboard', component: () => import('../views/inventory/InventoryDashboardView.vue'), title: '库存看板', description: '按产品大项/仓库/品牌/状态与库龄分档汇总，含超期未实销预警。', permission: 'IVS_READ' },
@@ -82,7 +83,6 @@ const modulePages: MenuPage[] = [
 
   // 票据资金
   { path: '/billing/sales-invoices', name: 'sales-invoice', component: () => import('../views/billing/InvoiceView.vue'), title: '销项发票', description: '开票、作废与红冲（一期整车按全价开票）。', permission: 'IVS_INVOICE_WRITE' },
-  { path: '/billing/red-invoices', name: 'red-invoice', component: () => import('../views/billing/RedInvoiceView.vue'), title: '红字发票', description: '进项红字（厂家 → 我方）为主通道；关联原蓝票与申报单。', permission: 'IVS_INVOICE_REDFLUSH' },
   { path: '/billing/refunds', name: 'refund', component: () => import('../views/billing/RefundView.vue'), title: '退款', description: '退款单：审批 → 执行 → 成功/失败/重试 → 人工兜底。', permission: 'IVS_FINANCE_READ' },
 
   // 报表
@@ -143,6 +143,7 @@ export const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', name: 'dashboard', component: () => import('../views/dashboard/DashboardView.vue') },
     { path: '/billing/payments', redirect: '/procurement/payables', meta: { permission: 'IVS_FINANCE_READ' } },
+    { path: '/billing/red-invoices', redirect: '/procurement/red-invoices', meta: { permission: 'IVS_INVOICE_REDFLUSH' } },
     ...modulePages.map((page) => ({
       path: page.path,
       name: page.name,
