@@ -58,6 +58,24 @@ public class PolicySubsidyPool {
         return pool;
     }
 
+    /** 草稿政策编辑时同步更新额度池定义。草稿不应存在已占额度。 */
+    public void updateDraftConfiguration(LimitType limitType, BigDecimal totalAmount, BigDecimal perUnitAmount,
+                                         String conditionDesc, LocalDate effectiveFrom, LocalDate effectiveTo) {
+        BigDecimal used = usedAmount == null ? BigDecimal.ZERO : usedAmount;
+        if (used.signum() > 0) {
+            throw new IllegalStateException("政策额度池已有占用，不能修改草稿");
+        }
+        this.limitType = limitType;
+        this.totalAmount = money(totalAmount);
+        this.remainingAmount = amountLimited() ? this.totalAmount : null;
+        this.perUnitAmount = money(perUnitAmount);
+        this.conditionDesc = conditionDesc == null || conditionDesc.isBlank() ? null : conditionDesc.trim();
+        this.conditionMet = false;
+        this.effectiveFrom = effectiveFrom;
+        this.effectiveTo = effectiveTo;
+        this.status = "ACTIVE";
+        this.updatedAt = Instant.now();
+    }
     /**
      * 预占额度（订单选政策时）：金额限制时原子扣减；返完为止。
      *

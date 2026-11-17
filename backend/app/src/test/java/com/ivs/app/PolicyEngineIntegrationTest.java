@@ -190,6 +190,41 @@ class PolicyEngineIntegrationTest {
         assertThat(adjusted.pool().remainingAmount()).isEqualByComparingTo("70000.00");
     }
 
+    @Test
+    void 草稿政策可编辑并同步更新额度池与申报周期() {
+        PolicyApi.PolicyView policy = createPolicy("待修订补贴", "AMOUNT", new BigDecimal("10000"),
+                new BigDecimal("50000"), LocalDate.now().minusDays(1), LocalDate.now().plusDays(30));
+        UUID productId = UUID.randomUUID();
+        Map<String, Object> body = new HashMap<>();
+        body.put("name", "已修订补贴");
+        body.put("policyType", "STORE_SUBSIDY");
+        body.put("supplierId", policy.supplierId());
+        body.put("productIds", List.of(productId.toString()));
+        body.put("benefitType", "AMOUNT");
+        body.put("benefitValue", new BigDecimal("12000"));
+        body.put("effFrom", LocalDate.now().minusDays(2).toString());
+        body.put("effTo", LocalDate.now().plusDays(60).toString());
+        body.put("referenceDateType", "RETAIL_DATE");
+        body.put("claimCycle", "HALF_YEARLY");
+        body.put("claimCutoffDay", 8);
+        body.put("priority", 10);
+        body.put("stackingRule", "ADDITIVE");
+        body.put("limitType", "AMOUNT");
+        body.put("totalAmount", new BigDecimal("80000"));
+
+        restTemplate.put("/api/ivs/policies/" + policy.id(), body);
+
+        PolicyApi.PolicyView updated = get("/api/ivs/policies/" + policy.id(), PolicyApi.PolicyView.class);
+        assertThat(updated.name()).isEqualTo("已修订补贴");
+        assertThat(updated.policyType()).isEqualTo("STORE_SUBSIDY");
+        assertThat(updated.claimCycle()).isEqualTo("HALF_YEARLY");
+        assertThat(updated.productIds()).containsExactly(productId);
+        assertThat(updated.pool().totalAmount()).isEqualByComparingTo("80000.00");
+        assertThat(updated.pool().remainingAmount()).isEqualByComparingTo("80000.00");
+        assertThat(updated.status().name()).isEqualTo("DRAFT");
+    }
+
+
     /* ===================== 辅助 ===================== */
 
     private PolicyApi.PolicyView createPolicy(String name, String benefitType, BigDecimal value,

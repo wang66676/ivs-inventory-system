@@ -74,6 +74,36 @@ public class PromotionPolicy {
         return policy;
     }
 
+    /** 草稿政策允许维护人员修正配置，发布前可反复调整。 */
+    public void updateDraft(String name, String policyType, UUID categoryId, UUID supplierId,
+                            String modelList, String benefitType, BigDecimal benefitValue,
+                            BigDecimal maxAmount, LocalDate effFrom, LocalDate effTo,
+                            String referenceDateType, String claimCycle, int claimCutoffDay,
+                            int priority, String stackingRule, String remark) {
+        if (status != PolicyStatus.DRAFT) {
+            throw new IllegalStateException("只有草稿政策可以编辑");
+        }
+        if (effFrom == null || effTo == null || effTo.isBefore(effFrom)) {
+            throw new IllegalArgumentException("失效日期不能早于生效日期");
+        }
+        this.name = name;
+        this.policyType = policyType;
+        this.categoryId = categoryId;
+        this.supplierId = supplierId;
+        this.modelList = modelList;
+        this.benefitType = benefitType;
+        this.benefitValue = benefitValue;
+        this.maxAmount = maxAmount;
+        this.effFrom = effFrom;
+        this.effTo = effTo;
+        this.referenceDateType = referenceDateType;
+        this.claimCycle = claimCycle;
+        this.claimCutoffDay = claimCutoffDay;
+        this.priority = priority;
+        this.stackingRule = stackingRule;
+        this.remark = remark;
+        this.updatedAt = Instant.now();
+    }
     public void publish() {
         if (status == PolicyStatus.PUBLISHED) return;
         if (status != PolicyStatus.DRAFT) throw new IllegalStateException("只有草稿政策可以发布");

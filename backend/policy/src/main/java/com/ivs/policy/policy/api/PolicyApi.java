@@ -31,14 +31,15 @@ public final class PolicyApi {
     public record PolicyView(UUID id, String policyNo, String name, String policyType, UUID categoryId, UUID supplierId, String benefitType,
                              BigDecimal benefitValue, BigDecimal maxAmount, LocalDate effFrom, LocalDate effTo,
                              String referenceDateType, String claimCycle, int claimCutoffDay, int priority,
-                             String stackingRule, PolicyStatus status, String remark, PoolView pool,
-                             Instant createdAt) {
-        public static PolicyView from(PromotionPolicy policy, PolicySubsidyPool pool) {
+                             String stackingRule, PolicyStatus status, String remark, List<UUID> productIds,
+                             PoolView pool, Instant createdAt) {
+        public static PolicyView from(PromotionPolicy policy, PolicySubsidyPool pool, List<UUID> productIds) {
             return new PolicyView(policy.getId(), policy.getPolicyNo(), policy.getName(), policy.getPolicyType(), policy.getCategoryId(), policy.getSupplierId(),
                     policy.getBenefitType(), policy.getBenefitValue(), policy.getMaxAmount(), policy.getEffFrom(),
                     policy.getEffTo(), policy.getReferenceDateType(), policy.getClaimCycle(),
                     policy.getClaimCutoffDay(), policy.getPriority(), policy.getStackingRule(), policy.getStatus(),
-                    policy.getRemark(), pool == null ? null : PoolView.from(pool), policy.getCreatedAt());
+                    policy.getRemark(), productIds == null ? List.of() : List.copyOf(productIds),
+                    pool == null ? null : PoolView.from(pool), policy.getCreatedAt());
         }
     }
 

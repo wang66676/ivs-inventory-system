@@ -30,6 +30,8 @@
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-space>
+              <a-button v-if="canWrite && record.status === 'DRAFT'" size="small"
+                        @click="openEdit(record)">编辑</a-button>
               <a-button v-if="canApprove && record.status === 'DRAFT'" size="small" type="primary"
                         @click="publish(record)">发布</a-button>
               <a-button v-if="!canApprove && canWrite && record.status === 'DRAFT'" size="small" type="primary"
@@ -44,7 +46,7 @@
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="formOpen" title="录入厂家政策" :confirm-loading="saving" ok-text="保存"
+    <a-modal v-model:open="formOpen" :title="editingId ? '编辑政策草稿' : '录入厂家政策'" :confirm-loading="saving" ok-text="保存"
              cancel-text="取消" width="860px" @ok="save">
       <a-form layout="vertical">
         <a-row :gutter="16">
@@ -137,6 +139,7 @@ const rows = ref<Policy[]>([])
 const filterStatus = ref<PolicyStatus | undefined>()
 const formOpen = ref(false)
 const saving = ref(false)
+const editingId = ref<string>()
 const supplierOptions = ref<{ label: string; value: string }[]>([])
 const productOptions = ref<{ label: string; value: string }[]>([])
 const form = reactive<Record<string, any>>({})
@@ -163,7 +166,7 @@ const columns = [
   { title: '周期', key: 'cycle', width: 90 },
   { title: '额度池（剩余/总额）', key: 'pool', width: 230 },
   { title: '状态', key: 'status', width: 100 },
-  { title: '操作', key: 'actions', width: 230, fixed: 'right' },
+  { title: '操作', key: 'actions', width: 300, fixed: 'right' },
 ]
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
@@ -181,6 +184,7 @@ function poolPercent(record: Policy) {
 }
 
 function openCreate() {
+  editingId.value = undefined
   Object.keys(form).forEach((key) => delete form[key])
   Object.assign(form, {
     policyType: 'PHASE_SUBSIDY', benefitType: 'AMOUNT', benefitValue: 0, effFrom: dayjs(),
@@ -190,19 +194,57 @@ function openCreate() {
   formOpen.value = true
 }
 
+function openEdit(record: Policy) {
+  editingId.value = record.id
+  Object.keys(form).forEach((key) => delete form[key])
+  Object.assign(form, {
+    name: record.name,
+    policyType: record.policyType,
+    supplierId: record.supplierId,
+    productIds: record.productIds?.length ? [...record.productIds] : [],
+    benefitType: record.benefitType,
+    benefitValue: Number(record.benefitValue ?? 0),
+    maxAmount: record.maxAmount == null ? undefined : Number(record.maxAmount),
+    effFrom: dayjs(record.effFrom),
+    effTo: dayjs(record.effTo),
+    referenceDateType: record.referenceDateType,
+    claimCycle: record.claimCycle,
+    claimCutoffDay: record.claimCutoffDay,
+    priority: record.priority,
+    stackingRule: record.stackingRule,
+    limitType: record.pool?.limitType || 'AMOUNT',
+    totalAmount: Number(record.pool?.totalAmount ?? 0),
+    perUnitAmount: record.pool?.perUnitAmount == null ? undefined : Number(record.pool.perUnitAmount),
+    conditionDesc: record.pool?.conditionDesc,
+    poolEffectiveFrom: record.pool?.effectiveFrom ? dayjs(record.pool.effectiveFrom) : undefined,
+    poolEffectiveTo: record.pool?.effectiveTo ? dayjs(record.pool.effectiveTo) : undefined,
+    remark: record.remark,
+  })
+  formOpen.value = true
+}
+
 async function save() {
   if (!form.name || !form.supplierId) { message.warning('请填写政策名目并选择 OEM 厂家'); return }
   if (!form.effFrom || !form.effTo) { message.warning('请填写生效与失效日期'); return }
   saving.value = true
   try {
-    await policyApi.create({
+    const payload = {
       ...form,
       effFrom: (form.effFrom as Dayjs).format('YYYY-MM-DD'),
       effTo: (form.effTo as Dayjs).format('YYYY-MM-DD'),
       productIds: form.productIds?.length ? form.productIds : null,
-    })
-    message.success('政策已保存，发布后可被订单选择')
+      poolEffectiveFrom: form.poolEffectiveFrom ? (form.poolEffectiveFrom as Dayjs).format('YYYY-MM-DD') : null,
+      poolEffectiveTo: form.poolEffectiveTo ? (form.poolEffectiveTo as Dayjs).format('YYYY-MM-DD') : null,
+    }
+    if (editingId.value) {
+      await policyApi.update(editingId.value, payload)
+      message.success('政策草稿已更新')
+    } else {
+      await policyApi.create(payload)
+      message.success('政策已保存，发布后可被订单选择')
+    }
     formOpen.value = false
+    editingId.value = undefined
     await reload()
   } catch (error) { message.error((error as Error).message) } finally { saving.value = false }
 }

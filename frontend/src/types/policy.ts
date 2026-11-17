@@ -25,6 +25,7 @@ export interface Policy {
   policyType: string
   categoryId?: string
   supplierId?: string
+  productIds?: string[]
   benefitType: 'AMOUNT' | 'RATE' | 'LADDER'
   benefitValue: number
   maxAmount?: number
@@ -325,6 +326,7 @@ export const POLICY_TYPE_LABELS: Record<string, string> = {
 export const CYCLE_LABELS: Record<string, string> = {
   MONTHLY: '月度',
   QUARTERLY: '季度',
+  HALF_YEARLY: '半年',
   ANNUAL: '年度',
   MIXED: '混合',
 }

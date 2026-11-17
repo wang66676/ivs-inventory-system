@@ -196,6 +196,26 @@ class ClaimWorkflowIntegrationTest {
         assertThat(response.getBody().get("code")).isEqualTo("CLAIM_CONFIRM_INVALID");
     }
 
+    @Test
+    void 半年申报周期按实销日期归入上下半年() {
+        UUID supplierId = createSupplier("某整车厂 半年政策");
+        PolicyApi.PolicyView policy = publish(createPolicy(supplierId, "下半年冲刺补贴", "8000", "100000",
+                "HALF_YEARLY"));
+        UUID orderId = UUID.randomUUID();
+        UUID retailId = createRetail(new BigDecimal("450000"));
+        applyPre(orderId, UUID.randomUUID(), UUID.randomUUID(), List.of(policy.id()));
+
+        EntitlementApi[] entitlements = generate(orderId, retailId);
+        assertThat(entitlements).hasSize(1);
+        assertThat(entitlements[0].periodCode()).isEqualTo("2026H2");
+
+        List<ClaimApi.ClaimView> claims = applyClaims(List.of(entitlements[0].id()), false);
+        assertThat(claims).hasSize(1);
+        assertThat(claims.get(0).periodCode()).isEqualTo("2026H2");
+        assertThat(claims.get(0).settleCycle()).isEqualTo("HALF_YEARLY");
+    }
+
+
     private VehicleFixture createVehicleFixture(UUID supplierId) {
         String code = "CLAIM-" + UUID.randomUUID().toString().substring(0, 8);
         MasterdataApi.CategoryView category = post("/api/ivs/product-categories", Map.of(

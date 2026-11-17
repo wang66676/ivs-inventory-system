@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,6 +48,14 @@ public class PolicyController {
     public ResponseEntity<PolicyApi.PolicyView> create(@Valid @RequestBody PolicyApi.SavePolicyCommand command) {
         PolicyApi.PolicyView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/policies/" + view.id())).body(view);
+    }
+
+    /** 修改政策草稿及其额度池配置。 */
+    @PutMapping("/policies/{id}")
+    @PreAuthorize("hasAuthority('IVS_POLICY_WRITE')")
+    public PolicyApi.PolicyView update(@PathVariable("id") UUID id,
+                                       @Valid @RequestBody PolicyApi.SavePolicyCommand command) {
+        return service.update(id, command);
     }
 
     /** 实销确认后生成正式权益（按实销日期归期）。 */
