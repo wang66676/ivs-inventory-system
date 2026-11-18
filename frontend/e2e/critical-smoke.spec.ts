@@ -42,7 +42,7 @@ test('登录、付款入口重定向和关键业务页面冒烟', async ({ page 
 test('进项蓝字发票字段和日期选择可用', async ({ page }) => {
   await login(page)
   await page.goto('/procurement/invoices')
-  await page.getByRole('button', { name: '登记进项蓝字', exact: true }).click()
+  await page.getByRole('button', { name: '单张登记蓝字', exact: true }).click()
   await expect(page.getByTitle('发票类型', { exact: true })).toBeVisible()
   await expect(page.getByTitle('发票号码', { exact: true })).toBeVisible()
   await expect(page.getByTitle('发票金额（价税合计）', { exact: true })).toBeVisible()
@@ -53,13 +53,32 @@ test('进项蓝字发票字段和日期选择可用', async ({ page }) => {
 test('销项发票支持 PDF 上传识别入口', async ({ page }) => {
   await login(page)
   await page.goto('/billing/sales-invoices')
-  await page.getByRole('button', { name: /^开\s*票$/ }).click()
+  await page.getByRole('button', { name: '单张开票', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.locator('button').filter({ hasText: '上传销项发票 PDF 并自动识别' })).toBeVisible()
   await expect(dialog.getByText('销售订单编号', { exact: true })).toBeVisible()
   await expect(dialog.getByText('VIN/SN（可多选）', { exact: true })).toBeVisible()
 })
 
+test('进项蓝字发票支持一次多选 PDF 批量上传', async ({ page }) => {
+  await login(page)
+  await page.goto('/procurement/invoices')
+  await page.getByRole('button', { name: '批量上传蓝字', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('批量上传并登记进项蓝字发票', { exact: true })).toBeVisible()
+  await expect(dialog.locator('input[type="file"]')).toHaveAttribute('multiple', '')
+  await expect(dialog.locator('input[type="file"]')).toHaveAttribute('accept', /application\/pdf/)
+})
+
+test('销项蓝字发票支持一次多选 PDF 批量上传', async ({ page }) => {
+  await login(page)
+  await page.goto('/billing/sales-invoices')
+  await page.getByRole('button', { name: '批量上传蓝字发票', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('批量上传并登记销项蓝字发票', { exact: true })).toBeVisible()
+  await expect(dialog.locator('input[type="file"]')).toHaveAttribute('multiple', '')
+  await expect(dialog.locator('input[type="file"]')).toHaveAttribute('accept', /application\/pdf/)
+})
 test('政策红字发票按 VIN/SN 冲减应付入口可用', async ({ page }) => {
   await login(page)
   await page.goto('/procurement/red-invoices')
