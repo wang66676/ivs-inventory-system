@@ -4,7 +4,8 @@
       <a-alert type="info" show-icon style="margin-bottom:12px"
                message="上传 PDF 后自动识别销售方厂家、发票类型、发票号码、VIN/SN 和价税合计金额；登记后可继续匹配应付。" />
       <a-space wrap style="margin-bottom:12px">
-        <a-button v-if="canWrite" type="primary" @click="openCreate">登记进项蓝字</a-button>
+        <a-button v-if="canWrite" type="primary" @click="openCreate">单张登记蓝字</a-button>
+        <a-button v-if="canWrite" @click="openBatch">批量上传蓝字</a-button>
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="supplierId" :options="supplierOptions" allow-clear show-search
                   placeholder="按厂家筛选" style="width:240px" @change="reload" />
@@ -98,6 +99,38 @@
         </a-row>
       </a-form>
     </a-modal>
+
+    <a-modal v-model:open="batchOpen" title="批量上传并登记进项蓝字发票" :footer="null" width="1180px">
+      <a-alert type="info" show-icon class="pdf-alert"
+               message="可一次选择多张 PDF。系统会逐张识别厂家、采购订单、VIN/SN、发票号码和金额，识别成功的发票可一键批量登记；失败项会保留原因，不影响其他发票。" />
+      <input ref="batchInput" type="file" accept=".pdf,application/pdf" multiple class="batch-file-input"
+             @change="onBatchFilesSelected" />
+      <a-space wrap class="batch-actions">
+        <a-button type="primary" :loading="batchPreparing" @click="batchInput?.click()">选择多张 PDF</a-button>
+        <a-button :loading="batchSaving" :disabled="!batchReadyCount || batchPreparing" @click="saveBatch">
+          批量登记（{{ batchReadyCount }}）
+        </a-button>
+        <a-button :disabled="batchPreparing || batchSaving" @click="resetBatch">清空列表</a-button>
+        <span class="batch-summary">共 {{ batchRows.length }} 张，成功 {{ batchSuccessCount }} 张，失败 {{ batchFailedCount }} 张</span>
+      </a-space>
+      <a-table :data-source="batchRows" :columns="batchColumns" row-key="uid" size="small"
+               :pagination="false" :scroll="{ x: 1050, y: 420 }">
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'fileName'">{{ record.fileName }}</template>
+          <template v-else-if="column.key === 'invoiceNo'">{{ record.invoiceNo || '-' }}</template>
+          <template v-else-if="column.key === 'supplier'">{{ record.supplierName || '-' }}</template>
+          <template v-else-if="column.key === 'orderNo'">{{ record.orderNo || '-' }}</template>
+          <template v-else-if="column.key === 'serialNos'">{{ record.serialNos?.join('、') || '-' }}</template>
+          <template v-else-if="column.key === 'amount'">{{ money(record.amount) }}</template>
+          <template v-else-if="column.key === 'status'">
+            <a-tag :color="batchStatusColor(record.status)">{{ batchStatusLabel(record.status) }}</a-tag>
+          </template>
+          <template v-else-if="column.key === 'message'">
+            <span :class="{ 'batch-error': record.status === 'FAILED' }">{{ record.message || '-' }}</span>
+          </template>
+        </template>
+      </a-table>
+    </a-modal>
   </div>
 </template>
 
@@ -131,6 +164,25 @@ const pdfExtraction = ref<PurchaseInvoicePdfExtraction>()
 const formOpen = ref(false)
 const saving = ref(false)
 const form = reactive<Record<string, any>>({})
+type PurchaseBatchStatus = 'PENDING' | 'PARSING' | 'READY' | 'SAVING' | 'SUCCESS' | 'FAILED'
+interface PurchaseBatchRow {
+  uid: string
+  fileName: string
+  file: File
+  status: PurchaseBatchStatus
+  invoiceNo?: string
+  supplierName?: string
+  orderNo?: string
+  serialNos?: string[]
+  amount?: number
+  message?: string
+  command?: Record<string, unknown>
+}
+const batchOpen = ref(false)
+const batchInput = ref<HTMLInputElement>()
+const batchPreparing = ref(false)
+const batchSaving = ref(false)
+const batchRows = ref<PurchaseBatchRow[]>([])
 const columns = [
   { title: '内部发票号', key: 'invoiceNo', dataIndex: 'invoiceNo', width: 150 },
   { title: '业务类型', key: 'type', width: 110 },
@@ -150,6 +202,16 @@ const columns = [
   { title: '操作', key: 'actions', width: 120, fixed: 'right' },
 ]
 
+const batchColumns = [
+  { title: 'PDF 文件', key: 'fileName', width: 190 },
+  { title: '发票号码', key: 'invoiceNo', width: 170 },
+  { title: '厂家', key: 'supplier', width: 170 },
+  { title: '采购订单编号', key: 'orderNo', width: 160 },
+  { title: 'VIN/SN', key: 'serialNos', width: 280 },
+  { title: '金额', key: 'amount', width: 120, align: 'right' },
+  { title: '状态', key: 'status', width: 100, align: 'center' },
+  { title: '处理说明', key: 'message', width: 280 },
+]
 const orderNoById = computed(() => Object.fromEntries([
   ...payables.value.map((item) => [item.purchaseOrderId || '', item.orderNo || ''] as const),
   ...purchaseOrders.value.map((item) => [item.id, item.externalOrderNo || item.orderNo] as const),
@@ -267,6 +329,169 @@ function onSerialChange(serialNos: string[]) {
   form.amount = Math.round(serialOptions.value
     .filter((item) => selected.has(item.value))
     .reduce((sum, item) => sum + item.amount, 0) * 100) / 100
+}
+const batchReadyCount = computed(() => batchRows.value.filter((row) => row.status === 'READY').length)
+const batchSuccessCount = computed(() => batchRows.value.filter((row) => row.status === 'SUCCESS').length)
+const batchFailedCount = computed(() => batchRows.value.filter((row) => row.status === 'FAILED').length)
+
+function batchStatusLabel(status: PurchaseBatchStatus) {
+  return { PENDING: '待识别', PARSING: '识别中', READY: '可登记', SAVING: '登记中', SUCCESS: '已登记', FAILED: '失败' }[status]
+}
+function batchStatusColor(status: PurchaseBatchStatus) {
+  return { PENDING: 'default', PARSING: 'processing', READY: 'blue', SAVING: 'processing', SUCCESS: 'green', FAILED: 'red' }[status]
+}
+function openBatch() {
+  batchOpen.value = true
+}
+function resetBatch() {
+  batchRows.value = []
+}
+function ensureBatchInvoiceUnique(invoiceNo: string) {
+  const normalized = invoiceNo.trim().toUpperCase()
+  if (allInvoices.value.some((row) => row.type === 'BLUE' &&
+    String(row.externalInvoiceNo || '').trim().toUpperCase() === normalized)) {
+    throw new Error(`发票号码 ${invoiceNo} 已存在，不能重复登记`)
+  }
+  if (batchRows.value.some((row) => row.status !== 'FAILED' && row.invoiceNo &&
+    row.invoiceNo.trim().toUpperCase() === normalized)) {
+    throw new Error(`本次上传中发票号码 ${invoiceNo} 重复`)
+  }
+}
+function preparePurchaseBatchRow(file: File, extraction: PurchaseInvoicePdfExtraction) {
+  if (extraction.type === 'RED') throw new Error('识别为红字发票，不能走蓝字批量登记')
+  const invoiceNo = extraction.invoiceNo?.trim()
+  if (!invoiceNo) throw new Error('未识别到发票号码')
+  ensureBatchInvoiceUnique(invoiceNo)
+  const vinCandidates = [...new Set((extraction.vinCandidates || []).map((vin) => vin.trim().toUpperCase()).filter(Boolean))]
+  if (!vinCandidates.length) throw new Error('未识别到 VIN/SN')
+  const orderIds = orderIdsForVins(vinCandidates)
+  const orderCandidates = purchaseOrders.value.filter((order) =>
+    extraction.orderNoCandidates.some((candidate) => candidate === order.externalOrderNo || candidate === order.orderNo)
+    || orderIds.has(order.id))
+  if (orderCandidates.length !== 1) {
+    throw new Error(orderCandidates.length > 1 ? '识别结果对应多个采购订单，请改用单张登记核对' : '未匹配到采购订单')
+  }
+  const order = orderCandidates[0]
+  const matchedSupplier = suppliers.value.find((item) =>
+    (extraction.sellerTaxNo && item.taxNo && item.taxNo.toUpperCase() === extraction.sellerTaxNo.toUpperCase())
+    || (extraction.sellerName && item.name && (item.name.includes(extraction.sellerName) || extraction.sellerName.includes(item.name))))
+  if (matchedSupplier && matchedSupplier.id !== order.supplierId) {
+    throw new Error('发票销售方与采购订单厂家不一致')
+  }
+  const orderSerialMap = new Map<string, string>()
+  for (const line of order.lines) {
+    for (const serialNo of serialValues(line.serialNo)) orderSerialMap.set(serialNo.toUpperCase(), serialNo)
+  }
+  for (const receipt of receipts.value.filter((item) => item.orderId === order.id && item.status === 'POSTED')) {
+    for (const line of receipt.lines) {
+      for (const serialNo of line.serialNos || []) orderSerialMap.set(serialNo.toUpperCase(), serialNo)
+    }
+  }
+  const invalidVins = vinCandidates.filter((vin) => !orderSerialMap.has(vin))
+  if (invalidVins.length) throw new Error(`以下 VIN/SN 不属于该采购订单：${invalidVins.join('、')}`)
+  const serialNos = vinCandidates.map((vin) => orderSerialMap.get(vin)!)
+  const alreadyInvoiced = new Set(allInvoices.value
+    .filter((row) => row.type === 'BLUE' && row.purchaseOrderId === order.id)
+    .flatMap((row) => row.serialNos || [])
+    .map((serialNo) => serialNo.toUpperCase()))
+  const duplicatedVins = serialNos.filter((serialNo) => alreadyInvoiced.has(serialNo.toUpperCase()))
+  if (duplicatedVins.length) throw new Error(`以下 VIN/SN 已登记进项蓝字发票：${duplicatedVins.join('、')}`)
+  const batchVins = new Set(batchRows.value
+    .filter((row) => row.status !== 'FAILED')
+    .flatMap((row) => row.serialNos || [])
+    .map((serialNo) => serialNo.toUpperCase()))
+  const batchDuplicateVins = serialNos.filter((serialNo) => batchVins.has(serialNo.toUpperCase()))
+  if (batchDuplicateVins.length) throw new Error(`本次上传中 VIN/SN 重复：${batchDuplicateVins.join('、')}`)
+  if (extraction.amount == null || Number(extraction.amount) <= 0) throw new Error('未识别到有效的价税合计金额')
+  if (!extraction.issuedAt) throw new Error('未识别到开票日期')
+  return {
+    supplierName: order.supplierName || supplierNames.value[order.supplierId] || order.supplierId,
+    orderNo: order.externalOrderNo || order.orderNo,
+    serialNos,
+    amount: Number(extraction.amount),
+    command: {
+      supplierId: order.supplierId,
+      purchaseOrderId: order.id,
+      serialNos,
+      amount: Number(extraction.amount),
+      taxRate: extraction.taxRate ?? 0.13,
+      invoiceType: extraction.invoiceType || null,
+      externalInvoiceNo: invoiceNo,
+      issuedAt: dayjs(extraction.issuedAt).startOf('day').toDate().toISOString(),
+      pdfFileName: extraction.fileName,
+      pdfStorageKey: extraction.storageKey,
+      extractedText: extraction.rawText || null,
+      remark: '批量PDF上传',
+    },
+  }
+}
+async function onBatchFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  input.value = ''
+  if (!files.length) return
+  const pdfFiles = files.filter((file) => file.name.toLowerCase().endsWith('.pdf'))
+  if (pdfFiles.length !== files.length) message.warning(`已忽略 ${files.length - pdfFiles.length} 个非 PDF 文件`)
+  batchPreparing.value = true
+  try {
+    for (const file of pdfFiles) {
+      const row: PurchaseBatchRow = {
+        uid: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        fileName: file.name,
+        file,
+        status: 'PARSING',
+        message: '正在识别 PDF…',
+      }
+      batchRows.value.push(row)
+      try {
+        const extraction = await purchaseInvoiceApi.extractPdf(file)
+        row.invoiceNo = extraction.invoiceNo
+        row.amount = extraction.amount == null ? undefined : Number(extraction.amount)
+        const prepared = preparePurchaseBatchRow(file, extraction)
+        row.supplierName = prepared.supplierName
+        row.orderNo = prepared.orderNo
+        row.serialNos = prepared.serialNos
+        row.amount = prepared.amount
+        row.command = prepared.command
+        row.status = 'READY'
+        row.message = extraction.warning || '识别成功，可批量登记'
+      } catch (error) {
+        row.status = 'FAILED'
+        row.message = (error as Error).message
+      }
+    }
+  } finally {
+    batchPreparing.value = false
+  }
+}
+async function saveBatch() {
+  const readyRows = batchRows.value.filter((row) => row.status === 'READY')
+  if (!readyRows.length) { message.warning('没有可登记的发票'); return }
+  batchSaving.value = true
+  let success = 0
+  let failed = 0
+  try {
+    for (const row of readyRows) {
+      row.status = 'SAVING'
+      row.message = '正在登记…'
+      try {
+        const invoice = await purchaseInvoiceApi.registerBlue(row.command!)
+        row.status = 'SUCCESS'
+        row.invoiceNo = invoice.externalInvoiceNo || row.invoiceNo
+        row.message = `登记成功，内部发票号 ${invoice.invoiceNo}`
+        success += 1
+      } catch (error) {
+        row.status = 'FAILED'
+        row.message = (error as Error).message
+        failed += 1
+      }
+    }
+    await reload()
+    if (failed) message.warning(`批量登记完成：成功 ${success} 张，失败 ${failed} 张`)
+    else message.success(`批量登记完成：成功 ${success} 张`)
+  } finally {
+    batchSaving.value = false
+  }
 }
 async function extractPdf(file: File) {
   extracting.value = true
@@ -393,4 +618,8 @@ onMounted(async () => {
 <style scoped>
 .pdf-alert { margin: 12px 0; }
 .linked-summary { margin-top: 4px; color: #4b5563; font-size: 12px; line-height: 18px; }
+.batch-file-input { display: none; }
+.batch-actions { margin-bottom: 14px; }
+.batch-summary { color: #64748b; font-size: 13px; }
+.batch-error { color: #cf1322; }
 </style>
