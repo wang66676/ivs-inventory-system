@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivs.policy.reference.PreEntitlementReferencePort;
 import com.ivs.procurement.purchase.PurchaseOrder;
+import com.ivs.procurement.purchase.PurchaseOrderLineRepository;
 import com.ivs.procurement.purchase.PurchaseOrderRepository;
 import com.ivs.procurement.purchase.PurchaseReceipt;
 import com.ivs.procurement.purchase.PurchaseReceiptLineRepository;
@@ -29,6 +30,7 @@ import java.util.UUID;
 public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePort {
 
     private final PurchaseOrderRepository orderRepository;
+    private final PurchaseOrderLineRepository orderLineRepository;
     private final PurchaseReceiptRepository receiptRepository;
     private final PurchaseReceiptLineRepository receiptLineRepository;
     private final RetailRecordRepository retailRepository;
@@ -36,12 +38,14 @@ public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePo
     private final ObjectMapper objectMapper;
 
     public PreEntitlementReferenceAdapter(PurchaseOrderRepository orderRepository,
+                                          PurchaseOrderLineRepository orderLineRepository,
                                           PurchaseReceiptRepository receiptRepository,
                                           PurchaseReceiptLineRepository receiptLineRepository,
                                           RetailRecordRepository retailRepository,
                                           ProductSerialRepository serialRepository,
                                           ObjectMapper objectMapper) {
         this.orderRepository = orderRepository;
+        this.orderLineRepository = orderLineRepository;
         this.receiptRepository = receiptRepository;
         this.receiptLineRepository = receiptLineRepository;
         this.retailRepository = retailRepository;
@@ -53,11 +57,11 @@ public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePo
     @Transactional(readOnly = true)
     public OrderReference describe(UUID orderId, UUID orderLineId, UUID serialId) {
         if (orderId == null) {
-            return new OrderReference(null, null, null, null, null, null, null);
+            return new OrderReference(null, null, null, null, null, null, null, null, null);
         }
         PurchaseOrder order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {
-            return new OrderReference(null, null, null, null, null, null, null);
+            return new OrderReference(null, null, null, null, null, null, null, null, null);
         }
         String orderNo = order.getExternalOrderNo() == null || order.getExternalOrderNo().isBlank()
                 ? order.getOrderNo() : order.getExternalOrderNo();
@@ -92,8 +96,10 @@ public class PreEntitlementReferenceAdapter implements PreEntitlementReferencePo
                 .max(LocalDate::compareTo)
                 .orElse(null);
         String serialText = serialNos.isEmpty() ? null : serialNos.stream().sorted().reduce((a, b) -> a + "、" + b).orElse(null);
+        java.math.BigDecimal lineAmount = orderLineId == null ? null
+                : orderLineRepository.findById(orderLineId).map(line -> line.getUnitPrice()).orElse(null);
         return new OrderReference(serialText, orderNo, orderDate(orderNo), invoiceIssuedAt, retailDate,
-                deliveryDate, registerDate);
+                deliveryDate, registerDate, lineAmount, order.getSupplierId());
     }
 
     @Override

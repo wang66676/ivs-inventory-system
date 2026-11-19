@@ -71,9 +71,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { purchaseApi } from '../../api/procurement'
-import { warehouseApi } from '../../api/masterdata'
+import { productApi, supplierApi, warehouseApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
 import type { PurchaseReceipt, PurchaseReceiptLine } from '../../types/procurement'
+import type { Product, Supplier } from '../../types/masterdata'
 import { exportCsv, exportTimestamp, parseCsv } from '../../utils/csvExport'
 import type { BusinessScope } from '../../utils/businessScope'
 
@@ -99,6 +100,8 @@ const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const saving = ref(false)
 const importing = ref(false)
 const importInput = ref<HTMLInputElement>()
+const products = ref<Product[]>([])
+const suppliers = ref<Supplier[]>([])
 
 const lines = computed<ReceiptLineRow[]>(() => receipts.value.flatMap((receipt) =>
   (receipt.businessScope || 'VEHICLE') !== props.scope ? [] : receipt.lines.map((line) => ({
@@ -221,7 +224,9 @@ function returnReceipt(line: ReceiptLineRow) {
 function downloadReceiptTemplate() {
   exportCsv('整车收货批量导入模板', [
     { title: '订单编号', value: () => 'CG2026111301' },
-    { title: '车系/商品', value: () => '示例车系' },
+    { title: '供应商', value: () => '示例整车厂' },
+    { title: '车系/商品', value: () => '示例车系或商品名称' },
+    { title: '配置', value: () => '示例配置' },
     { title: 'VIN/SN', value: () => 'LZZ1EXAMPLE000001' },
     { title: '采购价', value: () => 420000 },
     { title: '收货仓库', value: () => '主体仓' },
@@ -235,64 +240,163 @@ async function handleImportFile(event: Event) {
   if (file) await importReceipts(file)
   input.value = ''
 }
+interface ImportRow {
+  rowIndex: number
+  orderNo: string
+  supplierText: string
+  product: Product
+  configText: string
+  vin: string
+  price: number
+  warehouseId?: string
+  certificateDate: string | null
+}
+
 async function importReceipts(file: File) {
   importing.value = true
   try {
     const csv = parseCsv(await file.text())
     if (csv.length < 2) throw new Error('CSV 没有有效数据')
     const headers = new Map(csv[0].map((header, index) => [header.trim(), index]))
-    const column = (row: string[], name: string) => row[headers.get(name) ?? -1]?.trim() || ''
+    const column = (row: string[], ...names: string[]) => {
+      for (const name of names) {
+        const value = row[headers.get(name) ?? -1]?.trim()
+        if (value) return value
+      }
+      return ''
+    }
     const orders = (await purchaseApi.list()).filter((order) => (order.businessScope || 'VEHICLE') === 'VEHICLE')
     const orderByNo = new Map(orders.flatMap((order) => [[order.externalOrderNo || '', order], [order.orderNo, order]] as const)
       .filter(([no]) => Boolean(no)))
     const warehouseByName = new Map(warehouseOptions.value.map((item) => [item.label.replace(/（.*/, ''), item.value]))
+    const supplierByText = new Map(suppliers.value.flatMap((item) =>
+      [[item.name.toLowerCase(), item], [item.code.toLowerCase(), item]] as const))
     const seen = new Set<string>()
-    const groups = new Map<string, { orderId: string; lines: Map<string, Record<string, unknown>> }>()
+    const rowsToImport: ImportRow[] = []
     const errors: string[] = []
     for (let index = 1; index < csv.length; index += 1) {
       const row = csv[index]
       const orderNo = column(row, '订单编号')
-      const series = column(row, '车系/商品')
+      const supplierText = column(row, '供应商')
+      const productText = column(row, '车系/商品', '商品', '车系')
+      const configText = column(row, '配置')
       const vin = column(row, 'VIN/SN').toUpperCase()
-      if (!orderNo && !series && !vin) continue
-      if (!orderNo || !series || !vin) { errors.push(`第${index + 1}行缺少订单编号、车系/商品或 VIN/SN`); continue }
+      if (!orderNo && !productText && !vin) continue
+      if (!orderNo || !productText || !vin) { errors.push(`第${index + 1}行缺少订单编号、车系/商品或 VIN/SN`); continue }
       if (seen.has(vin)) { errors.push(`第${index + 1}行 VIN/SN 重复：${vin}`); continue }
       seen.add(vin)
       const order = orderByNo.get(orderNo)
-      if (!order) { errors.push(`第${index + 1}行订单不存在：${orderNo}`); continue }
-      const orderLine = order.lines.find((line) => (line.series || line.productName) === series && Number(line.remainingQuantity) > 0)
-      if (!orderLine) { errors.push(`第${index + 1}行未找到可收货明细：${series}`); continue }
+      if (order && supplierText) {
+        const supplier = supplierByText.get(supplierText.toLowerCase())
+        if (!supplier || supplier.id !== order.supplierId) {
+          errors.push(`第${index + 1}行供应商与已有采购订单不一致`)
+          continue
+        }
+      }
+      let productCandidates = products.value.filter((item) =>
+        [item.productNo, item.name, item.series, item.model, item.configCode]
+          .some((value) => value != null && value.toLowerCase() === productText.toLowerCase()))
+      if (productCandidates.length > 1 && configText) {
+        const narrowed = productCandidates.filter((item) => [item.model, item.configCode, item.name].filter(Boolean).includes(configText))
+        if (narrowed.length) productCandidates = narrowed
+      }
+      if (productCandidates.length !== 1) {
+        errors.push(`第${index + 1}行无法唯一匹配商品：${productText}${configText ? ` / ${configText}` : ''}`)
+        continue
+      }
+      const product = productCandidates[0]
       const warehouseText = column(row, '收货仓库')
-      const warehouseId = warehouseText ? warehouseByName.get(warehouseText) : orderLine.warehouseId
+      const warehouseId = warehouseText ? warehouseByName.get(warehouseText)
+        : order?.lines.find((line) => line.productId === product.id)?.warehouseId
       if (warehouseText && !warehouseId) { errors.push(`第${index + 1}行收货仓库不存在：${warehouseText}`); continue }
-      const priceText = column(row, '采购价')
-      const price = priceText ? Number(priceText) : Number(orderLine.unitPrice)
+      const priceText = column(row, '采购价', '单价')
+      const existingLine = order?.lines.find((line) => line.productId === product.id
+        && (!configText || [line.configText, line.configCode].includes(configText)) && Number(line.remainingQuantity) > 0)
+      const price = priceText ? Number(priceText) : Number(existingLine?.unitPrice || 0)
       if (!Number.isFinite(price) || price < 0) { errors.push(`第${index + 1}行采购价无效`); continue }
       const certificateDate = column(row, '申请合格证日期') || null
       if (certificateDate && !/^\d{4}-\d{2}-\d{2}$/.test(certificateDate)) {
         errors.push(`第${index + 1}行申请合格证日期格式应为 YYYY-MM-DD`); continue
       }
-      let group = groups.get(order.id)
-      if (!group) { group = { orderId: order.id, lines: new Map() }; groups.set(order.id, group) }
-      let command = group.lines.get(orderLine.id)
-      if (!command) {
-        command = { orderLineId: orderLine.id, serialNos: [], unitPrice: price, warehouseId: warehouseId || null, certificateApplicationDate: certificateDate }
-        group.lines.set(orderLine.id, command)
+      rowsToImport.push({ rowIndex: index + 1, orderNo, supplierText, product, configText, vin, price,
+        warehouseId, certificateDate })
+    }
+
+    const missingOrderRows = rowsToImport.filter((row) => !orderByNo.has(row.orderNo))
+    const newOrderGroups = new Map<string, ImportRow[]>()
+    for (const row of missingOrderRows) {
+      const group = newOrderGroups.get(row.orderNo) || []
+      group.push(row)
+      newOrderGroups.set(row.orderNo, group)
+    }
+    for (const [orderNo, groupRows] of newOrderGroups) {
+      const supplierIds = new Set<string>()
+      for (const row of groupRows) {
+        const supplier = row.supplierText ? supplierByText.get(row.supplierText.toLowerCase()) : undefined
+        if (supplier) supplierIds.add(supplier.id)
+        else if (suppliers.value.length === 1) supplierIds.add(suppliers.value[0].id)
       }
-      ;(command.serialNos as string[]).push(vin)
+      if (supplierIds.size !== 1) {
+        errors.push(`订单 ${orderNo} 在采购单中不存在，且无法唯一确定供应商；请在模板“供应商”列填写供应商名称或编码`)
+        continue
+      }
+      const supplierId = [...supplierIds][0]
+      const newLines = new Map<string, { productId: string; quantity: number; unitPrice: number; configText: string; warehouseId?: string }>()
+      for (const row of groupRows) {
+        const key = `${row.product.id}|${row.price.toFixed(2)}|${row.configText}|${row.warehouseId || ''}`
+        const line = newLines.get(key) || { productId: row.product.id, quantity: 0, unitPrice: row.price,
+          configText: row.configText, warehouseId: row.warehouseId }
+        line.quantity += 1
+        newLines.set(key, line)
+      }
+      let created = await purchaseApi.create({
+        supplierId,
+        externalOrderNo: orderNo,
+        warehouseId: groupRows.find((row) => row.warehouseId)?.warehouseId || null,
+        expectedDate: null,
+        remark: '整车批量入库联动创建',
+        lines: [...newLines.values()].map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          configText: line.configText || null,
+          warehouseId: line.warehouseId || null,
+          policyIds: [],
+        })),
+      })
+      created = await purchaseApi.approve(created.id)
+      orderByNo.set(orderNo, created)
+      orderByNo.set(created.orderNo, created)
+    }
+
+    const receiveGroups = new Map<string, Record<string, unknown>[]>()
+    for (const row of rowsToImport) {
+      const order = orderByNo.get(row.orderNo)
+      if (!order) { errors.push(`第${row.rowIndex}行采购订单未创建成功：${row.orderNo}`); continue }
+      const orderLine = order.lines.find((line) => line.productId === row.product.id
+        && (!row.configText || [line.configText, line.configCode].includes(row.configText))
+        && Number(line.remainingQuantity) > 0)
+      if (!orderLine) { errors.push(`第${row.rowIndex}行未找到可收货明细：${row.product.name}`); continue }
+      const commands = receiveGroups.get(order.id) || []
+      commands.push({
+        orderLineId: orderLine.id,
+        quantity: 1,
+        serialNos: [row.vin],
+        unitPrice: row.price,
+        warehouseId: row.warehouseId || orderLine.warehouseId || null,
+        certificateApplicationDate: row.certificateDate,
+      })
+      receiveGroups.set(order.id, commands)
     }
     let success = 0
-    for (const group of groups.values()) {
-      await purchaseApi.receive(group.orderId, {
-        warehouseId: null,
-        remark: '整车收货批量导入',
-        lines: [...group.lines.values()],
-        offsetTxnIds: [],
+    for (const [orderId, commands] of receiveGroups) {
+      await purchaseApi.receive(orderId, {
+        warehouseId: null, remark: '整车收货批量导入', lines: commands, offsetTxnIds: [],
       })
-      success += [...group.lines.values()].reduce((sum, line) => sum + (line.serialNos as string[]).length, 0)
+      success += commands.length
     }
-    if (errors.length) message.warning(`已导入 ${success} 台；${errors.length} 行未导入：${errors.slice(0, 3).join('；')}`)
-    else message.success(`已批量导入 ${success} 台车辆`)
+    if (errors.length) message.warning(`已导入 ${success} 台；${errors.length} 项未导入：${errors.slice(0, 3).join('；')}`)
+    else message.success(`已批量导入 ${success} 台车辆；不存在的采购订单已自动创建并审核`)
     await reload()
   } catch (error) { message.error((error as Error).message) } finally { importing.value = false }
 }
@@ -303,8 +407,12 @@ async function reload() {
 
 onMounted(async () => {
   try {
-    const warehouses = await warehouseApi.list()
+    const [warehouses, productRows, supplierRows] = await Promise.all([
+      warehouseApi.list(), productApi.list(), supplierApi.list({ supplierType: 'VEHICLE_OEM' }),
+    ])
     warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
+    products.value = productRows
+    suppliers.value = supplierRows
   } catch { /* ignore */ }
   await reload()
 })

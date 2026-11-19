@@ -12,8 +12,7 @@ export const purchaseInvoiceApi = {
     const formData = new FormData()
     formData.append('file', file)
     return http.post<PurchaseInvoicePdfExtraction>('/ivs/purchase-invoices/pdf/extract', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000,
+      timeout: 120000,
     }).then((r) => r.data)
   },
   downloadPdf: (id: string) =>

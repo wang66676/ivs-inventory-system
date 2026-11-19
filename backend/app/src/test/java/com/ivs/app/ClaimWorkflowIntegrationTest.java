@@ -197,6 +197,45 @@ class ClaimWorkflowIntegrationTest {
     }
 
     @Test
+    void 收货后可按VIN变更和删除返利政策() {
+        UUID supplierId = createSupplier("某整车厂 VIN政策管理");
+        PolicyApi.PolicyView first = publish(createPolicy(supplierId, "首期补贴", "10000", "100000", "MONTHLY"));
+        PolicyApi.PolicyView second = publish(createPolicy(supplierId, "调整后补贴", "12000", "100000", "MONTHLY"));
+        VehicleFixture vehicle = createVehicleFixture(supplierId);
+        Map<String, Object> applyBody = new HashMap<>();
+        applyBody.put("orderId", vehicle.purchaseOrderId().toString());
+        applyBody.put("orderLineId", vehicle.orderLineId().toString());
+        applyBody.put("productId", vehicle.productId().toString());
+        applyBody.put("serialId", vehicle.serialId().toString());
+        applyBody.put("orderLineAmount", 420000);
+        applyBody.put("policyIds", List.of(first.id().toString()));
+        post("/api/ivs/pre-entitlements", applyBody, PolicyApi.PreEntitlementView[].class);
+
+        Map<String, Object> updateBody = Map.of(
+                "orderId", vehicle.purchaseOrderId().toString(),
+                "orderLineId", vehicle.orderLineId().toString(),
+                "productId", vehicle.productId().toString(),
+                "serialId", vehicle.serialId().toString(),
+                "policyIds", List.of(second.id().toString()));
+        restTemplate.put("/api/ivs/pre-entitlements/serial-policies", updateBody);
+
+        PolicyApi.PreEntitlementView[] updated = get(
+                "/api/ivs/pre-entitlements?orderId=" + vehicle.purchaseOrderId(),
+                PolicyApi.PreEntitlementView[].class);
+        PolicyApi.PreEntitlementView[] serialPolicies = java.util.Arrays.stream(updated)
+                .filter(row -> vehicle.serialId().equals(row.serialId())).toArray(PolicyApi.PreEntitlementView[]::new);
+        assertThat(serialPolicies).hasSize(1);
+        assertThat(serialPolicies[0].policyId()).isEqualTo(second.id());
+        assertThat(serialPolicies[0].estimateAmount()).isEqualByComparingTo("12000.00");
+
+        restTemplate.delete("/api/ivs/pre-entitlements/" + serialPolicies[0].id());
+        PolicyApi.PreEntitlementView[] afterDelete = get(
+                "/api/ivs/pre-entitlements?orderId=" + vehicle.purchaseOrderId(),
+                PolicyApi.PreEntitlementView[].class);
+        assertThat(java.util.Arrays.stream(afterDelete)
+                .filter(row -> vehicle.serialId().equals(row.serialId())).toList()).isEmpty();
+    }
+    @Test
     void 半年申报周期按实销日期归入上下半年() {
         UUID supplierId = createSupplier("某整车厂 半年政策");
         PolicyApi.PolicyView policy = publish(createPolicy(supplierId, "下半年冲刺补贴", "8000", "100000",
@@ -244,10 +283,12 @@ class ClaimWorkflowIntegrationTest {
                 "serialId", serial.id().toString(), "userName", "政策红字测试用户",
                 "userMobile", "13800000000", "salePrice", 450000),
                 com.ivs.retail.api.RetailApi.RetailView.class);
-        return new VehicleFixture(order.id(), retail.id(), serial.serialNo());
+        return new VehicleFixture(order.id(), order.lines().get(0).id(), product.id(), serial.id(),
+                retail.id(), serial.serialNo());
     }
 
-    private record VehicleFixture(UUID purchaseOrderId, UUID retailId, String serialNo) {
+    private record VehicleFixture(UUID purchaseOrderId, UUID orderLineId, UUID productId, UUID serialId,
+                                  UUID retailId, String serialNo) {
     }
 
     private UUID createSupplier(String name) {

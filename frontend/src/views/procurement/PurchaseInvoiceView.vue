@@ -346,22 +346,22 @@ function openBatch() {
 function resetBatch() {
   batchRows.value = []
 }
-function ensureBatchInvoiceUnique(invoiceNo: string) {
+function ensureBatchInvoiceUnique(invoiceNo: string, currentUid: string) {
   const normalized = invoiceNo.trim().toUpperCase()
   if (allInvoices.value.some((row) => row.type === 'BLUE' &&
     String(row.externalInvoiceNo || '').trim().toUpperCase() === normalized)) {
     throw new Error(`发票号码 ${invoiceNo} 已存在，不能重复登记`)
   }
-  if (batchRows.value.some((row) => row.status !== 'FAILED' && row.invoiceNo &&
+  if (batchRows.value.some((row) => row.uid !== currentUid && row.status !== 'FAILED' && row.invoiceNo &&
     row.invoiceNo.trim().toUpperCase() === normalized)) {
     throw new Error(`本次上传中发票号码 ${invoiceNo} 重复`)
   }
 }
-function preparePurchaseBatchRow(file: File, extraction: PurchaseInvoicePdfExtraction) {
+function preparePurchaseBatchRow(file: File, extraction: PurchaseInvoicePdfExtraction, currentUid: string) {
   if (extraction.type === 'RED') throw new Error('识别为红字发票，不能走蓝字批量登记')
   const invoiceNo = extraction.invoiceNo?.trim()
   if (!invoiceNo) throw new Error('未识别到发票号码')
-  ensureBatchInvoiceUnique(invoiceNo)
+  ensureBatchInvoiceUnique(invoiceNo, currentUid)
   const vinCandidates = [...new Set((extraction.vinCandidates || []).map((vin) => vin.trim().toUpperCase()).filter(Boolean))]
   if (!vinCandidates.length) throw new Error('未识别到 VIN/SN')
   const orderIds = orderIdsForVins(vinCandidates)
@@ -435,19 +435,20 @@ async function onBatchFilesSelected(event: Event) {
   batchPreparing.value = true
   try {
     for (const file of pdfFiles) {
-      const row: PurchaseBatchRow = {
+      const row = reactive<PurchaseBatchRow>({
         uid: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
         fileName: file.name,
         file,
         status: 'PARSING',
         message: '正在识别 PDF…',
-      }
+      })
       batchRows.value.push(row)
+      let extraction: PurchaseInvoicePdfExtraction | undefined
       try {
-        const extraction = await purchaseInvoiceApi.extractPdf(file)
+        extraction = await purchaseInvoiceApi.extractPdf(file)
         row.invoiceNo = extraction.invoiceNo
         row.amount = extraction.amount == null ? undefined : Number(extraction.amount)
-        const prepared = preparePurchaseBatchRow(file, extraction)
+        const prepared = preparePurchaseBatchRow(file, extraction, row.uid)
         row.supplierName = prepared.supplierName
         row.orderNo = prepared.orderNo
         row.serialNos = prepared.serialNos
@@ -457,7 +458,8 @@ async function onBatchFilesSelected(event: Event) {
         row.message = extraction.warning || '识别成功，可批量登记'
       } catch (error) {
         row.status = 'FAILED'
-        row.message = (error as Error).message
+        const detail = extraction?.warning ? `；识别提示：${extraction.warning}` : ''
+        row.message = `${(error as Error).message}${detail}`
       }
     }
   } finally {

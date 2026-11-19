@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -126,6 +127,19 @@ public class PolicyController {
         return service.apply(command);
     }
 
+    /** 收货后管理单个 VIN/SN 的政策集合。 */
+    @PutMapping("/pre-entitlements/serial-policies")
+    @PreAuthorize("hasAuthority('IVS_PRE_ENTITLEMENT_MANAGE')")
+    public List<PolicyApi.PreEntitlementView> updateSerialPolicies(
+            @RequestBody PolicyApi.UpdateSerialPoliciesCommand command) {
+        return service.updateSerialPolicies(command);
+    }
+
+    @DeleteMapping("/pre-entitlements/{id}")
+    @PreAuthorize("hasAuthority('IVS_PRE_ENTITLEMENT_MANAGE')")
+    public void deletePre(@PathVariable("id") UUID id) {
+        service.deletePre(id);
+    }
     @PostMapping("/pre-entitlements/{id}/cancel")
     @PreAuthorize("hasAuthority('IVS_PRE_ENTITLEMENT_MANAGE')")
     public PolicyApi.PreEntitlementView cancelPre(@PathVariable("id") UUID id) {

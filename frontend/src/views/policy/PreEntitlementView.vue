@@ -25,8 +25,11 @@
             <a-tag :color="statusColor(record.status)">{{ statusLabel(record) }}</a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <a-button v-if="canManage && record.status !== 'SETTLED' && record.status !== 'CANCELLED'"
-                      size="small" danger @click="cancel(record)">取消</a-button>
+            <a-space v-if="canManage && record.status !== 'APPLIED' && record.status !== 'SETTLED' && record.status !== 'CANCELLED'" size="small">
+              <a-button size="small" @click="openPolicyManager(record)">变更政策</a-button>
+              <a-button size="small" danger @click="removePolicy(record)">删除</a-button>
+            </a-space>
+            <span v-else>-</span>
           </template>
         </template>
       </a-table>
@@ -56,17 +59,33 @@
         </template>
       </a-spin>
     </a-modal>
+
+    <a-modal v-model:open="policyOpen" title="管理 VIN/SN 返利政策" :confirm-loading="policySaving"
+             ok-text="保存政策" cancel-text="取消" width="680px" @ok="savePolicies">
+      <a-descriptions bordered :column="2" size="small" style="margin-bottom:16px">
+        <a-descriptions-item label="VIN/SN">{{ policyCurrent?.serialNos || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="订单编号">{{ policyCurrent?.orderNo || '-' }}</a-descriptions-item>
+      </a-descriptions>
+      <a-alert type="info" show-icon style="margin-bottom:14px"
+               message="勾选该 VIN/SN 应享受的返利政策。取消勾选并保存即删除对应政策；选择新政策即追加或替换，系统会自动释放和重新预占额度。" />
+      <a-form layout="vertical">
+        <a-form-item label="返利政策">
+          <a-select v-model:value="policyIds" mode="multiple" :options="policyOptions" show-search
+                    allow-clear option-filter-prop="label" placeholder="选择该 VIN/SN 适用的政策" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { policyApi } from '../../api/policy'
 import { purchaseApi } from '../../api/procurement'
 import { useAuthStore } from '../../stores/auth'
 import { PRE_STATUS_LABELS } from '../../types/policy'
-import type { PreEntitlement } from '../../types/policy'
+import type { Policy, PreEntitlement } from '../../types/policy'
 import type { PurchaseOrder } from '../../types/procurement'
 import { PURCHASE_STATUS_LABELS } from '../../types/procurement'
 
@@ -77,6 +96,14 @@ const orderKeyword = ref('')
 const orderDetailOpen = ref(false)
 const orderLoading = ref(false)
 const orderDetail = ref<PurchaseOrder>()
+const policies = ref<Policy[]>([])
+const policyOpen = ref(false)
+const policySaving = ref(false)
+const policyCurrent = ref<PreEntitlement>()
+const policyIds = ref<string[]>([])
+const policyOptions = computed(() => policies.value
+  .filter((policy) => !policyCurrent.value?.supplierId || policy.supplierId === policyCurrent.value.supplierId)
+  .map((policy) => ({ label: `${policy.name}（${policy.policyNo}）`, value: policy.id })))
 
 const filteredRows = computed(() => {
   const keyword = orderKeyword.value.trim().toLowerCase()
@@ -93,7 +120,7 @@ const columns = [
   { title: '状态', key: 'status', width: 110 },
   { title: '终端开票日期', key: 'invoiceIssuedAt', width: 130 },
   { title: '实销时间', key: 'retailDate', width: 120 },
-  { title: '操作', key: 'actions', width: 100 },
+  { title: '操作', key: 'actions', width: 220, fixed: 'right' },
 ]
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
@@ -121,9 +148,52 @@ function statusColor(status: string) {
   return 'default'
 }
 
-async function cancel(record: PreEntitlement) {
-  try { await policyApi.cancelPreEntitlement(record.id); message.success('预享受项已取消并释放额度'); await reload() }
-  catch (error) { message.error((error as Error).message) }
+function openPolicyManager(record: PreEntitlement) {
+  if (!record.orderId || !record.orderLineId || !record.serialId || !record.productId) {
+    message.warning('该政策记录缺少订单或 VIN/SN 信息，无法变更')
+    return
+  }
+  policyCurrent.value = record
+  policyIds.value = rows.value
+    .filter((row) => row.orderId === record.orderId && row.orderLineId === record.orderLineId
+      && row.serialId === record.serialId && row.status !== 'CANCELLED')
+    .map((row) => row.policyId)
+  policyOpen.value = true
+}
+
+async function savePolicies() {
+  const record = policyCurrent.value
+  if (!record?.orderId || !record.orderLineId || !record.serialId || !record.productId) return
+  policySaving.value = true
+  try {
+    await policyApi.updateSerialPolicies({
+      orderId: record.orderId,
+      orderLineId: record.orderLineId,
+      serialId: record.serialId,
+      productId: record.productId,
+      policyIds: policyIds.value,
+    })
+    message.success(policyIds.value.length ? '该 VIN/SN 的返利政策已更新' : '该 VIN/SN 的返利政策已删除')
+    policyOpen.value = false
+    await reload()
+  } catch (error) { message.error((error as Error).message) } finally { policySaving.value = false }
+}
+
+function removePolicy(record: PreEntitlement) {
+  Modal.confirm({
+    title: `删除该 VIN/SN 的政策「${record.policyName}」？`,
+    content: '删除后会释放对应的政策额度；已申请或已兑现的政策不能删除。',
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await policyApi.deletePreEntitlement(record.id)
+        message.success('政策已删除并释放额度')
+        await reload()
+      } catch (error) { message.error((error as Error).message) }
+    },
+  })
 }
 
 async function reload() {
@@ -142,6 +212,8 @@ async function openOrderDetail(record: PreEntitlement) {
 }
 
 onMounted(async () => {
+  try { policies.value = await policyApi.list({ status: 'PUBLISHED' }) }
+  catch (error) { message.error((error as Error).message) }
   await reload()
 })
 </script>

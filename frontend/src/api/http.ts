@@ -43,6 +43,13 @@ http.interceptors.request.use(async (config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  if (config.data instanceof FormData) {
+    if (typeof (config.headers as any)?.delete === 'function') {
+      (config.headers as any).delete('Content-Type')
+    } else {
+      delete (config.headers as any)['Content-Type']
+    }
+  }
   return config
 })
 

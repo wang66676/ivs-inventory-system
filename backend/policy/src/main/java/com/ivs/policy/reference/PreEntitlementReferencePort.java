@@ -10,7 +10,8 @@ import java.util.UUID;
 public interface PreEntitlementReferencePort {
 
     record OrderReference(String serialNos, String orderNo, LocalDate orderDate, Instant invoiceIssuedAt,
-                          LocalDate retailDate, LocalDate deliveryDate, LocalDate registerDate) {
+                          LocalDate retailDate, LocalDate deliveryDate, LocalDate registerDate,
+                          BigDecimal lineAmount, UUID supplierId) {
     }
 
     /** 采购收货明细对应的单车信息，用于修复历史行级预享受项并补齐到 VIN 级。 */

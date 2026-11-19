@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -415,8 +416,8 @@ public class PolicyApplicationService {
             preRepository.delete(pre);
             return;
         }
-        if (pre.getStatus() != PreEntitlementStatus.PENDING_RETAIL) {
-            throw new ConflictException("PRE_STATUS_INVALID", "采购单政策已生成正式权益，不能再修改预享受项");
+        if (pre.getStatus() == PreEntitlementStatus.APPLIED || pre.getStatus() == PreEntitlementStatus.SETTLED) {
+            throw new ConflictException("PRE_STATUS_INVALID", "预享受项已申请或已兑现，不能再修改");
         }
         pre.cancel();
         PolicySubsidyPool pool = poolRepository.findByPolicyIdForUpdate(pre.getPolicyId())
@@ -449,6 +450,64 @@ public class PolicyApplicationService {
         return toPreView(saved, find(saved.getPolicyId()));
     }
 
+    /** 管理同一采购订单单个 VIN/SN 的返利政策：保留勾选项，释放并删除未勾选项，新增新选政策。 */
+    @Transactional
+    public List<PolicyApi.PreEntitlementView> updateSerialPolicies(PolicyApi.UpdateSerialPoliciesCommand command) {
+        if (command == null || command.orderId() == null || command.orderLineId() == null
+                || command.serialId() == null || command.productId() == null) {
+            throw new ConflictException("PRE_POLICY_CONTEXT_REQUIRED", "缺少订单、明细或 VIN/SN，无法变更政策");
+        }
+        PreEntitlementReferencePort.OrderReference reference = referencePort.describe(
+                command.orderId(), command.orderLineId(), command.serialId());
+        if (reference.supplierId() == null) {
+            throw new ConflictException("PRE_POLICY_SUPPLIER_REQUIRED", "采购订单缺少厂家，无法变更政策");
+        }
+        List<UUID> policyIds = command.policyIds() == null ? List.of()
+                : new ArrayList<>(new LinkedHashSet<>(command.policyIds()));
+        for (UUID policyId : policyIds) {
+            PromotionPolicy policy = find(policyId);
+            if (!reference.supplierId().equals(policy.getSupplierId())) {
+                throw new ConflictException("PRE_POLICY_SUPPLIER_MISMATCH",
+                        "政策「" + policy.getName() + "」不属于当前采购订单厂家");
+            }
+        }
+        List<PolicyPreEntitlement> current = preRepository
+                .findByOrderIdAndOrderLineIdAndSerialIdOrderByCreatedAtAsc(
+                        command.orderId(), command.orderLineId(), command.serialId());
+        LinkedHashSet<UUID> currentPolicyIds = new LinkedHashSet<>();
+        for (PolicyPreEntitlement pre : current) {
+            if (pre.getStatus() != PreEntitlementStatus.CANCELLED) currentPolicyIds.add(pre.getPolicyId());
+            if (pre.getStatus() == PreEntitlementStatus.APPLIED || pre.getStatus() == PreEntitlementStatus.SETTLED) {
+                throw new ConflictException("PRE_STATUS_INVALID", "该 VIN/SN 的政策已申请或已兑现，不能再变更");
+            }
+        }
+        if (currentPolicyIds.equals(new LinkedHashSet<>(policyIds))) {
+            return current.stream().filter(pre -> pre.getStatus() != PreEntitlementStatus.CANCELLED)
+                    .map(pre -> toPreView(pre, find(pre.getPolicyId()))).toList();
+        }
+        for (PolicyPreEntitlement pre : current) {
+            releaseForResync(pre);
+        }
+        preRepository.flush();
+        if (policyIds.isEmpty()) {
+            return List.of();
+        }
+        BigDecimal lineAmount = reference.lineAmount() == null ? BigDecimal.ZERO : reference.lineAmount();
+        return apply(new PolicyApi.ApplyPreEntitlementCommand(command.orderId(), command.orderLineId(),
+                command.productId(), command.serialId(), lineAmount, policyIds, true, "收货后按VIN调整返利政策"), true);
+    }
+
+    /** 删除单个 VIN/SN 的政策，并释放对应额度。 */
+    @Transactional
+    public void deletePre(UUID preId) {
+        PolicyPreEntitlement pre = preRepository.findById(preId)
+                .orElseThrow(() -> new NotFoundException("预享受项", preId));
+        if (pre.getStatus() == PreEntitlementStatus.APPLIED || pre.getStatus() == PreEntitlementStatus.SETTLED) {
+            throw new ConflictException("PRE_STATUS_INVALID", "预享受项已申请或已兑现，不能删除");
+        }
+        releaseForResync(pre);
+        preRepository.flush();
+    }
     @Transactional(readOnly = true)
     public List<PolicyApi.PreEntitlementView> listPre(UUID orderId) {
         List<PolicyPreEntitlement> rows = orderId == null ? preRepository.findAllByOrderByCreatedAtDesc()
@@ -686,7 +745,7 @@ public class PolicyApplicationService {
         PreEntitlementStatus effectiveStatus = effectivePreStatus(pre.getStatus(), referenceDate, policy);
         return new PolicyApi.PreEntitlementView(pre.getId(), pre.getPreNo(), pre.getOrderId(),
                 pre.getOrderLineId(), pre.getProductId(), pre.getSerialId(), pre.getPolicyId(),
-                policy.getName(), pre.getEstimateAmount(), effectiveStatus, pre.isAddedAfterOrder(),
+                policy.getName(), policy.getSupplierId(), policy.getPolicyNo(), pre.getEstimateAmount(), effectiveStatus, pre.isAddedAfterOrder(),
                 pre.getAddReason(), reference.serialNos(), reference.orderNo(), reference.invoiceIssuedAt(),
                 reference.retailDate(), policy.getReferenceDateType(), referenceDate, pre.getCreatedAt());
     }

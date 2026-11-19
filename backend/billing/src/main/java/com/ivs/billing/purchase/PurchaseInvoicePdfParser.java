@@ -55,7 +55,7 @@ public class PurchaseInvoicePdfParser {
     private static final Pattern TAX_RATE = Pattern.compile(
             "(?:税率|征收率|税率\\s*[/／]\\s*征收率)[:：\\s]*(\\d+(?:\\.\\d+)?)\\s*%");
     private static final Pattern TAX_RATE_FALLBACK = Pattern.compile("(?<!\\d)(\\d{1,2}(?:\\.\\d+)?)\\s*%");
-    private static final Pattern NAME_VALUE = Pattern.compile("名称[:：\\s]*([^\\n\\r]{2,100})");
+    private static final Pattern NAME_VALUE = Pattern.compile("名称[:：\\s]*([^\\n\\r]*?)(?=名称[:：]|\\n|\\r|\\z)");
     private static final Pattern SELLER_NAME = Pattern.compile(
             "(?:销售方(?:信息)?[\\s\\S]{0,360}?|销售方)名称[:：\\s]*([^\\n\\r]{2,100})");
     private static final Pattern BUYER_NAME = Pattern.compile(
@@ -78,9 +78,22 @@ public class PurchaseInvoicePdfParser {
             if (document.isEncrypted()) {
                 throw new IOException("PDF 已加密，无法读取");
             }
-            String text = new PDFTextStripper().getText(document);
-            return parseText(text);
+            PDFTextStripper sorted = new PDFTextStripper();
+            sorted.setSortByPosition(true);
+            sorted.setLineSeparator("\n");
+            ParsedInvoice sortedResult = parseText(sorted.getText(document));
+
+            PDFTextStripper plain = new PDFTextStripper();
+            plain.setLineSeparator("\n");
+            ParsedInvoice plainResult = parseText(plain.getText(document));
+
+            return quality(sortedResult) >= quality(plainResult) ? sortedResult : plainResult;
         }
+    }
+
+    private int quality(ParsedInvoice parsed) {
+        int rawLength = parsed.rawText() == null ? 0 : parsed.rawText().length();
+        return parsed.confidence() * 1_000 + Math.min(rawLength, 5_000);
     }
 
     public ParsedInvoice parseText(String text) {
@@ -216,7 +229,8 @@ public class PurchaseInvoicePdfParser {
 
     private static String cleanName(String value) {
         if (value == null) return null;
-        String cleaned = value.replaceAll("\\s{2,}.*$", "").trim();
+        String cleaned = value.replaceAll("\\s{2,}.*$", "")
+                .replaceAll("\\s+(?:售|销|购买方|销售方)\\s*$", "").trim();
         return cleaned.length() > 100 ? cleaned.substring(0, 100) : cleaned;
     }
 

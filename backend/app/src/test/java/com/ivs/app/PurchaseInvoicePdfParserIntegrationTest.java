@@ -158,6 +158,20 @@ class PurchaseInvoicePdfParserIntegrationTest {
     }
 
     @Test
+    void 同一行并列买卖方名称可分别识别() {
+        String text = """
+                机动车 电子发票（增值税专用发票）
+                发票号码：26957000000273010148
+                开票日期：2026年10月28日
+                买 名称:天津容大汽车贸易有限公司 售 名称:比亚迪汽车工业有限公司
+                价税合计（大写）肆拾万圆整（小写）¥400000.00
+                *机动车*纯电动运输车 LPEKMDBD1TD000280 辆 1 353982.30 13%
+                """;
+        PurchaseInvoicePdfParser.ParsedInvoice parsed = parser.parseText(text);
+        assertThat(parsed.buyerName()).isEqualTo("天津容大汽车贸易有限公司");
+        assertThat(parsed.sellerName()).isEqualTo("比亚迪汽车工业有限公司");
+    }
+    @Test
     void 拒绝非PDF扩展名上传() {
         MockMultipartFile file = new MockMultipartFile("file", "invoice.exe", "application/pdf",
                 "%PDF-1.4 test".getBytes(java.nio.charset.StandardCharsets.UTF_8));

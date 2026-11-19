@@ -1,0 +1,1 @@
+@echo off`r`nchcp 65001 >nul`r`npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0局域网连接诊断.ps1"`r`n
