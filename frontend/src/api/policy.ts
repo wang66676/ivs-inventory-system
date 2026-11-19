@@ -23,6 +23,10 @@ export const policyApi = {
     http.post<PreEntitlement[]>('/ivs/pre-entitlements', body).then((r) => r.data),
   cancelPreEntitlement: (id: string) =>
     http.post<PreEntitlement>(`/ivs/pre-entitlements/${id}/cancel`, {}).then((r) => r.data),
+  updateSerialPolicies: (body: { orderId: string; orderLineId: string; serialId: string; productId: string; policyIds: string[] }) =>
+    http.put<PreEntitlement[]>('/ivs/pre-entitlements/serial-policies', body).then((r) => r.data),
+  deletePreEntitlement: (id: string) =>
+    http.delete(`/ivs/pre-entitlements/${id}`),
 
   entitlements: (params?: { retailId?: string; supplierId?: string; periodCode?: string; status?: string }) =>
     http.get<Entitlement[]>('/ivs/entitlements', { params }).then((r) => r.data),

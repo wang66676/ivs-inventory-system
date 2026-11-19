@@ -54,13 +54,17 @@ public final class PolicyApi {
 
     public record PreEntitlementView(
             UUID id, String preNo, UUID orderId, UUID orderLineId, UUID productId, UUID serialId,
-            UUID policyId, String policyName, BigDecimal estimateAmount, PreEntitlementStatus status,
+            UUID policyId, String policyName, UUID supplierId, String policyNo, BigDecimal estimateAmount, PreEntitlementStatus status,
             boolean addedAfterOrder, String addReason, String serialNos, String orderNo,
             Instant invoiceIssuedAt, LocalDate retailDate, String referenceDateType,
             LocalDate referenceDate, Instant createdAt
     ) {
     }
 
+    public record UpdateSerialPoliciesCommand(
+            UUID orderId, UUID orderLineId, UUID serialId, UUID productId, List<UUID> policyIds
+    ) {
+    }
     public record ApplyPreEntitlementCommand(
             UUID orderId, UUID orderLineId, UUID productId, UUID serialId, BigDecimal orderLineAmount,
             List<UUID> policyIds, Boolean addedAfterOrder, String reason

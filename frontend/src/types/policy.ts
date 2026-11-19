@@ -51,6 +51,8 @@ export interface PreEntitlement {
   serialId?: string
   policyId: string
   policyName: string
+  supplierId?: string
+  policyNo?: string
   estimateAmount: number
   status: PreEntitlementStatus
   addedAfterOrder: boolean

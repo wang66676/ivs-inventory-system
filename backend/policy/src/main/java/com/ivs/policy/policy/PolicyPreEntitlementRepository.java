@@ -16,6 +16,8 @@ public interface PolicyPreEntitlementRepository extends JpaRepository<PolicyPreE
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from PolicyPreEntitlement p where p.orderId = :orderId order by p.createdAt asc")
     List<PolicyPreEntitlement> findByOrderIdForUpdate(UUID orderId);
+    List<PolicyPreEntitlement> findByOrderIdAndOrderLineIdAndSerialIdOrderByCreatedAtAsc(
+            UUID orderId, UUID orderLineId, UUID serialId);
     Optional<PolicyPreEntitlement> findByOrderIdAndOrderLineIdAndSerialIdAndPolicyId(
             UUID orderId, UUID orderLineId, UUID serialId, UUID policyId);
     @Query(value = "select nextval('ivs.pre_entitlement_no_seq')", nativeQuery = true)

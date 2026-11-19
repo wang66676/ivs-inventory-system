@@ -79,6 +79,63 @@ test('销项蓝字发票支持一次多选 PDF 批量上传', async ({ page }) =
   await expect(dialog.locator('input[type="file"]')).toHaveAttribute('multiple', '')
   await expect(dialog.locator('input[type="file"]')).toHaveAttribute('accept', /application\/pdf/)
 })
+test('整车批量入库无采购单时自动创建采购单并收货', async ({ page }) => {
+  test.setTimeout(120000)
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const suffix = Date.now().toString()
+  const supplierName = `E2E整车厂-${suffix}`
+  const warehouseName = `E2E整车仓-${suffix}`
+  const productName = `E2E自动入库整车-${suffix}`
+  const orderNo = `CG${new Date().toISOString().slice(2, 10).replace(/-/g, '')}${suffix.slice(-6)}`
+  const vin = `LZZE2E${suffix.slice(-11)}`
+  const supplier = await page.request.post('/api/ivs/suppliers', {
+    headers, data: { name: supplierName, supplierType: 'VEHICLE_OEM' },
+  })
+  expect(supplier.ok()).toBeTruthy()
+  const warehouse = await page.request.post('/api/ivs/warehouses', {
+    headers, data: { code: `E2E-WH-${suffix.slice(-8)}`, name: warehouseName, type: 'MAIN' },
+  })
+  expect(warehouse.ok()).toBeTruthy()
+  const category = await page.request.post('/api/ivs/product-categories', {
+    headers, data: { code: `E2E-CAT-${suffix.slice(-8)}`, name: `E2E整车-${suffix}`,
+      trackingMode: 'SERIAL', statusTemplate: 'VEHICLE', unit: '台', sortOrder: 0 },
+  })
+  expect(category.ok()).toBeTruthy()
+  const categoryBody = await category.json()
+  const product = await page.request.post('/api/ivs/products', {
+    headers, data: { name: productName, categoryId: categoryBody.id, unit: '台', minPrice: 300000,
+      purchasePriceRef: 350000 },
+  })
+  expect(product.ok()).toBeTruthy()
+
+  const csv = [
+    '订单编号,供应商,车系/商品,配置,VIN/SN,采购价,收货仓库,申请合格证日期',
+    `${orderNo},${supplierName},${productName},标准配置,${vin},350000,${warehouseName},2026-11-19`,
+  ].join('\n')
+  await page.goto('/procurement/receipts')
+  await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+    name: `receipt-${suffix}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8'),
+  })
+  await expect(page.getByText(/自动创建并审核/)).toBeVisible({ timeout: 60000 })
+  await expect(page.getByText(vin, { exact: true })).toBeVisible()
+
+  const created = await page.request.get(`/api/ivs/purchase-orders?keyword=${encodeURIComponent(orderNo)}`, { headers })
+  expect(created.ok()).toBeTruthy()
+  const orders = await created.json()
+  expect(orders.some((order: any) => order.externalOrderNo === orderNo)).toBeTruthy()
+})
+
+test('全站表格分页支持10条20条50条选择', async ({ page }) => {
+  await login(page)
+  await page.goto('/masterdata/products')
+  const pagination = page.locator('.ant-pagination-options')
+  await expect(pagination).toBeVisible()
+  await pagination.locator('.ant-select').click()
+  const options = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content')
+  await expect(options).toContainText(['10 / page', '20 / page', '50 / page'])
+})
 test('政策红字发票按 VIN/SN 冲减应付入口可用', async ({ page }) => {
   await login(page)
   await page.goto('/procurement/red-invoices')
