@@ -60,6 +60,13 @@ public class InventoryQueryController {
         return service.summary();
     }
 
+    @GetMapping("/vehicle-series-detail")
+    @PreAuthorize("hasAuthority('IVS_READ')")
+    public List<InventoryApi.VehicleSeriesInventoryDetailView> vehicleSeriesInventoryDetail(
+            @RequestParam(required = false) String series,
+            @RequestParam(required = false) String config) {
+        return service.vehicleSeriesInventoryDetails(series, config);
+    }
     @GetMapping("/age-analysis")
     @PreAuthorize("hasAuthority('IVS_READ')")
     public List<InventoryApi.AgeAnalysisView> ageAnalysis() {

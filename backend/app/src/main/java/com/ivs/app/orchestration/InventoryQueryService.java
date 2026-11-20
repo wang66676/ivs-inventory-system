@@ -216,23 +216,69 @@ public class InventoryQueryService {
     }
 
     private List<InventoryApi.VehicleSeriesInventoryView> vehicleSeriesInventory() {
+        Map<String, List<InventoryApi.VehicleSeriesInventoryDetailView>> grouped = new LinkedHashMap<>();
+        for (InventoryApi.VehicleSeriesInventoryDetailView row : vehicleSeriesInventoryDetails(null, null)) {
+            String key = row.series() + "::" + row.config();
+            grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+        }
+        return grouped.values().stream()
+                .map(rows -> new InventoryApi.VehicleSeriesInventoryView(
+                        rows.get(0).series(), rows.get(0).config(), rows.size()))
+                .toList();
+    }
+
+    /** 按车系和采购配置下钻在库 VIN/SN，并带出对应采购订单号。 */
+    @Transactional(readOnly = true)
+    public List<InventoryApi.VehicleSeriesInventoryDetailView> vehicleSeriesInventoryDetails(
+            String seriesFilter, String configFilter) {
+        String series = seriesFilter == null ? null : seriesFilter.trim();
+        String config = configFilter == null ? null : configFilter.trim();
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select coalesce(nullif(trim(p.series), ''), p.name) as series,
-                       coalesce(nullif(trim(p.config_code), ''), nullif(trim(p.model), ''), '未配置') as config,
-                       count(*) as quantity
+                with purchase_origin as (
+                    select sl.serial_id, sl.biz_id,
+                           row_number() over (partition by sl.serial_id
+                                              order by sl.occurred_at asc, sl.created_at asc) rn
+                      from ivs.stock_ledger sl
+                     where sl.serial_id is not null and sl.biz_id is not null
+                       and sl.move_type = 'PURCHASE_IN'
+                )
+                select ps.id as serial_id,
+                       ps.serial_no,
+                       coalesce(nullif(trim(p.series), ''), p.name) as series,
+                       coalesce(nullif(trim(pol.config_text), ''),
+                                nullif(trim(p.config_code), ''),
+                                nullif(trim(p.model), ''), '未配置') as config,
+                       ps.status,
+                       ps.warehouse_id,
+                       w.name as warehouse_name,
+                       po.id as purchase_order_id,
+                       coalesce(po.external_order_no, po.order_no) as purchase_order_no
                   from ivs.product_serial ps
                   join ivs.product p on p.id = ps.product_id
                   join ivs.product_category c on c.id = p.category_id
+                  left join purchase_origin por on por.serial_id = ps.id and por.rn = 1
+                  left join ivs.purchase_receipt pr on pr.id = por.biz_id
+                  left join ivs.purchase_receipt_line prl
+                         on prl.receipt_id = pr.id and prl.serial_nos like '%' || ps.serial_no || '%'
+                  left join ivs.purchase_order_line pol on pol.id = prl.order_line_id
+                  left join ivs.purchase_order po on po.id = pr.order_id
+                  left join ivs.warehouse w on w.id = ps.warehouse_id
                  where c.status_template = 'VEHICLE' and ps.status = 'IN_STOCK'
-                 group by coalesce(nullif(trim(p.series), ''), p.name),
-                          coalesce(nullif(trim(p.config_code), ''), nullif(trim(p.model), ''), '未配置')
-                 order by series, config
+                 order by series, config, ps.serial_no
                 """);
         return rows.stream()
-                .map(row -> new InventoryApi.VehicleSeriesInventoryView(
+                .map(row -> new InventoryApi.VehicleSeriesInventoryDetailView(
+                        (UUID) row.get("serial_id"),
+                        String.valueOf(row.get("serial_no")),
                         String.valueOf(row.get("series")),
                         String.valueOf(row.get("config")),
-                        ((Number) row.get("quantity")).intValue()))
+                        String.valueOf(row.get("status")),
+                        row.get("warehouse_id") == null ? null : (UUID) row.get("warehouse_id"),
+                        row.get("warehouse_name") == null ? null : String.valueOf(row.get("warehouse_name")),
+                        row.get("purchase_order_id") == null ? null : (UUID) row.get("purchase_order_id"),
+                        row.get("purchase_order_no") == null ? null : String.valueOf(row.get("purchase_order_no"))))
+                .filter(row -> series == null || series.equals(row.series()))
+                .filter(row -> config == null || config.equals(row.config()))
                 .toList();
     }
 

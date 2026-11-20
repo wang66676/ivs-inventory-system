@@ -27,7 +27,13 @@
           <a-table :data-source="summary?.vehicleSeriesInventory ?? []" :row-key="(record: any) => `${record.series}-${record.config}`" size="small" :pagination="false">
             <a-table-column title="车系" data-index="series" :width="180" />
             <a-table-column title="配置" data-index="config" :width="180" />
-            <a-table-column title="数量" data-index="quantity" :width="110" align="right" />
+            <a-table-column title="数量" key="quantity" :width="110" align="right">
+              <template #default="{ record }">
+                <a-button type="link" size="small" style="padding:0" @click="openVinDetail(record)">
+                  {{ record.quantity }}
+                </a-button>
+              </template>
+            </a-table-column>
           </a-table>
         </a-card>
       </a-col>
@@ -41,6 +47,22 @@
         </a-card>
       </a-col>
     </a-row>
+
+    <a-modal v-model:open="detailOpen" :title="detailTitle" :footer="null" width="1080px">
+      <a-table :data-source="detailRows" row-key="serialId" size="small" :loading="detailLoading"
+               :pagination="{ pageSize: 20, showSizeChanger: true }" :scroll="{ x: 900 }">
+        <a-table-column title="VIN / SN" data-index="serialNo" :width="230" />
+        <a-table-column title="车系" data-index="series" :width="150" />
+        <a-table-column title="采购配置" data-index="config" :width="200" />
+        <a-table-column title="状态" :width="100">
+          <template #default="{ record }">
+            <a-tag color="green">{{ record.status === 'IN_STOCK' ? '在库' : record.status }}</a-tag>
+          </template>
+        </a-table-column>
+        <a-table-column title="当前仓库" data-index="warehouseName" :width="150" />
+        <a-table-column title="对应采购订单号" data-index="purchaseOrderNo" :width="190" />
+      </a-table>
+    </a-modal>
 
     <a-card title="按仓库" :bordered="false" style="margin-top:16px">
       <a-table :data-source="summary?.byWarehouse ?? []" row-key="warehouseName" size="small" :pagination="false">
@@ -56,9 +78,27 @@
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { inventoryApi } from '../../api/inventory'
-import type { InventorySummary } from '../../types/inventory'
+import type { InventorySummary, VehicleSeriesInventoryDetail } from '../../types/inventory'
 
 const summary = ref<InventorySummary | null>(null)
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detailRows = ref<VehicleSeriesInventoryDetail[]>([])
+const detailTitle = ref('VIN / SN 明细')
+
+async function openVinDetail(record: InventorySummary['vehicleSeriesInventory'][number]) {
+  detailOpen.value = true
+  detailLoading.value = true
+  detailTitle.value = `${record.series} / ${record.config} VIN 明细`
+  detailRows.value = []
+  try {
+    detailRows.value = await inventoryApi.vehicleSeriesDetail({ series: record.series, config: record.config })
+  } catch (error) {
+    message.error((error as Error).message)
+  } finally {
+    detailLoading.value = false
+  }
+}
 
 onMounted(async () => {
   try {

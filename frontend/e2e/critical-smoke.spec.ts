@@ -127,6 +127,23 @@ test('整车批量入库无采购单时自动创建采购单并收货', async ({
   expect(orders.some((order: any) => order.externalOrderNo === orderNo)).toBeTruthy()
 })
 
+test('车系VIN库存使用采购配置且数量可查看VIN与采购订单', async ({ page }) => {
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const detailsResponse = await page.request.get('/api/ivs/inventory/vehicle-series-detail', { headers })
+  expect(detailsResponse.ok()).toBeTruthy()
+  const details = await detailsResponse.json()
+  expect(details.length).toBeGreaterThan(0)
+  const target = details[details.length - 1]
+  await page.goto('/inventory/dashboard')
+  const row = page.getByRole('row').filter({ hasText: target.series }).filter({ hasText: target.config })
+  await expect(row).toBeVisible()
+  await row.locator('button').first().click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText(target.serialNo, { exact: true })).toBeVisible()
+  await expect(dialog.getByText(target.purchaseOrderNo, { exact: true })).toBeVisible()
+})
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
   await page.goto('/masterdata/products')

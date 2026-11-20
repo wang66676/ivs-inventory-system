@@ -102,6 +102,18 @@ export interface AgeAnalysisItem {
   purchasePrice: number
 }
 
+export interface VehicleSeriesInventoryDetail {
+  serialId: string
+  serialNo: string
+  series: string
+  config: string
+  status: string
+  warehouseId?: string
+  warehouseName?: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+}
+
 export interface InventorySummary {
   serialInStock: number
   vehicleInStockNotLocked: number

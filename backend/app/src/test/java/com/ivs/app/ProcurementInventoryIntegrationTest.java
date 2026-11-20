@@ -289,7 +289,8 @@ class ProcurementInventoryIntegrationTest {
 
         ProcurementApi.PurchaseOrderView order = createOrder(oem.id(), warehouse.id(),
                 List.of(new ProcurementApi.SavePurchaseOrderLineCommand(product.id(), BigDecimal.ONE,
-                        new BigDecimal("430000"), null, null)));
+                        new BigDecimal("430000"), null, null, List.of(), "标载财富版", warehouse.id(),
+                        null, null, null, null, null, null, null, null, null)));
         order = approve(order.id());
         receive(order, warehouse, order.lines().get(0).id(), null, List.of("LZZ1CLWB0NA300001"));
 
@@ -315,11 +316,19 @@ class ProcurementInventoryIntegrationTest {
         assertThat(summary.batteryInStock()).isEqualTo(1);
         assertThat(summary.vehicleSeriesInventory()).hasSize(1);
         assertThat(summary.vehicleSeriesInventory().get(0).series()).isEqualTo("Q3");
-        assertThat(summary.vehicleSeriesInventory().get(0).config()).isEqualTo("T31");
+        assertThat(summary.vehicleSeriesInventory().get(0).config()).isEqualTo("标载财富版");
         assertThat(summary.vehicleSeriesInventory().get(0).quantity()).isEqualTo(1);
         assertThat(summary.totalAmount()).isEqualByComparingTo("430000.00");
         assertThat(summary.ageBuckets()).hasSize(4);
         assertThat(summary.consistent()).isTrue();
+
+        InventoryApi.VehicleSeriesInventoryDetailView[] vehicleDetails = restTemplate.getForEntity(
+                "/api/ivs/inventory/vehicle-series-detail", InventoryApi.VehicleSeriesInventoryDetailView[].class)
+                .getBody();
+        assertThat(vehicleDetails).hasSize(1);
+        assertThat(vehicleDetails[0].serialNo()).isEqualTo("LZZ1CLWB0NA300001");
+        assertThat(vehicleDetails[0].config()).isEqualTo("标载财富版");
+        assertThat(vehicleDetails[0].purchaseOrderNo()).isEqualTo(order.orderNo());
     }
 
     /* ===================== 辅助方法 ===================== */
@@ -379,6 +388,8 @@ class ProcurementInventoryIntegrationTest {
             item.put("quantity", line.quantity());
             item.put("unitPrice", line.unitPrice());
             if (line.taxRate() != null) item.put("taxRate", line.taxRate());
+            if (line.configText() != null) item.put("configText", line.configText());
+            if (line.warehouseId() != null) item.put("warehouseId", line.warehouseId().toString());
             linePayload.add(item);
         }
         body.put("lines", linePayload);
