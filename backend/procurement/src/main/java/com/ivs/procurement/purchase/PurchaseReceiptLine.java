@@ -50,6 +50,9 @@ public class PurchaseReceiptLine {
     @Column(name = "serial_nos", columnDefinition = "text")
     private String serialNos;
 
+    @Column(name = "b_box", length = 10)
+    private String bBox;
+
     @Column(length = 300)
     private String remark;
 
@@ -69,7 +72,7 @@ public class PurchaseReceiptLine {
     public static PurchaseReceiptLine create(UUID receiptId, UUID orderLineId, UUID productId,
                                              UUID warehouseId, BigDecimal quantity, BigDecimal unitPrice,
                                              String batchNo, String serialNos, LocalDate certificateApplicationDate,
-                                             String remark) {
+                                             String bBox, String remark) {
         PurchaseReceiptLine line = new PurchaseReceiptLine();
         line.id = UUID.randomUUID();
         line.receiptId = receiptId;
@@ -81,6 +84,7 @@ public class PurchaseReceiptLine {
         line.unitPrice = (unitPrice == null ? BigDecimal.ZERO : unitPrice).setScale(2, RoundingMode.HALF_UP);
         line.batchNo = batchNo;
         line.serialNos = serialNos;
+        line.bBox = bBox == null || bBox.isBlank() ? null : bBox.trim();
         line.remark = remark;
         line.createdAt = Instant.now();
         line.updatedAt = line.createdAt;
@@ -114,6 +118,7 @@ public class PurchaseReceiptLine {
     public BigDecimal getUnitPrice() { return unitPrice; }
     public String getBatchNo() { return batchNo; }
     public String getSerialNos() { return serialNos; }
+    public String getBBox() { return bBox; }
     public String getRemark() { return remark; }
     public long getVersion() { return version; }
 

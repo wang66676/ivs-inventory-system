@@ -336,7 +336,8 @@ public class PurchaseOrderApplicationService {
             BigDecimal unitPrice = receiveLine.unitPrice() == null ? orderLine.getUnitPrice()
                     : receiveLine.unitPrice().setScale(2, RoundingMode.HALF_UP);
             prepared.add(new Prepared(orderLine, product, lineWarehouseId, quantity, unitPrice,
-                    receiveLine.batchNo(), serialNos, receiveLine.certificateApplicationDate()));
+                    receiveLine.batchNo(), serialNos, receiveLine.certificateApplicationDate(),
+                    batteryOrder ? normalizeBBox(receiveLine.bBox()) : null));
             total = total.add(quantity.multiply(unitPrice));
         }
 
@@ -351,7 +352,7 @@ public class PurchaseOrderApplicationService {
             lineRepository.save(item.orderLine());
             receiptLineRepository.save(PurchaseReceiptLine.create(receipt.getId(), item.orderLine().getId(),
                     item.product().id(), item.warehouseId(), item.quantity(), item.unitPrice(), item.batchNo(),
-                    serialNosJson(item.serialNos()), item.certificateApplicationDate(), null));
+                    serialNosJson(item.serialNos()), item.certificateApplicationDate(), item.bBox(), null));
             postingLines.add(new InventoryReceiptPort.ReceiptPostingLine(item.product().id(), item.warehouseId(),
                     item.quantity(), item.unitPrice(), item.batchNo(), item.serialNos(),
                     item.certificateApplicationDate()));
@@ -560,12 +561,19 @@ public class PurchaseOrderApplicationService {
 
     private record Prepared(PurchaseOrderLine orderLine, MasterDataQueryPort.ProductInfo product,
                             UUID warehouseId, BigDecimal quantity, BigDecimal unitPrice, String batchNo,
-                            List<String> serialNos, LocalDate certificateApplicationDate) {
+                            List<String> serialNos, LocalDate certificateApplicationDate, String bBox) {
     }
 
     private record BatteryPricing(BigDecimal unitPrice, String boxManufacturer, String boxModel,
                                   BigDecimal boxUnitPrice, String packManufacturer, BigDecimal energyKwh,
                                   BigDecimal packUnitPrice) {
+    }
+
+    private String normalizeBBox(String value) {
+        if (value == null || value.isBlank()) return "无";
+        String normalized = value.trim();
+        if ("有".equals(normalized) || "无".equals(normalized)) return normalized;
+        throw new ConflictException("RECEIVE_BBOX_INVALID", "B-BOX 只能选择“有”或“无”");
     }
 
     private List<String> normalizeSerialNos(List<String> serialNos) {
@@ -740,7 +748,7 @@ public class PurchaseOrderApplicationService {
                             orderLine == null ? null : orderLine.getBatteryBoxUnitPrice(),
                             orderLine == null ? null : orderLine.getBatteryPackManufacturer(),
                             orderLine == null ? null : orderLine.getBatteryEnergyKwh(),
-                            orderLine == null ? null : orderLine.getBatteryPackUnitPrice());
+                            orderLine == null ? null : orderLine.getBatteryPackUnitPrice(), line.getBBox());
                 }).toList();
         String businessScope = orderRepository.findById(receipt.getOrderId())
                 .map(this::purchaseScope).orElse("VEHICLE");

@@ -16,7 +16,7 @@ public final class PayableApi {
             UUID purchaseReceiptId, String orderNo, String receiptNo, BigDecimal purchaseQuantity, BigDecimal amount,
             BigDecimal rebateCreditAmount, BigDecimal netAmount, BigDecimal invoiceMatchedAmount,
             BigDecimal uninvoicedAmount, BigDecimal paidAmount, BigDecimal outstanding,
-            LocalDate dueDate, LocalDate lastPaymentDate, PayableStatus status,
+            LocalDate dueDate, LocalDate lastPaymentDate, String lastPaymentMethod, PayableStatus status,
             String remark, Instant createdAt
     ) {
         public static PayableView from(Payable p, String supplierName) {
@@ -24,10 +24,10 @@ public final class PayableApi {
                     p.getPurchaseOrderId(), p.getPurchaseReceiptId(), p.getOrderNo(), p.getReceiptNo(),
                     p.getPurchaseQuantity(), p.getAmount(), p.getRebateCreditAmount(), p.getNetAmount(),
                     p.getInvoiceMatchedAmount(), p.getUninvoicedAmount(), p.getPaidAmount(), p.outstanding(),
-                    p.getDueDate(), p.getLastPaymentDate(), p.getStatus(),
+                    p.getDueDate(), p.getLastPaymentDate(), p.getLastPaymentMethod(), p.getStatus(),
                     p.getRemark(), p.getCreatedAt());
         }
     }
 
-    public record PayCommand(BigDecimal amount, String remark, LocalDate paymentDate) {}
+    public record PayCommand(BigDecimal amount, String remark, LocalDate paymentDate, String paymentMethod) {}
 }

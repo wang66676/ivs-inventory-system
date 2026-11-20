@@ -121,7 +121,8 @@ public class PayableService {
     public PayableApi.PayableView pay(UUID id, PayableApi.PayCommand command) {
         Payable payable = repository.findById(id).orElseThrow(() -> new NotFoundException("应付单", id));
         try {
-            payable.pay(command == null ? null : command.amount(), command == null ? null : command.paymentDate());
+            payable.pay(command == null ? null : command.amount(), command == null ? null : command.paymentDate(),
+                    command == null ? null : command.paymentMethod());
         } catch (IllegalArgumentException exception) {
             throw new ConflictException("PAYABLE_PAY_INVALID", exception.getMessage());
         }

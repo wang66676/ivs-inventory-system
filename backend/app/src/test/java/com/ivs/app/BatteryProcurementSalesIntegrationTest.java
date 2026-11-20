@@ -91,9 +91,10 @@ class BatteryProcurementSalesIntegrationTest {
         ProcurementApi.PurchaseOrderView purchase = post("/api/ivs/purchase-orders", Map.of(
                 "supplierId", supplier.id().toString(),
                 "warehouseId", warehouse.id().toString(),
-                "externalOrderNo", "BAT-PO-001",
                 "lines", List.of(batteryLine)
         ), ProcurementApi.PurchaseOrderView.class);
+        assertThat(purchase.orderNo()).isNotBlank();
+        assertThat(purchase.externalOrderNo()).isEqualTo(purchase.orderNo());
         assertThat(purchase.lines()).hasSize(1);
         assertThat(purchase.businessScope()).isEqualTo("BATTERY");
         assertThat(purchase.warehouseName()).isEqualTo("天津容大");
@@ -117,13 +118,25 @@ class BatteryProcurementSalesIntegrationTest {
                                 "orderLineId", purchase.lines().get(0).id().toString(),
                                 "quantity", 1,
                                 "serialNos", List.of("BAT-SN-TEST-001"),
-                                "unitPrice", 300000))
+                                "unitPrice", 300000, "bBox", "有"))
                 ), ProcurementApi.PurchaseReceiptView.class);
         assertThat(receipt.lines()).hasSize(1);
         assertThat(receipt.businessScope()).isEqualTo("BATTERY");
         assertThat(receipt.warehouseName()).isEqualTo("天津容大");
         assertThat(receipt.lines().get(0).batteryBoxManufacturer()).isEqualTo("电池箱厂 A");
         assertThat(receipt.lines().get(0).batteryPackManufacturer()).isEqualTo("电池包厂 B");
+        assertThat(receipt.lines().get(0).bBox()).isEqualTo("有");
+
+        InventoryApi.SummaryView summary = restTemplate.getForEntity(
+                "/api/ivs/inventory/summary", InventoryApi.SummaryView.class).getBody();
+        assertThat(summary).isNotNull();
+        assertThat(summary.batteryInStock()).isEqualTo(1);
+        assertThat(summary.batteryInventoryAmount()).isEqualByComparingTo("300000.00");
+        assertThat(summary.batteryInventory()).hasSize(1);
+        assertThat(summary.batteryInventory().get(0).batteryManufacturer()).isEqualTo("电池包厂 B");
+        assertThat(summary.batteryInventory().get(0).frameManufacturer()).isEqualTo("电池箱厂 A");
+        assertThat(summary.batteryInventory().get(0).quantity()).isEqualTo(1);
+        assertThat(summary.byWarehouse()).isEmpty();
 
         MasterdataApi.SerialView serial = serialByKeyword("BAT-SN-TEST-001");
         assertThat(serial.status()).isEqualTo(SerialStatus.IN_STOCK);

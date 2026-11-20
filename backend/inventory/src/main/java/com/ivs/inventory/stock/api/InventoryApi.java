@@ -80,12 +80,16 @@ public final class InventoryApi {
     ) {
     }
 
+    /** 电池库存明细看板：按电池包厂家与电池箱（框架）厂家汇总在库数量。 */
+    public record BatteryInventoryView(String batteryManufacturer, String frameManufacturer, int quantity) {
+    }
     public record SummaryView(
             int serialInStock, int vehicleInStockNotLocked, int batteryInStock,
             int quantityItems, BigDecimal totalAmount, BigDecimal totalLockedQty,
             List<CategorySummaryView> byCategory, List<WarehouseSummaryView> byWarehouse,
             List<AgeBucketView> ageBuckets, List<VehicleSeriesInventoryView> vehicleSeriesInventory,
-            long ledgerCount, boolean consistent
+            List<BatteryInventoryView> batteryInventory, BigDecimal vehicleInventoryAmount,
+            BigDecimal batteryInventoryAmount, long ledgerCount, boolean consistent
     ) {
     }
 

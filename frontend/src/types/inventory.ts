@@ -125,6 +125,9 @@ export interface InventorySummary {
   byWarehouse: { warehouseName: string; itemCount: number; amount: number }[]
   ageBuckets: AgeBucket[]
   vehicleSeriesInventory: { series: string; config: string; quantity: number }[]
+  batteryInventory: { batteryManufacturer: string; frameManufacturer: string; quantity: number }[]
+  vehicleInventoryAmount: number
+  batteryInventoryAmount: number
   ledgerCount: number
   consistent: boolean
 }

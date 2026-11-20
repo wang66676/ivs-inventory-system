@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="上传 PDF 后自动识别销售方厂家、发票类型、发票号码、VIN/SN 和价税合计金额；登记后可继续匹配应付。" />
+               :message="props.scope === 'BATTERY' ? '电池进项发票独立登记与应付匹配；动力电池不进入返利、红字和折扣流程。' : '上传 PDF 后自动识别销售方厂家、发票类型、发票号码、VIN/SN 和价税合计金额；登记后可继续匹配应付。'" />
       <a-space wrap style="margin-bottom:12px">
         <a-button v-if="canWrite" type="primary" @click="openCreate">单张登记蓝字</a-button>
         <a-button v-if="canWrite" @click="openBatch">批量上传蓝字</a-button>
@@ -147,7 +147,9 @@ import type { PurchaseInvoicePdfExtraction, PurchaseRedInvoice } from '../../typ
 import type { Supplier } from '../../types/masterdata'
 import type { Payable } from '../../types/payable'
 import type { PurchaseOrder, PurchaseReceipt } from '../../types/procurement'
+import type { BusinessScope } from '../../utils/businessScope'
 
+const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_INVOICE_WRITE')
 const rows = ref<PurchaseRedInvoice[]>([])
@@ -599,11 +601,17 @@ async function reload() {
       purchaseApi.receipts(),
       purchaseApi.list(),
     ])
-    allInvoices.value = invoiceRows
-    rows.value = supplierId.value ? invoiceRows.filter((row) => row.supplierId === supplierId.value) : invoiceRows
-    payables.value = payableRows
-    receipts.value = receiptRows
-    purchaseOrders.value = orderRows
+    const scopedOrders = orderRows.filter((order) => (order.businessScope || 'VEHICLE') === props.scope)
+    const scopedOrderIds = new Set(scopedOrders.map((order) => order.id))
+    allInvoices.value = invoiceRows.filter((row) => props.scope === 'BATTERY'
+      ? row.type === 'BLUE' && Boolean(row.purchaseOrderId) && scopedOrderIds.has(row.purchaseOrderId!)
+      : row.type === 'RED' || (Boolean(row.purchaseOrderId) && scopedOrderIds.has(row.purchaseOrderId!)))
+    rows.value = supplierId.value
+      ? allInvoices.value.filter((row) => row.supplierId === supplierId.value)
+      : allInvoices.value
+    payables.value = payableRows.filter((row) => row.purchaseOrderId && scopedOrderIds.has(row.purchaseOrderId))
+    receipts.value = receiptRows.filter((receipt) => scopedOrderIds.has(receipt.orderId))
+    purchaseOrders.value = scopedOrders
   } catch (error) { message.error((error as Error).message) }
 }
 onMounted(async () => {

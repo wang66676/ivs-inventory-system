@@ -88,11 +88,11 @@ public final class ProcurementApi {
 
     public record ReceiveLineCommand(
             UUID orderLineId, BigDecimal quantity, List<String> serialNos, String batchNo, BigDecimal unitPrice,
-            UUID warehouseId, LocalDate certificateApplicationDate
+            UUID warehouseId, LocalDate certificateApplicationDate, String bBox
     ) {
         public ReceiveLineCommand(UUID orderLineId, BigDecimal quantity, List<String> serialNos, String batchNo,
                                   BigDecimal unitPrice) {
-            this(orderLineId, quantity, serialNos, batchNo, unitPrice, null, null);
+            this(orderLineId, quantity, serialNos, batchNo, unitPrice, null, null, null);
         }
     }
 
@@ -125,7 +125,7 @@ public final class ProcurementApi {
             String batchNo, List<String> serialNos,
             LocalDate certificateApplicationDate, String batteryBoxManufacturer, String batteryBoxModel,
             BigDecimal batteryBoxUnitPrice, String batteryPackManufacturer, BigDecimal batteryEnergyKwh,
-            BigDecimal batteryPackUnitPrice
+            BigDecimal batteryPackUnitPrice, String bBox
     ) {
     }
 

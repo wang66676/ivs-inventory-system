@@ -54,18 +54,15 @@
              @ok="submit">
       <a-form layout="vertical">
         <a-row :gutter="12">
-          <a-col :span="8">
+          <a-col :span="props.scope === 'BATTERY' ? 12 : 8">
             <a-form-item label="供应商" required>
               <a-select v-model:value="form.supplierId" :options="supplierOptions" show-search @change="onSupplierChange" />
             </a-form-item>
           </a-col>
-          <a-col v-if="props.scope === 'BATTERY'" :span="8">
-            <a-form-item label="订单编号" required><a-input v-model:value="form.externalOrderNo" placeholder="电池采购订单编号" /></a-form-item>
-          </a-col>
-          <a-col v-else :span="8">
+          <a-col v-if="props.scope !== 'BATTERY'" :span="8">
             <a-form-item label="预计到货"><a-date-picker v-model:value="form.expectedDate" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item>
           </a-col>
-          <a-col :span="8"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
+          <a-col :span="props.scope === 'BATTERY' ? 12 : 8"><a-form-item label="备注"><a-input v-model:value="form.remark" /></a-form-item></a-col>
         </a-row>
         <a-space wrap style="margin-bottom:10px">
           <a-button @click="downloadTemplate">下载导入模板</a-button>
@@ -193,7 +190,7 @@
         <a-divider orientation="left" style="font-size:13px">收货明细</a-divider>
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false"
                  :scroll="{ x: 1360 }" :locale="{ emptyText: '无明细' }">
-          <a-table-column title="车系" :width="180"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="车系" :width="180"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
           <a-table-column title="电池信息" :width="360"><template #default="{ record }">{{ batteryText(record) }}</template></a-table-column>
           <a-table-column title="待收" data-index="remainingQuantity" :width="80" />
           <a-table-column title="本次收货" :width="620">
@@ -208,6 +205,11 @@
                           placeholder="收货仓库" style="width:210px" allow-clear />
                 <span v-else class="hint">固定仓库：天津容大</span>
               </a-space>
+            </template>
+          </a-table-column>
+          <a-table-column v-if="props.scope === 'BATTERY'" title="B-BOX" :width="110" align="center">
+            <template #default="{ record }">
+              <a-select v-model:value="receiveInput[record.id].bBox" :options="bBoxOptions" style="width:90px" />
             </template>
           </a-table-column>
         </a-table>
@@ -279,7 +281,8 @@ interface PurchaseListRow {
 }
 const form = reactive<Record<string, any>>({ lines: [newLine()] })
 const receiveForm = reactive<Record<string, any>>({})
-const receiveInput = reactive<Record<string, { serialRows?: string; quantity?: number; warehouseId?: string }>>({})
+const receiveInput = reactive<Record<string, { serialRows?: string; quantity?: number; warehouseId?: string; bBox?: string }>>({})
+const bBoxOptions = [{ value: '有', label: '有' }, { value: '无', label: '无' }]
 const offsetLoading = ref(false)
 const offsetPreview = ref<FundOffsetPreview>()
 const selectedOffsetTxnIds = ref<string[]>([])
@@ -497,10 +500,10 @@ async function importCsv(file: File) {
     const headers = new Map(csvRows[0].map((header, index) => [header.trim(), index])); const imported: Record<string, any>[] = []
     for (let index = 1; index < csvRows.length; index += 1) {
       const row = csvRows[index]; const scopedBattery = props.scope === 'BATTERY'
-      const orderNo = field(row, headers, '订单编号', '订单号') || (scopedBattery ? String(form.externalOrderNo || '').trim() : '')
+      const orderNo = scopedBattery ? 'BATTERY' : field(row, headers, '订单编号', '订单号')
       const series = field(row, headers, '商品 / 车系', '商品', '车系'); const product = resolveProduct(series)
       const quantity = Number(field(row, headers, '数量'))
-      if (!orderNo) throw new Error(`第 ${index + 1} 行缺少订单编号`)
+      if (!scopedBattery && !orderNo) throw new Error(`第 ${index + 1} 行缺少订单编号`)
       if (!product) throw new Error(`第 ${index + 1} 行无法匹配商品/车系：${series}`)
       if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`第 ${index + 1} 行数量无效`)
       const battery = scopedBattery
@@ -605,9 +608,6 @@ function exportOrders() {
 async function submit() {
   if (!form.supplierId) { message.warning('请选择供应商'); return }
   const batteryScope = props.scope === 'BATTERY'
-  if (batteryScope && !String(form.externalOrderNo ?? '').trim()) {
-    message.warning('请填写订单编号'); return
-  }
   const lines = (form.lines as Record<string, any>[]).filter((line) => line.orderNo || line.productId || line.unitPrice != null)
   if (!lines.length) { message.warning('请至少填写一行有效明细'); return }
   for (const line of lines) {
@@ -645,7 +645,7 @@ async function submit() {
         batteryPackUnitPrice: isBatteryLine(line) ? line.batteryPackUnitPrice : null,
         arrivalDate: batteryScope ? line.arrivalDate : null })) })
     if (batteryScope) {
-      const body = { externalOrderNo: String(form.externalOrderNo).trim(), ...bodyFor(lines) }
+      const body = bodyFor(lines)
       if (editingId.value) await purchaseApi.update(editingId.value, body)
       else await purchaseApi.create(body)
       message.success(editingId.value ? '电池采购单已更新' : '电池采购单已创建')
@@ -722,7 +722,7 @@ async function openReceive(record: PurchaseOrder) {
     Object.keys(receiveForm).forEach((key) => delete receiveForm[key])
     Object.keys(receiveInput).forEach((key) => delete receiveInput[key])
     receiveForm.warehouseId = latest.warehouseId
-    latest.lines.forEach((line) => { receiveInput[line.id] = { warehouseId: line.warehouseId, serialRows: '' } })
+    latest.lines.forEach((line) => { receiveInput[line.id] = { warehouseId: line.warehouseId, serialRows: '', bBox: '无' } })
     offsetPreview.value = undefined
     selectedOffsetTxnIds.value = []
     receiveOpen.value = true
@@ -766,12 +766,14 @@ async function submitReceive() {
         }
         if (certDate && (!/^\d{4}-\d{2}-\d{2}$/.test(certDate) || !dayjs(certDate).isValid())) { message.warning(`${batteryScope ? '电池 SN' : 'VIN'} ${serialNo} 的申请合格证日期格式应为 YYYY-MM-DD`); return }
         lines.push({ orderLineId: line.id, quantity: 1, serialNos: [serialNo], unitPrice,
-          warehouseId: warehouseId || null, certificateApplicationDate: certDate || null })
+          warehouseId: warehouseId || null, certificateApplicationDate: certDate || null,
+          bBox: batteryScope ? (input.bBox || '无') : null })
       }
     } else if (input.quantity && Number(input.quantity) > 0) {
       const warehouseId = batteryScope ? null : (input.warehouseId || line.warehouseId || receiveForm.warehouseId)
       if (!batteryScope && !warehouseId) { message.warning(`商品 ${line.productName} 请指定收货仓库`); return }
-      lines.push({ orderLineId: line.id, quantity: input.quantity, unitPrice: line.unitPrice, warehouseId })
+      lines.push({ orderLineId: line.id, quantity: input.quantity, unitPrice: line.unitPrice, warehouseId,
+        bBox: batteryScope ? (input.bBox || '无') : null })
     }
   }
   if (!lines.length) { message.warning('请填写本次收货内容'); return }

@@ -319,6 +319,10 @@ class ProcurementInventoryIntegrationTest {
         assertThat(summary.vehicleSeriesInventory().get(0).config()).isEqualTo("标载财富版");
         assertThat(summary.vehicleSeriesInventory().get(0).quantity()).isEqualTo(1);
         assertThat(summary.totalAmount()).isEqualByComparingTo("430000.00");
+        assertThat(summary.vehicleInventoryAmount()).isEqualByComparingTo("430000.00");
+        assertThat(summary.byWarehouse()).hasSize(1);
+        assertThat(summary.byWarehouse().get(0).warehouseName()).isEqualTo("主仓");
+        assertThat(summary.byWarehouse().get(0).itemCount()).isEqualTo(1);
         assertThat(summary.ageBuckets()).hasSize(4);
         assertThat(summary.consistent()).isTrue();
 
