@@ -25,7 +25,7 @@ test('登录、付款入口重定向和关键业务页面冒烟', async ({ page 
 
   const routes = [
     '/masterdata/products', '/procurement/orders', '/procurement/receipts',
-    '/procurement/invoices', '/procurement/payables', '/inventory/dashboard',
+    '/procurement/invoices', '/procurement/battery-invoices', '/procurement/payables', '/procurement/battery-payables', '/inventory/dashboard',
     '/inventory/vin', '/sales/orders', '/sales/deliveries', '/retail/records',
     '/policy/pre-entitlements', '/policy/entitlements', '/policy/claims',
     '/policy/fund-pool', '/billing/sales-invoices', '/procurement/red-invoices', '/procurement/offsets', '/billing/refunds', '/reports/monthly', '/system/approval-tasks',
@@ -127,6 +127,90 @@ test('整车批量入库无采购单时自动创建采购单并收货', async ({
   expect(orders.some((order: any) => order.externalOrderNo === orderNo)).toBeTruthy()
 })
 
+test('整车批量入库自动审核草稿且重复项不影响其他VIN', async ({ page }) => {
+  test.setTimeout(120000)
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const suffix = Date.now().toString()
+  const supplierName = `E2E批量车厂-${suffix}`
+  const warehouseName = `E2E批量仓-${suffix}`
+  const productName = `E2E批量整车-${suffix}`
+  const orderNo = `CGDRAFT${suffix.slice(-10)}`
+  const vin1 = `LZZBATCH${suffix.slice(-10)}`
+  const vin2 = `LZZUNIQUE${suffix.slice(-9)}`
+  const supplier = await page.request.post('/api/ivs/suppliers', {
+    headers, data: { name: supplierName, supplierType: 'VEHICLE_OEM' },
+  })
+  expect(supplier.ok()).toBeTruthy()
+  const warehouse = await page.request.post('/api/ivs/warehouses', {
+    headers, data: { code: `E2E-BWH-${suffix.slice(-8)}`, name: warehouseName, type: 'MAIN' },
+  })
+  expect(warehouse.ok()).toBeTruthy()
+  const warehouseBody = await warehouse.json()
+  const category = await page.request.post('/api/ivs/product-categories', {
+    headers, data: { code: `E2E-BCAT-${suffix.slice(-8)}`, name: `E2E批量整车-${suffix}`,
+      trackingMode: 'SERIAL', statusTemplate: 'VEHICLE', unit: '台', sortOrder: 0 },
+  })
+  expect(category.ok()).toBeTruthy()
+  const categoryBody = await category.json()
+  const product = await page.request.post('/api/ivs/products', {
+    headers, data: { name: productName, categoryId: categoryBody.id, unit: '台', minPrice: 300000,
+      purchasePriceRef: 350000 },
+  })
+  expect(product.ok()).toBeTruthy()
+  const productBody = await product.json()
+  const order = await page.request.post('/api/ivs/purchase-orders', {
+    headers, data: {
+      supplierId: (await supplier.json()).id,
+      externalOrderNo: orderNo,
+      warehouseId: warehouseBody.id,
+      lines: [{ productId: productBody.id, quantity: 3, unitPrice: 350000, configText: '标准配置' }],
+    },
+  })
+  expect(order.ok()).toBeTruthy()
+  expect((await order.json()).status).toBe('DRAFT')
+
+  const csv = [
+    '订单编号,供应商,车系/商品,配置,VIN/SN,采购价,收货仓库,申请合格证日期',
+    `${orderNo},${supplierName},${productName},标准配置,${vin1},350000,${warehouseName},2026-11-20`,
+    `${orderNo},${supplierName},${productName},标准配置,${vin1},350000,${warehouseName},2026-11-20`,
+    `${orderNo},${supplierName},${productName},标准配置,${vin2},350000,${warehouseName},2026-11-20`,
+  ].join('\n')
+  await page.goto('/procurement/receipts')
+  await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+    name: `receipt-draft-${suffix}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8'),
+  })
+  await expect(page.getByText(/已导入 2 台/)).toBeVisible({ timeout: 60000 })
+  await expect(page.getByText(/VIN\/SN 重复/)).toBeVisible({ timeout: 10000 })
+
+  const updated = await page.request.get(`/api/ivs/purchase-orders?keyword=${encodeURIComponent(orderNo)}`, { headers })
+  expect(updated.ok()).toBeTruthy()
+  const orders = await updated.json()
+  expect(orders.find((item: any) => item.externalOrderNo === orderNo)?.status).toBe('PARTIALLY_RECEIVED')
+  const receiptResponse = await page.request.get('/api/ivs/purchase-receipts', { headers })
+  const receipts = await receiptResponse.json()
+  const importedSerials = receipts.flatMap((receipt: any) => receipt.lines.flatMap((line: any) => line.serialNos || []))
+  expect(importedSerials).toContain(vin1)
+  expect(importedSerials).toContain(vin2)
+})
+test('车系VIN库存使用采购配置且数量可查看VIN与采购订单', async ({ page }) => {
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const detailsResponse = await page.request.get('/api/ivs/inventory/vehicle-series-detail', { headers })
+  expect(detailsResponse.ok()).toBeTruthy()
+  const details = await detailsResponse.json()
+  expect(details.length).toBeGreaterThan(0)
+  const target = details[details.length - 1]
+  await page.goto('/inventory/dashboard')
+  const row = page.getByRole('row').filter({ hasText: target.series }).filter({ hasText: target.config })
+  await expect(row).toBeVisible()
+  await row.locator('button').first().click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText(target.serialNo, { exact: true })).toBeVisible()
+  await expect(dialog.getByText(target.purchaseOrderNo, { exact: true })).toBeVisible()
+})
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
   await page.goto('/masterdata/products')

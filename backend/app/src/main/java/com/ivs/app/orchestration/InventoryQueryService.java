@@ -170,8 +170,6 @@ public class InventoryQueryService {
         BigDecimal totalLocked = BigDecimal.ZERO;
         Map<String, int[]> categoryCount = new LinkedHashMap<>();
         Map<String, BigDecimal> categoryAmount = new LinkedHashMap<>();
-        Map<String, int[]> warehouseCount = new LinkedHashMap<>();
-        Map<String, BigDecimal> warehouseAmount = new LinkedHashMap<>();
         int quantityItems = 0;
         for (InventoryApi.BalanceView view : balances) {
             totalAmount = totalAmount.add(view.amount());
@@ -182,26 +180,92 @@ public class InventoryQueryService {
             String category = view.categoryCode() == null ? "未分类" : view.categoryCode();
             categoryCount.computeIfAbsent(category, key -> new int[1])[0]++;
             categoryAmount.merge(category, view.amount(), BigDecimal::add);
-            String warehouse = view.warehouseName() == null ? "未知仓库" : view.warehouseName();
-            warehouseCount.computeIfAbsent(warehouse, key -> new int[1])[0]++;
-            warehouseAmount.merge(warehouse, view.amount(), BigDecimal::add);
         }
         List<InventoryApi.CategorySummaryView> byCategory = categoryCount.entrySet().stream()
                 .map(entry -> new InventoryApi.CategorySummaryView(entry.getKey(), entry.getValue()[0],
                         categoryAmount.get(entry.getKey())))
                 .toList();
-        List<InventoryApi.WarehouseSummaryView> byWarehouse = warehouseCount.entrySet().stream()
-                .map(entry -> new InventoryApi.WarehouseSummaryView(entry.getKey(), entry.getValue()[0],
-                        warehouseAmount.get(entry.getKey())))
-                .toList();
         int serialInStock = (int) serialRepository.findByStatusOrderByCreatedAtDesc(SerialStatus.IN_STOCK).size();
         int[] serialCounts = inStockSerialCounts();
+        Map<String, Object> inStockValues = inStockInventoryValues();
         return new InventoryApi.SummaryView(serialInStock, serialCounts[0], serialCounts[1], quantityItems,
-                totalAmount, totalLocked, byCategory, byWarehouse, ageBuckets(), vehicleSeriesInventory(),
-                reconciliationService.ledgerCount(),
-                reconciliationService.reconcile().isEmpty());
+                totalAmount, totalLocked, byCategory, vehicleInStockByWarehouse(), ageBuckets(),
+                vehicleSeriesInventory(), batteryInventory(),
+                toMoney(inStockValues.get("vehicle_amount")), toMoney(inStockValues.get("battery_amount")),
+                reconciliationService.ledgerCount(), reconciliationService.reconcile().isEmpty());
     }
 
+    private Map<String, Object> inStockInventoryValues() {
+        return jdbc.queryForMap("""
+                select coalesce(sum(case when c.status_template = 'VEHICLE'
+                                        then coalesce(ps.purchase_price, 0) else 0 end), 0) as vehicle_amount,
+                       coalesce(sum(case when c.status_template = 'BATTERY'
+                                        then coalesce(ps.purchase_price, 0) else 0 end), 0) as battery_amount
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                 where ps.status = 'IN_STOCK'
+                """);
+    }
+
+    private List<InventoryApi.WarehouseSummaryView> vehicleInStockByWarehouse() {
+        return jdbc.queryForList("""
+                select coalesce(w.name, '未知仓库') as warehouse_name,
+                       count(*) as item_count,
+                       coalesce(sum(coalesce(ps.purchase_price, 0)), 0) as amount
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                  left join ivs.warehouse w on w.id = ps.warehouse_id
+                 where c.status_template = 'VEHICLE' and ps.status = 'IN_STOCK'
+                 group by w.name
+                 order by warehouse_name
+                """).stream()
+                .map(row -> new InventoryApi.WarehouseSummaryView(
+                        String.valueOf(row.get("warehouse_name")),
+                        ((Number) row.get("item_count")).intValue(),
+                        toMoney(row.get("amount"))))
+                .toList();
+    }
+
+    private List<InventoryApi.BatteryInventoryView> batteryInventory() {
+        return jdbc.queryForList("""
+                with purchase_origin as (
+                    select sl.serial_id, sl.biz_id,
+                           row_number() over (partition by sl.serial_id
+                                              order by sl.occurred_at asc, sl.created_at asc) rn
+                      from ivs.stock_ledger sl
+                     where sl.serial_id is not null and sl.biz_id is not null
+                       and sl.move_type = 'PURCHASE_IN'
+                )
+                select coalesce(nullif(trim(pol.battery_pack_manufacturer), ''), '未配置') as battery_manufacturer,
+                       coalesce(nullif(trim(pol.battery_box_manufacturer), ''), '未配置') as frame_manufacturer,
+                       count(*) as quantity
+                  from ivs.product_serial ps
+                  join ivs.product p on p.id = ps.product_id
+                  join ivs.product_category c on c.id = p.category_id
+                  left join purchase_origin por on por.serial_id = ps.id and por.rn = 1
+                  left join ivs.purchase_receipt pr on pr.id = por.biz_id
+                  left join ivs.purchase_receipt_line prl on prl.id = (
+                      select prl2.id
+                        from ivs.purchase_receipt_line prl2
+                       where prl2.receipt_id = pr.id and prl2.product_id = ps.product_id
+                         and prl2.serial_nos like '%"' || ps.serial_no || '"%'
+                       order by prl2.created_at
+                       limit 1
+                  )
+                  left join ivs.purchase_order_line pol on pol.id = prl.order_line_id
+                 where c.status_template = 'BATTERY' and ps.status = 'IN_STOCK'
+                 group by coalesce(nullif(trim(pol.battery_pack_manufacturer), ''), '未配置'),
+                          coalesce(nullif(trim(pol.battery_box_manufacturer), ''), '未配置')
+                 order by battery_manufacturer, frame_manufacturer
+                """).stream()
+                .map(row -> new InventoryApi.BatteryInventoryView(
+                        String.valueOf(row.get("battery_manufacturer")),
+                        String.valueOf(row.get("frame_manufacturer")),
+                        ((Number) row.get("quantity")).intValue()))
+                .toList();
+    }
     private int[] inStockSerialCounts() {
         Map<String, Object> row = jdbc.queryForMap("""
                 select coalesce(sum(case when c.status_template = 'VEHICLE' then 1 else 0 end), 0) as vehicle_count,
@@ -216,23 +280,75 @@ public class InventoryQueryService {
     }
 
     private List<InventoryApi.VehicleSeriesInventoryView> vehicleSeriesInventory() {
+        Map<String, List<InventoryApi.VehicleSeriesInventoryDetailView>> grouped = new LinkedHashMap<>();
+        for (InventoryApi.VehicleSeriesInventoryDetailView row : vehicleSeriesInventoryDetails(null, null)) {
+            String key = row.series() + "::" + row.config();
+            grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+        }
+        return grouped.values().stream()
+                .map(rows -> new InventoryApi.VehicleSeriesInventoryView(
+                        rows.get(0).series(), rows.get(0).config(), rows.size()))
+                .toList();
+    }
+
+    /** 按车系和采购配置下钻在库 VIN/SN，并带出对应采购订单号。 */
+    @Transactional(readOnly = true)
+    public List<InventoryApi.VehicleSeriesInventoryDetailView> vehicleSeriesInventoryDetails(
+            String seriesFilter, String configFilter) {
+        String series = seriesFilter == null ? null : seriesFilter.trim();
+        String config = configFilter == null ? null : configFilter.trim();
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select coalesce(nullif(trim(p.series), ''), p.name) as series,
-                       coalesce(nullif(trim(p.config_code), ''), nullif(trim(p.model), ''), '未配置') as config,
-                       count(*) as quantity
+                with purchase_origin as (
+                    select sl.serial_id, sl.biz_id,
+                           row_number() over (partition by sl.serial_id
+                                              order by sl.occurred_at asc, sl.created_at asc) rn
+                      from ivs.stock_ledger sl
+                     where sl.serial_id is not null and sl.biz_id is not null
+                       and sl.move_type = 'PURCHASE_IN'
+                )
+                select ps.id as serial_id,
+                       ps.serial_no,
+                       coalesce(nullif(trim(p.series), ''), p.name) as series,
+                       coalesce(nullif(trim(pol.config_text), ''),
+                                nullif(trim(p.config_code), ''),
+                                nullif(trim(p.model), ''), '未配置') as config,
+                       ps.status,
+                       ps.warehouse_id,
+                       w.name as warehouse_name,
+                       po.id as purchase_order_id,
+                       coalesce(po.external_order_no, po.order_no) as purchase_order_no
                   from ivs.product_serial ps
                   join ivs.product p on p.id = ps.product_id
                   join ivs.product_category c on c.id = p.category_id
+                  left join purchase_origin por on por.serial_id = ps.id and por.rn = 1
+                  left join ivs.purchase_receipt pr on pr.id = por.biz_id
+                  left join ivs.purchase_receipt_line prl on prl.id = (
+                      select prl2.id
+                        from ivs.purchase_receipt_line prl2
+                       where prl2.receipt_id = pr.id and prl2.product_id = ps.product_id
+                         and prl2.serial_nos like '%"' || ps.serial_no || '"%'
+                       order by prl2.created_at
+                       limit 1
+                  )
+                  left join ivs.purchase_order_line pol on pol.id = prl.order_line_id
+                  left join ivs.purchase_order po on po.id = pr.order_id
+                  left join ivs.warehouse w on w.id = ps.warehouse_id
                  where c.status_template = 'VEHICLE' and ps.status = 'IN_STOCK'
-                 group by coalesce(nullif(trim(p.series), ''), p.name),
-                          coalesce(nullif(trim(p.config_code), ''), nullif(trim(p.model), ''), '未配置')
-                 order by series, config
+                 order by series, config, ps.serial_no
                 """);
         return rows.stream()
-                .map(row -> new InventoryApi.VehicleSeriesInventoryView(
+                .map(row -> new InventoryApi.VehicleSeriesInventoryDetailView(
+                        (UUID) row.get("serial_id"),
+                        String.valueOf(row.get("serial_no")),
                         String.valueOf(row.get("series")),
                         String.valueOf(row.get("config")),
-                        ((Number) row.get("quantity")).intValue()))
+                        String.valueOf(row.get("status")),
+                        row.get("warehouse_id") == null ? null : (UUID) row.get("warehouse_id"),
+                        row.get("warehouse_name") == null ? null : String.valueOf(row.get("warehouse_name")),
+                        row.get("purchase_order_id") == null ? null : (UUID) row.get("purchase_order_id"),
+                        row.get("purchase_order_no") == null ? null : String.valueOf(row.get("purchase_order_no"))))
+                .filter(row -> series == null || series.equals(row.series()))
+                .filter(row -> config == null || config.equals(row.config()))
                 .toList();
     }
 

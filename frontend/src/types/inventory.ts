@@ -102,6 +102,18 @@ export interface AgeAnalysisItem {
   purchasePrice: number
 }
 
+export interface VehicleSeriesInventoryDetail {
+  serialId: string
+  serialNo: string
+  series: string
+  config: string
+  status: string
+  warehouseId?: string
+  warehouseName?: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+}
+
 export interface InventorySummary {
   serialInStock: number
   vehicleInStockNotLocked: number
@@ -113,6 +125,9 @@ export interface InventorySummary {
   byWarehouse: { warehouseName: string; itemCount: number; amount: number }[]
   ageBuckets: AgeBucket[]
   vehicleSeriesInventory: { series: string; config: string; quantity: number }[]
+  batteryInventory: { batteryManufacturer: string; frameManufacturer: string; quantity: number }[]
+  vehicleInventoryAmount: number
+  batteryInventoryAmount: number
   ledgerCount: number
   consistent: boolean
 }

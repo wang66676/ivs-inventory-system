@@ -29,6 +29,7 @@ public class Payable {
     private BigDecimal rebateCreditAmount;
     @Column(name = "due_date") private LocalDate dueDate;
     @Column(name = "last_payment_date") private LocalDate lastPaymentDate;
+    @Column(name = "last_payment_method", length = 30) private String lastPaymentMethod;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PayableStatus status;
     @Column(length = 300) private String remark;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
@@ -85,7 +86,7 @@ public class Payable {
         return value;
     }
 
-    public void pay(BigDecimal value, LocalDate paymentDate) {
+    public void pay(BigDecimal value, LocalDate paymentDate, String paymentMethod) {
         BigDecimal pay = money(value);
         if (pay.signum() <= 0 || pay.compareTo(outstanding()) > 0) {
             throw new IllegalArgumentException("付款金额必须大于 0 且不能超过未付余额");
@@ -96,6 +97,7 @@ public class Payable {
         }
         this.paidAmount = money(paidAmount.add(pay));
         this.lastPaymentDate = actualDate;
+        this.lastPaymentMethod = normalizePaymentMethod(paymentMethod);
         refreshStatus();
     }
 
@@ -176,6 +178,16 @@ public class Payable {
                 : paidAmount.signum() > 0 ? PayableStatus.PARTIALLY_PAID : PayableStatus.OPEN;
     }
 
+    private static String normalizePaymentMethod(String value) {
+        String method = value == null ? "" : value.trim().toUpperCase();
+        return switch (method) {
+            case "CASH", "现金" -> "CASH";
+            case "THIRD_PARTY_STORAGE", "三方库容" -> "THIRD_PARTY_STORAGE";
+            case "ACCEPTANCE_BILL", "承兑汇票" -> "ACCEPTANCE_BILL";
+            default -> "OTHER";
+        };
+    }
+
     @PrePersist void prePersist() {
         Instant now = Instant.now();
         if (id == null) id = UUID.randomUUID();
@@ -216,6 +228,7 @@ public class Payable {
     public BigDecimal getUninvoicedAmount() { return uninvoicedAmount(); }
     public LocalDate getDueDate() { return dueDate; }
     public LocalDate getLastPaymentDate() { return lastPaymentDate; }
+    public String getLastPaymentMethod() { return lastPaymentMethod; }
     public PayableStatus getStatus() { return status; }
     public String getRemark() { return remark; }
     public Instant getCreatedAt() { return createdAt; }

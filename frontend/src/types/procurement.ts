@@ -81,6 +81,7 @@ export interface PurchaseReceiptLine {
   batteryPackManufacturer?: string
   batteryEnergyKwh?: number
   batteryPackUnitPrice?: number
+  bBox?: '有' | '无'
 }
 
 export interface PurchaseReceipt {

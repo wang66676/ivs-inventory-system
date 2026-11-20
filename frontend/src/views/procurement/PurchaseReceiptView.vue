@@ -73,7 +73,7 @@ import { message, Modal } from 'ant-design-vue'
 import { purchaseApi } from '../../api/procurement'
 import { productApi, supplierApi, warehouseApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
-import type { PurchaseReceipt, PurchaseReceiptLine } from '../../types/procurement'
+import type { PurchaseOrder, PurchaseReceipt, PurchaseReceiptLine } from '../../types/procurement'
 import type { Product, Supplier } from '../../types/masterdata'
 import { exportCsv, exportTimestamp, parseCsv } from '../../utils/csvExport'
 import type { BusinessScope } from '../../utils/businessScope'
@@ -126,6 +126,7 @@ const batteryColumns = [
   { title: '申请合格证日期', key: 'certificateApplicationDate', width: 150, align: 'center' },
   { title: '采购单价', key: 'unitPrice', width: 120, align: 'right' },
   { title: '收货仓库', key: 'warehouseName', dataIndex: 'warehouseName', width: 140, ellipsis: true },
+  { title: 'B-BOX', key: 'bBox', dataIndex: 'bBox', width: 90, align: 'center' },
   { title: '状态', key: 'status', width: 110, align: 'center' },
 ]
 const columns = computed(() => props.scope === 'BATTERY' ? batteryColumns : vehicleColumns)
@@ -154,6 +155,7 @@ function exportReceipts() {
       { title: '申请合格证日期', value: (row) => row.certificateApplicationDate },
       { title: '采购单价', value: (row) => row.unitPrice },
       { title: '收货仓库', value: () => '天津容大' },
+      { title: 'B-BOX', value: (row) => row.bBox || '-' },
       { title: '状态', value: (row) => receiptStatusLabel(row.status) },
     ], lines.value)
     message.success('电池收货入库数据已导出')
@@ -369,31 +371,38 @@ async function importReceipts(file: File) {
       orderByNo.set(created.orderNo, created)
     }
 
-    const receiveGroups = new Map<string, Record<string, unknown>[]>()
-    for (const row of rowsToImport) {
-      const order = orderByNo.get(row.orderNo)
-      if (!order) { errors.push(`第${row.rowIndex}行采购订单未创建成功：${row.orderNo}`); continue }
-      const orderLine = order.lines.find((line) => line.productId === row.product.id
-        && (!row.configText || [line.configText, line.configCode].includes(row.configText))
-        && Number(line.remainingQuantity) > 0)
-      if (!orderLine) { errors.push(`第${row.rowIndex}行未找到可收货明细：${row.product.name}`); continue }
-      const commands = receiveGroups.get(order.id) || []
-      commands.push({
-        orderLineId: orderLine.id,
-        quantity: 1,
-        serialNos: [row.vin],
-        unitPrice: row.price,
-        warehouseId: row.warehouseId || orderLine.warehouseId || null,
-        certificateApplicationDate: row.certificateDate,
-      })
-      receiveGroups.set(order.id, commands)
-    }
     let success = 0
-    for (const [orderId, commands] of receiveGroups) {
-      await purchaseApi.receive(orderId, {
-        warehouseId: null, remark: '整车收货批量导入', lines: commands, offsetTxnIds: [],
-      })
-      success += commands.length
+    for (const row of rowsToImport) {
+      try {
+        let order = orderByNo.get(row.orderNo)
+        if (!order) throw new Error(`采购订单未创建成功：${row.orderNo}`)
+        order = await purchaseApi.get(order.id)
+        if (order.status === 'DRAFT') order = await purchaseApi.approve(order.id)
+        if (order.status !== 'APPROVED' && order.status !== 'PARTIALLY_RECEIVED') {
+          throw new Error(`采购订单当前状态不可收货：${order.status}`)
+        }
+        orderByNo.set(row.orderNo, order)
+        const orderLine = order.lines.find((line) => line.productId === row.product.id
+          && (!row.configText || [line.configText, line.configCode].includes(row.configText))
+          && Number(line.remainingQuantity) > 0)
+        if (!orderLine) throw new Error(`未找到可收货明细：${row.product.name}`)
+        await purchaseApi.receive(order.id, {
+          warehouseId: null,
+          remark: '整车收货批量导入',
+          lines: [{
+            orderLineId: orderLine.id,
+            quantity: 1,
+            serialNos: [row.vin],
+            unitPrice: row.price,
+            warehouseId: row.warehouseId || orderLine.warehouseId || null,
+            certificateApplicationDate: row.certificateDate,
+          }],
+          offsetTxnIds: [],
+        })
+        success += 1
+      } catch (error) {
+        errors.push(`第${row.rowIndex}行 ${row.vin}：${(error as Error).message}`)
+      }
     }
     if (errors.length) message.warning(`已导入 ${success} 台；${errors.length} 项未导入：${errors.slice(0, 3).join('；')}`)
     else message.success(`已批量导入 ${success} 台车辆；不存在的采购订单已自动创建并审核`)

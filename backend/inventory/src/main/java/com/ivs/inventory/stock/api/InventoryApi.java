@@ -69,16 +69,27 @@ public final class InventoryApi {
     public record WarehouseSummaryView(String warehouseName, int itemCount, BigDecimal amount) {
     }
 
-    /** 车系 VIN 库存：未销售只统计在库未锁定；已锁定 VIN 视为已销售，仅单独备注。 */
+    /** 车系 VIN 库存：配置取对应采购订单明细配置。 */
     public record VehicleSeriesInventoryView(String series, String config, int quantity) {
     }
 
+    /** 车系配置下钻：展示在库 VIN/SN 及其采购订单来源。 */
+    public record VehicleSeriesInventoryDetailView(
+            UUID serialId, String serialNo, String series, String config, String status,
+            UUID warehouseId, String warehouseName, UUID purchaseOrderId, String purchaseOrderNo
+    ) {
+    }
+
+    /** 电池库存明细看板：按电池包厂家与电池箱（框架）厂家汇总在库数量。 */
+    public record BatteryInventoryView(String batteryManufacturer, String frameManufacturer, int quantity) {
+    }
     public record SummaryView(
             int serialInStock, int vehicleInStockNotLocked, int batteryInStock,
             int quantityItems, BigDecimal totalAmount, BigDecimal totalLockedQty,
             List<CategorySummaryView> byCategory, List<WarehouseSummaryView> byWarehouse,
             List<AgeBucketView> ageBuckets, List<VehicleSeriesInventoryView> vehicleSeriesInventory,
-            long ledgerCount, boolean consistent
+            List<BatteryInventoryView> batteryInventory, BigDecimal vehicleInventoryAmount,
+            BigDecimal batteryInventoryAmount, long ledgerCount, boolean consistent
     ) {
     }
 
