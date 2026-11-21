@@ -20,6 +20,10 @@ namespace IvsLauncher
         private static int Main(string[] args)
         {
             string appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("IVS_DATA_DIR")))
+            {
+                Environment.SetEnvironmentVariable("IVS_DATA_DIR", Path.Combine(appDirectory, "data"), EnvironmentVariableTarget.Process);
+            }
 
             bool createdNew;
             using (var mutex = new Mutex(true, MutexName, out createdNew))

@@ -17,7 +17,8 @@
         </a-form-item>
         <a-button type="primary" html-type="submit" size="large" block :loading="loading">登录</a-button>
       </a-form>
-      <a-alert class="login-hint" type="info" show-icon message="首次使用请用随软件附带的《使用说明》中的默认账号登录，并尽快在「用户管理」中新建自己的账号。" />
+      <div class="server-address">当前登录服务：{{ serverAddress }}</div>
+      <a-alert class="login-hint" type="info" show-icon message="首次使用请用随软件附带的《使用说明》中的默认账号登录，并尽快在「用户管理」中新建自己的账号。局域网客户端必须填写主机服务器地址，并使用主机端创建的账号。" />
     </a-card>
   </div>
 </template>
@@ -29,6 +30,7 @@ import { message } from 'ant-design-vue'
 import { useAuthStore } from '../../stores/auth'
 
 const brandLogoUrl = import.meta.env.BASE_URL + 'logo.png'
+const serverAddress = window.location.origin
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -46,7 +48,10 @@ async function submit() {
     message.success('登录成功')
     await router.push('/dashboard')
   } catch (error) {
-    message.error((error as Error).message)
+    const errorMessage = (error as Error).message
+    message.error(errorMessage === '用户名或密码错误'
+      ? '用户名或密码错误。局域网登录请确认客户端地址指向主机，并使用主机端“用户管理”中创建的账号。'
+      : errorMessage)
   } finally {
     loading.value = false
   }
@@ -92,6 +97,13 @@ h1 {
 p {
   margin: 4px 0 0;
   color: #8b96a8;
+}
+
+.server-address {
+  margin: 14px 0 10px;
+  color: #6b7280;
+  font-size: 12px;
+  text-align: center;
 }
 
 .login-hint {

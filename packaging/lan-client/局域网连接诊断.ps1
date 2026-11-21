@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $addressFile = Join-Path $root '服务器地址.txt'
 if (-not (Test-Path -LiteralPath $addressFile)) { throw '未找到服务器地址.txt' }

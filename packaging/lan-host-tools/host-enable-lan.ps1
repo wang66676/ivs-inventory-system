@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -46,7 +46,14 @@ try {
 } catch { }
 
 if (-not $healthy -and (Test-Path -LiteralPath $launcher)) {
-    Start-Process -FilePath $launcher -WindowStyle Hidden
+    New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+    $previousDataDir = $env:IVS_DATA_DIR
+    $env:IVS_DATA_DIR = $dataDir
+    try { Start-Process -FilePath $launcher -WorkingDirectory $appDir -WindowStyle Hidden }
+    finally {
+        if ($null -eq $previousDataDir) { Remove-Item Env:IVS_DATA_DIR -ErrorAction SilentlyContinue }
+        else { $env:IVS_DATA_DIR = $previousDataDir }
+    }
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 2
         try {
@@ -71,7 +78,7 @@ $ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
 $primaryIp = $null
 if ($ips) {
     foreach ($ip in $ips) {
-        $primaryIp = $primaryIp ?? $ip.IPAddress
+        if (-not $primaryIp) { $primaryIp = $ip.IPAddress }
         Write-Host ("  http://{0}:{1}/" -f $ip.IPAddress, $port) -ForegroundColor White
     }
 } else {
@@ -93,7 +100,7 @@ Write-Host ("本机网卡地址端口测试：" + $(if ($tcpOk) { '通过' } els
 Write-Host ("当前网络类别：" + $(if ($profile) { $profile.NetworkCategory } else { '未知' }))
 Write-Host ''
 Write-Host '整改要点：' -ForegroundColor Yellow
-Write-Host '1. 其他电脑必须与主机在同一网段，例如主机为 192.168.18.x，客户端也必须是 192.168.18.x。' -ForegroundColor Yellow
+Write-Host '1. 其他电脑必须与主机在同一网段，例如客户端必须与上方主机地址处于同一网段。' -ForegroundColor Yellow
 Write-Host '2. 路由器必须关闭“终端隔离 / AP 隔离 / 访客网络隔离”。' -ForegroundColor Yellow
 Write-Host '3. 客户端不要使用 VPN，浏览器代理请排除 192.168.*、10.*、172.16.*。' -ForegroundColor Yellow
 Write-Host '4. Windows 网络建议设为“专用网络”；本工具已放行 LocalSubnet 的 TCP 8090。' -ForegroundColor Yellow
