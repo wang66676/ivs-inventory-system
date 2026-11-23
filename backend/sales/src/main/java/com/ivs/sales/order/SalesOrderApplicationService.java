@@ -47,6 +47,7 @@ public class SalesOrderApplicationService {
     private final EventPublisher events;
     private final CurrentActorProvider actors;
     private final ObjectMapper objectMapper;
+    private final SalesOrderHistoryCleanupPort historyCleanup;
 
     public SalesOrderApplicationService(SalesOrderRepository orderRepository,
                                         SalesOrderLineRepository lineRepository,
@@ -59,7 +60,8 @@ public class SalesOrderApplicationService {
                                         InstallmentPlanService installmentPlanService,
                                         EventPublisher events,
                                         CurrentActorProvider actors,
-                                        ObjectMapper objectMapper) {
+                                        ObjectMapper objectMapper,
+                                        SalesOrderHistoryCleanupPort historyCleanup) {
         this.orderRepository = orderRepository;
         this.lineRepository = lineRepository;
         this.deliveryRepository = deliveryRepository;
@@ -72,6 +74,7 @@ public class SalesOrderApplicationService {
         this.events = events;
         this.actors = actors;
         this.objectMapper = objectMapper;
+        this.historyCleanup = historyCleanup;
     }
 
     @Transactional(readOnly = true)
@@ -405,6 +408,7 @@ public class SalesOrderApplicationService {
         if (order.getStatus() != SalesOrderStatus.CANCELLED) {
             throw new ConflictException("SALES_STATUS_INVALID", "只有已取消订单可以删除");
         }
+        historyCleanup.deleteDownstream(id);
         lineRepository.deleteAll(lineRepository.findByOrderIdOrderByLineNoAsc(id));
         orderRepository.delete(order);
     }

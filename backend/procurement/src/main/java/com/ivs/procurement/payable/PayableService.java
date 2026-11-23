@@ -26,12 +26,19 @@ public class PayableService {
 
     @Transactional
     public Payable createFromReceipt(UUID supplierId, UUID orderId, String orderNo, UUID receiptId,
-                                     String receiptNo, BigDecimal purchaseQuantity, BigDecimal amount) {
-        if (amount == null || amount.signum() <= 0) return null;
-        return repository.findByPurchaseReceiptId(receiptId).orElseGet(() -> repository.save(
+                                     String receiptNo, BigDecimal purchaseQuantity, BigDecimal orderTotalAmount,
+                                     BigDecimal offsetAmount) {
+        if (orderTotalAmount == null || orderTotalAmount.signum() <= 0) return null;
+        Payable payable = repository.findByPurchaseOrderId(orderId).orElseGet(() -> repository.save(
                 Payable.fromReceipt("AP-%06d".formatted(repository.nextPayableSequence()), supplierId,
-                        orderId, receiptId, orderNo, receiptNo, purchaseQuantity, amount,
+                        orderId, receiptId, orderNo, receiptNo, purchaseQuantity, orderTotalAmount,
                         LocalDate.now().plusDays(30))));
+        BigDecimal offset = offsetAmount == null ? BigDecimal.ZERO : offsetAmount;
+        if (offset.signum() > 0) {
+            payable.applyRebateCredit(offset);
+            payable = repository.save(payable);
+        }
+        return payable;
     }
 
     /** 取消返利抵扣时恢复采购收货对应的应付。 */
@@ -43,29 +50,27 @@ public class PayableService {
         if (amount.signum() <= 0) {
             throw new ConflictException("REBATE_OFFSET_REVERSAL_AMOUNT_INVALID", "恢复抵扣金额必须大于 0");
         }
-        Payable payable = repository.findByPurchaseReceiptId(receiptId).orElse(null);
-        if (payable == null) {
-            createFromReceipt(supplierId, orderId, orderNo, receiptId, receiptNo, purchaseQuantity, amount);
-            return;
-        }
+        Payable payable = repository.findByPurchaseOrderId(orderId)
+                .orElseThrow(() -> new ConflictException("PAYABLE_NOT_FOUND", "未找到该采购订单对应的应付单"));
         try {
-            payable.restoreRebateOffset(amount);
+            payable.restoreReceiptOffset(amount);
         } catch (IllegalStateException | IllegalArgumentException exception) {
             throw new ConflictException("REBATE_OFFSET_REVERSAL_BLOCKED", exception.getMessage());
         }
         repository.save(payable);
     }
 
-    /** 收货单退回时删除未付款、未匹配进项发票的应付。 */
+    /** 最后一张有效收货单退回时，删除未付款、未匹配进项发票的订单级应付。 */
     @Transactional
-    public void reverseReceipt(UUID receiptId) {
-        Payable payable = repository.findByPurchaseReceiptId(receiptId).orElse(null);
+    public void reverseReceipt(UUID orderId, boolean hasOtherPostedReceipts) {
+        if (hasOtherPostedReceipts) return;
+        Payable payable = repository.findByPurchaseOrderId(orderId).orElse(null);
         if (payable == null) return;
         if (payable.getPaidAmount().signum() > 0) {
-            throw new ConflictException("RECEIPT_RETURN_PAYABLE_PAID", "该收货单已发生付款，不能退回");
+            throw new ConflictException("RECEIPT_RETURN_PAYABLE_PAID", "该采购订单已发生付款，不能退回最后一张收货单");
         }
         if (payable.getInvoiceMatchedAmount().signum() > 0) {
-            throw new ConflictException("RECEIPT_RETURN_INVOICE_MATCHED", "该收货单已匹配进项发票，不能退回");
+            throw new ConflictException("RECEIPT_RETURN_INVOICE_MATCHED", "该采购订单已匹配进项发票，不能退回最后一张收货单");
         }
         repository.delete(payable);
     }

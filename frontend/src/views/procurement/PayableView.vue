@@ -34,9 +34,11 @@
         </template>
       </a-table>
     </a-card>
-    <a-modal v-model:open="payOpen" title="应付付款" :confirm-loading="saving" ok-text="确认付款" cancel-text="取消" @ok="submitPay">
+    <a-modal v-model:open="payOpen" title="按采购订单付款" :confirm-loading="saving" ok-text="确认付款" cancel-text="取消" @ok="submitPay">
       <a-form layout="vertical">
-        <a-form-item label="应付单">{{ current?.payableNo }}</a-form-item>
+        <a-form-item label="采购订单编号">{{ current?.orderNo || '-' }}</a-form-item>
+        <a-form-item label="采购应付金额">{{ money(current?.amount) }}</a-form-item>
+        <a-form-item label="应付单号">{{ current?.payableNo }}</a-form-item>
         <a-form-item label="未付金额">{{ money(current?.outstanding) }}</a-form-item>
         <a-form-item label="本次付款" required><MoneyInput v-model:value="payAmount" :min="0.01" :max="current?.outstanding" :precision="2" style="width:100%" /></a-form-item>
         <a-form-item label="付款时间" required>

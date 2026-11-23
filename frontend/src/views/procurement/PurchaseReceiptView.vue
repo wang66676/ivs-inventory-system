@@ -44,6 +44,27 @@
       </a-table>
     </a-card>
 
+    <a-modal v-model:open="previewOpen" title="整车收货导入预览" width="1280px"
+             :confirm-loading="importing" ok-text="确认导入有效项" cancel-text="取消"
+             :ok-button-props="{ disabled: previewRows.length === 0 }"
+             @ok="confirmImport" @cancel="closePreview">
+      <a-alert type="info" show-icon style="margin-bottom:12px"
+               :message="`文件：${previewFileName}；可导入 ${previewRows.length} 台车辆。请核对订单、VIN、配置、仓库和日期，确认后才会写入系统。`" />
+      <a-alert v-if="previewErrors.length" type="error" show-icon style="margin-bottom:12px"
+               :message="`发现 ${previewErrors.length} 项错误，这些行不会导入；其他有效行可继续确认：${previewErrors.slice(0, 5).join('；')}`" />
+      <a-table :data-source="previewRows" row-key="rowIndex" size="small" :pagination="false"
+               :scroll="{ x: 1180, y: 420 }">
+        <a-table-column title="行号" data-index="rowIndex" :width="70" align="center" />
+        <a-table-column title="订单编号" data-index="orderNo" :width="150" />
+        <a-table-column title="车系/商品" :width="180"><template #default="{ record }">{{ record.product.name }}</template></a-table-column>
+        <a-table-column title="配置" data-index="configText" :width="150" />
+        <a-table-column title="VIN/SN" data-index="vin" :width="190" />
+        <a-table-column title="采购价" :width="120" align="right"><template #default="{ record }">{{ money(record.price) }}</template></a-table-column>
+        <a-table-column title="收货仓库" :width="150"><template #default="{ record }">{{ warehouseLabel(record.warehouseId) }}</template></a-table-column>
+        <a-table-column title="申请合格证日期" data-index="certificateDate" :width="150" />
+        <a-table-column title="预览结果" data-index="action" :width="190" />
+      </a-table>
+    </a-modal>
     <a-modal v-model:open="certificateOpen" title="登记申请合格证日期" :confirm-loading="saving"
              ok-text="保存" cancel-text="取消" @ok="saveCertificate">
       <a-form layout="vertical">
@@ -99,6 +120,10 @@ const warehouseId = ref<string>()
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const saving = ref(false)
 const importing = ref(false)
+const previewOpen = ref(false)
+const previewFileName = ref('')
+const previewErrors = ref<string[]>([])
+const previewRows = ref<PreviewRow[]>([])
 const importInput = ref<HTMLInputElement>()
 const products = ref<Product[]>([])
 const suppliers = ref<Supplier[]>([])
@@ -239,7 +264,7 @@ function triggerImport() { importInput.value?.click() }
 async function handleImportFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (file) await importReceipts(file)
+  if (file) await prepareImport(file)
   input.value = ''
 }
 interface ImportRow {
@@ -254,7 +279,22 @@ interface ImportRow {
   certificateDate: string | null
 }
 
-async function importReceipts(file: File) {
+interface PreviewRow extends ImportRow {
+  action: string
+}
+
+function warehouseLabel(id?: string) {
+  return warehouseOptions.value.find((item) => item.value === id)?.label.replace(/（.*/, '') || '收货时指定'
+}
+
+function closePreview() {
+  previewOpen.value = false
+  previewRows.value = []
+  previewErrors.value = []
+  previewFileName.value = ''
+}
+
+async function prepareImport(file: File) {
   importing.value = true
   try {
     const csv = parseCsv(await file.text())
@@ -274,7 +314,7 @@ async function importReceipts(file: File) {
     const supplierByText = new Map(suppliers.value.flatMap((item) =>
       [[item.name.toLowerCase(), item], [item.code.toLowerCase(), item]] as const))
     const seen = new Set<string>()
-    const rowsToImport: ImportRow[] = []
+    const rows: ImportRow[] = []
     const errors: string[] = []
     for (let index = 1; index < csv.length; index += 1) {
       const row = csv[index]
@@ -320,18 +360,17 @@ async function importReceipts(file: File) {
       if (certificateDate && !/^\d{4}-\d{2}-\d{2}$/.test(certificateDate)) {
         errors.push(`第${index + 1}行申请合格证日期格式应为 YYYY-MM-DD`); continue
       }
-      rowsToImport.push({ rowIndex: index + 1, orderNo, supplierText, product, configText, vin, price,
+      rows.push({ rowIndex: index + 1, orderNo, supplierText, product, configText, vin, price,
         warehouseId, certificateDate })
     }
 
-    const missingOrderRows = rowsToImport.filter((row) => !orderByNo.has(row.orderNo))
-    const newOrderGroups = new Map<string, ImportRow[]>()
-    for (const row of missingOrderRows) {
-      const group = newOrderGroups.get(row.orderNo) || []
+    const missingGroups = new Map<string, ImportRow[]>()
+    for (const row of rows.filter((item) => !orderByNo.has(item.orderNo))) {
+      const group = missingGroups.get(row.orderNo) || []
       group.push(row)
-      newOrderGroups.set(row.orderNo, group)
+      missingGroups.set(row.orderNo, group)
     }
-    for (const [orderNo, groupRows] of newOrderGroups) {
+    for (const [orderNo, groupRows] of missingGroups) {
       const supplierIds = new Set<string>()
       for (const row of groupRows) {
         const supplier = row.supplierText ? supplierByText.get(row.supplierText.toLowerCase()) : undefined
@@ -339,7 +378,70 @@ async function importReceipts(file: File) {
         else if (suppliers.value.length === 1) supplierIds.add(suppliers.value[0].id)
       }
       if (supplierIds.size !== 1) {
-        errors.push(`订单 ${orderNo} 在采购单中不存在，且无法唯一确定供应商；请在模板“供应商”列填写供应商名称或编码`)
+        errors.push(`订单 ${orderNo} 在采购单中不存在，且无法唯一确定供应商`)
+      }
+    }
+
+    const preview = rows.map((row) => {
+      const order = orderByNo.get(row.orderNo)
+      let action = '可导入'
+      if (!order) {
+        action = '自动创建并审核采购单后收货'
+      } else if (order.status === 'DRAFT') {
+        action = '自动审核草稿后收货'
+      } else if (order.status !== 'APPROVED' && order.status !== 'PARTIALLY_RECEIVED') {
+        action = `采购单状态不可收货：${order.status}`
+        errors.push(`第${row.rowIndex}行采购订单状态不可收货：${order.status}`)
+      } else {
+        const line = order.lines.find((item) => item.productId === row.product.id
+          && (!row.configText || [item.configText, item.configCode].includes(row.configText))
+          && Number(item.remainingQuantity) > 0)
+        if (!line) {
+          action = '未找到可收货明细'
+          errors.push(`第${row.rowIndex}行未找到可收货明细：${row.product.name}`)
+        }
+      }
+      return { ...row, action }
+    })
+    previewRows.value = preview
+    previewErrors.value = [...new Set(errors)]
+    previewFileName.value = file.name
+    previewOpen.value = true
+  } catch (error) {
+    message.error((error as Error).message)
+  } finally {
+    importing.value = false
+  }
+}
+
+async function confirmImport() {
+  const fileErrors = [...previewErrors.value]
+  if (!previewRows.value.length) { message.warning('没有可导入的数据'); return }
+  importing.value = true
+  const importErrors: string[] = []
+  let success = 0
+  try {
+    const orders = (await purchaseApi.list()).filter((order) => (order.businessScope || 'VEHICLE') === 'VEHICLE')
+    const orderByNo = new Map(orders.flatMap((order) => [[order.externalOrderNo || '', order], [order.orderNo, order]] as const)
+      .filter(([no]) => Boolean(no)))
+    const supplierByText = new Map(suppliers.value.flatMap((item) =>
+      [[item.name.toLowerCase(), item], [item.code.toLowerCase(), item]] as const))
+    const rows = previewRows.value
+    const missingGroups = new Map<string, PreviewRow[]>()
+    for (const row of rows.filter((item) => !orderByNo.has(item.orderNo))) {
+      const group = missingGroups.get(row.orderNo) || []
+      group.push(row)
+      missingGroups.set(row.orderNo, group)
+    }
+    for (const [orderNo, groupRows] of missingGroups) {
+      const supplierIds = new Set<string>()
+      for (const row of groupRows) {
+        const supplier = row.supplierText ? supplierByText.get(row.supplierText.toLowerCase()) : undefined
+        if (supplier) supplierIds.add(supplier.id)
+        else if (suppliers.value.length === 1) supplierIds.add(suppliers.value[0].id)
+      }
+      if (supplierIds.size !== 1) {
+        importErrors.push(`订单 ${orderNo} 无法唯一确定供应商`)
         continue
       }
       const supplierId = [...supplierIds][0]
@@ -371,8 +473,7 @@ async function importReceipts(file: File) {
       orderByNo.set(created.orderNo, created)
     }
 
-    let success = 0
-    for (const row of rowsToImport) {
+    for (const row of rows) {
       try {
         let order = orderByNo.get(row.orderNo)
         if (!order) throw new Error(`采购订单未创建成功：${row.orderNo}`)
@@ -401,14 +502,21 @@ async function importReceipts(file: File) {
         })
         success += 1
       } catch (error) {
-        errors.push(`第${row.rowIndex}行 ${row.vin}：${(error as Error).message}`)
+        importErrors.push(`第${row.rowIndex}行 ${row.vin}：${(error as Error).message}`)
       }
     }
-    if (errors.length) message.warning(`已导入 ${success} 台；${errors.length} 项未导入：${errors.slice(0, 3).join('；')}`)
-    else message.success(`已批量导入 ${success} 台车辆；不存在的采购订单已自动创建并审核`)
+    closePreview()
+    const allErrors = [...fileErrors, ...importErrors]
+    if (allErrors.length) message.warning(`已导入 ${success} 台；${allErrors.length} 项未导入：${allErrors.slice(0, 3).join('；')}`)
+    else message.success(`已批量导入 ${success} 台车辆`)
     await reload()
-  } catch (error) { message.error((error as Error).message) } finally { importing.value = false }
+  } catch (error) {
+    message.error((error as Error).message)
+  } finally {
+    importing.value = false
+  }
 }
+
 async function reload() {
   try { receipts.value = await purchaseApi.receipts() }
   catch (error) { message.error((error as Error).message) }

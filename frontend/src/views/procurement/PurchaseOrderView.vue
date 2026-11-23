@@ -191,7 +191,10 @@
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false"
                  :scroll="{ x: 1360 }" :locale="{ emptyText: '无明细' }">
           <a-table-column v-if="props.scope !== 'BATTERY'" title="车系" :width="180"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
-          <a-table-column title="电池信息" :width="360"><template #default="{ record }">{{ batteryText(record) }}</template></a-table-column>
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池信息" :width="360"><template #default="{ record }">{{ batteryText(record) }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="商品" :width="180"><template #default="{ record }">{{ record.productName || '-' }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="配置" :width="180"><template #default="{ record }">{{ record.configText || record.configCode || '-' }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="采购价" :width="120" align="right"><template #default="{ record }">{{ money(record.unitPrice) }}</template></a-table-column>
           <a-table-column title="待收" data-index="remainingQuantity" :width="80" />
           <a-table-column title="本次收货" :width="620">
             <template #default="{ record }">

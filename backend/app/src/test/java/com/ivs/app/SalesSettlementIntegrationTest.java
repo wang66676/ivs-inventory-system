@@ -440,6 +440,55 @@ class SalesSettlementIntegrationTest {
         return restTemplate.getForEntity(url, type).getBody();
     }
 
+    @Test
+    void 删除取消销售订单时清理全部不成立下游数据() {
+        MasterdataApi.CategoryView category = createCategory("VEHICLE-DELETE", "删除测试整车", TrackingMode.QUANTITY,
+                "VEHICLE", "台");
+        MasterdataApi.ProductView product = createProduct("删除测试车型", category.id(), "台", "某厂", "Q3", "T31",
+                new BigDecimal("300000"), new BigDecimal("350000"));
+        MasterdataApi.WarehouseView warehouse = createWarehouse("WH-SALES-DELETE", "删除测试仓");
+        MasterdataApi.CustomerView customer = createCustomer("删除测试客户", CustomerType.COMPANY,
+                new BigDecimal("1000000"), 30);
+        SalesApi.SalesOrderView order = createOrder(customer, warehouse,
+                List.of(new SalesApi.SaveSalesOrderLineCommand(product.id(), BigDecimal.ONE,
+                        new BigDecimal("350000"), List.of(), null)));
+        order = post("/api/ivs/sales-orders/" + order.id() + "/cancel", Map.of(), SalesApi.SalesOrderView.class);
+
+        jdbcTemplate.update("""
+                insert into ivs.sales_invoice
+                    (id, invoice_no, direction, type, order_id, customer_id, amount, status, created_at, updated_at, version)
+                values (?, ?, 'OUT', 'BLUE', ?, ?, 350000, 'ISSUED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, UUID.randomUUID(), "DEL-INV-" + UUID.randomUUID().toString().substring(0, 8),
+                order.id(), customer.id());
+        jdbcTemplate.update("""
+                insert into ivs.approval_task
+                    (id, task_no, task_type, business_type, business_id, business_no, title,
+                     approval_permission, status, applicant_name, created_at, updated_at, version)
+                values (?, ?, 'DELETE_TEST', 'SALES_ORDER', ?, ?, '删除级联测试',
+                        'IVS_WRITE', 'PENDING', '测试用户', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, UUID.randomUUID(), "TASK-" + UUID.randomUUID().toString().substring(0, 8),
+                order.id(), order.orderNo());
+        jdbcTemplate.update("""
+                insert into ivs.stock_lock
+                    (id, product_id, warehouse_id, quantity, status, biz_type, biz_id, expires_at,
+                     created_at, updated_at, version)
+                values (?, ?, ?, 1, 'RELEASED', 'SALES_ORDER', ?, DATEADD('DAY', 1, CURRENT_TIMESTAMP),
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, UUID.randomUUID(), product.id(), warehouse.id(), order.id());
+
+        restTemplate.delete("/api/ivs/sales-orders/" + order.id());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.sales_invoice where order_id = ?", Integer.class, order.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.approval_task where business_id = ?", Integer.class, order.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.stock_lock where biz_id = ?", Integer.class, order.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.sales_order_line where order_id = ?", Integer.class, order.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ivs.sales_order where id = ?", Integer.class, order.id())).isZero();
+    }
     private MasterdataApi.CategoryView createCategory(String code, String name, TrackingMode mode,
                                                       String template, String unit) {
         Map<String, Object> body = new HashMap<>();

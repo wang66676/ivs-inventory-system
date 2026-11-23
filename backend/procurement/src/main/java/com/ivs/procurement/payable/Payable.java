@@ -111,8 +111,8 @@ public class Payable {
         refreshStatus();
     }
 
-    /** 取消返利抵扣后恢复应付金额；已付款或已匹配进项发票时禁止直接回退。 */
-    public void restoreRebateOffset(BigDecimal value) {
+    /** 取消收货抵扣后恢复应付净额；应付总额始终保持采购订单总金额。 */
+    public void restoreReceiptOffset(BigDecimal value) {
         BigDecimal offset = money(value);
         if (offset.signum() <= 0) {
             throw new IllegalArgumentException("恢复抵扣金额必须大于 0");
@@ -123,7 +123,10 @@ public class Payable {
         if (invoiceMatchedAmount.signum() > 0) {
             throw new IllegalStateException("该应付已匹配进项发票，不能取消返利抵扣");
         }
-        this.amount = money(amount.add(offset));
+        if (rebateCreditAmount.compareTo(offset) < 0) {
+            throw new IllegalArgumentException("可恢复的返利抵扣金额不足");
+        }
+        this.rebateCreditAmount = money(rebateCreditAmount.subtract(offset));
         refreshStatus();
     }
 
