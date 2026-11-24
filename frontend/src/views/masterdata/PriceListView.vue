@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { priceListApi, productApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
@@ -84,7 +84,7 @@ import type { CustomerType, PriceList, PriceListLine, Product } from '../../type
 const customerTypeLabel = (type?: string) => (type ? CUSTOMER_TYPE_LABELS[type as CustomerType] : '通用')
 
 const auth = useAuthStore()
-const canWrite = auth.can('IVS_PRODUCT_MANAGE')
+const canWrite = computed(() => auth.isAdmin)
 
 const rows = ref<PriceList[]>([])
 const products = ref<Product[]>([])

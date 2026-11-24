@@ -3,6 +3,7 @@ package com.ivs.procurement.purchase;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivs.procurement.payable.PayableService;
 import com.ivs.procurement.purchase.api.ProcurementApi;
+import com.ivs.shared.error.BusinessException;
 import com.ivs.shared.error.ConflictException;
 import com.ivs.shared.error.NotFoundException;
 import com.ivs.shared.event.EventEnvelope;
@@ -125,6 +126,7 @@ public class PurchaseOrderApplicationService {
     public ProcurementApi.PurchaseOrderView update(UUID id, ProcurementApi.SavePurchaseOrderCommand command) {
         PurchaseOrder order = orderRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("采购单", id));
+        assertOwnerOrAdmin(order.getOwnerId(), "只有采购单登记人或管理员可以修改该采购单");
         if (order.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new ConflictException("PURCHASE_STATUS_INVALID", "只有草稿采购单可以编辑: " + order.getStatus());
         }
@@ -254,6 +256,7 @@ public class PurchaseOrderApplicationService {
     @Transactional
     public ProcurementApi.PurchaseOrderView cancel(UUID id) {
         PurchaseOrder order = find(id);
+        assertOwnerOrAdmin(order.getOwnerId(), "只有采购单登记人或管理员可以取消该采购单");
         try {
             order.cancel();
         } catch (IllegalStateException exception) {
@@ -387,8 +390,12 @@ public class PurchaseOrderApplicationService {
         receiptRepository.save(receipt);
         BigDecimal receivedQuantity = prepared.stream().map(Prepared::quantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        payableService.createFromReceipt(order.getSupplierId(), order.getId(), order.getOrderNo(),
-                receipt.getId(), receiptNo, receivedQuantity, receipt.netAmount());
+        BigDecimal orderedQuantity = orderLines.stream().map(PurchaseOrderLine::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        String payableOrderNo = order.getExternalOrderNo() == null || order.getExternalOrderNo().isBlank()
+                ? order.getOrderNo() : order.getExternalOrderNo();
+        payableService.createFromReceipt(order.getSupplierId(), order.getId(), payableOrderNo,
+                receipt.getId(), receiptNo, orderedQuantity, order.getTotalAmount(), receipt.getOffsetAmount());
 
         publishReceived(receipt, order, postingLines.size());
         return toReceiptView(receipt);
@@ -471,7 +478,9 @@ public class PurchaseOrderApplicationService {
         BigDecimal receivedQuantity = receiptLineRepository.findByReceiptId(receiptId).stream()
                 .map(PurchaseReceiptLine::getQuantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        payableService.restoreRebateOffset(receipt.getSupplierId(), receipt.getOrderId(), order.getOrderNo(),
+        String payableOrderNo = order.getExternalOrderNo() == null || order.getExternalOrderNo().isBlank()
+                ? order.getOrderNo() : order.getExternalOrderNo();
+        payableService.restoreRebateOffset(receipt.getSupplierId(), receipt.getOrderId(), payableOrderNo,
                 receipt.getId(), receipt.getReceiptNo(), receivedQuantity, restore);
         receipt.applyOffset(receipt.getOffsetAmount().subtract(restore));
         receiptRepository.save(receipt);
@@ -541,7 +550,9 @@ public class PurchaseOrderApplicationService {
         }
         inventoryReceiptPort.reverseReceipt(new InventoryReceiptPort.ReceiptPosting(
                 receipt.getId(), receipt.getReceiptNo(), receipt.getWarehouseId(), postingLines));
-        payableService.reverseReceipt(receiptId);
+        boolean hasOtherPostedReceipts = receiptRepository.findByOrderIdOrderByReceivedAtAsc(order.getId())
+                .stream().anyMatch(item -> !item.getId().equals(receipt.getId()) && item.getStatus() == ReceiptStatus.POSTED);
+        payableService.reverseReceipt(order.getId(), hasOtherPostedReceipts);
         preEntitlementPort.removeSerials(order.getId(), allSerialNos);
         boolean anyReceived = lineRepository.findByOrderIdOrderByLineNoAsc(order.getId()).stream()
                 .anyMatch(line -> line.getReceivedQuantity().signum() > 0);
@@ -628,6 +639,13 @@ public class PurchaseOrderApplicationService {
                 receipt.getId(), receipt.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
     }
 
+    private void assertOwnerOrAdmin(UUID ownerId, String message) {
+        var actor = actors.current()
+                .orElseThrow(() -> new BusinessException("FORBIDDEN_NOT_AUTHENTICATED", "未登录或登录已失效"));
+        if (!actor.isAdmin() && !actor.userId().equals(ownerId)) {
+            throw new BusinessException("FORBIDDEN_DATA_MODIFY", message);
+        }
+    }
     private UUID currentUserId() {
         return actors.current().map(actor -> actor.userId()).orElse(null);
     }

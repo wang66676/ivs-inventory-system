@@ -31,7 +31,7 @@ public final class PermissionCatalog {
                 new Item(PermissionCodes.IVS_WRITE, "新增与修改进销存单据")
         ));
         GROUPS.put("主数据", List.of(
-                new Item(PermissionCodes.PRODUCT_MANAGE, "产品大项、商品、序列号、仓库、供应商、客户、价目表")
+                new Item(PermissionCodes.PRODUCT_MANAGE, "产品大项、商品、序列号、仓库、供应商、客户、价目表（仅 ADMIN 角色可实际写入）")
         ));
         GROUPS.put("库存", List.of(
                 new Item(PermissionCodes.STOCK_ADJUST, "库存调整与盘点过账"),
@@ -74,7 +74,7 @@ public final class PermissionCatalog {
                 new Item(PermissionCodes.LEASE_MANAGE, "电池租赁资产、合同与月租（二期）")
         ));
         GROUPS.put("系统管理", List.of(
-                new Item(PermissionCodes.USER_MANAGE, "用户、角色权限、组织与审计日志")
+                new Item(PermissionCodes.USER_MANAGE, "用户、角色权限、组织与审计日志（仅 ADMIN 角色可访问）")
         ));
     }
 

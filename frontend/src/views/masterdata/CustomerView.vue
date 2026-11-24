@@ -14,13 +14,14 @@
 
 <script setup lang="ts">
 import MasterDataCrudView, { type CrudColumn, type CrudField } from './MasterDataCrudView.vue'
+import { computed } from 'vue'
 import { customerApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
 import { CUSTOMER_TYPE_LABELS } from '../../types/masterdata'
 import type { Customer } from '../../types/masterdata'
 
 const auth = useAuthStore()
-const canWrite = auth.can('IVS_PRODUCT_MANAGE')
+const canWrite = computed(() => auth.isAdmin)
 
 const columns: CrudColumn[] = [
   { key: 'name', title: '客户名称', width: 240 },

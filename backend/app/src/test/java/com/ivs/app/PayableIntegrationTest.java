@@ -76,6 +76,41 @@ class PayableIntegrationTest {
         assertThat(after[0].outstanding()).isEqualByComparingTo("500.00");
     }
 
+    @Test
+    void 分次收货仅生成一张订单级应付且金额为订单总额() {
+        UUID supplierId = post("/api/ivs/suppliers", Map.of("name", "订单级应付供应商", "supplierType", "OTHER"),
+                com.ivs.masterdata.api.MasterdataApi.SupplierView.class).id();
+        var category = post("/api/ivs/product-categories", Map.of("code", "APC2-" + UUID.randomUUID().toString().substring(0, 6),
+                "name", "订单级应付配件", "trackingMode", "QUANTITY", "statusTemplate", "SIMPLE", "unit", "件", "sortOrder", 0),
+                com.ivs.masterdata.api.MasterdataApi.CategoryView.class);
+        UUID productId = post("/api/ivs/products", Map.of("name", "订单级应付测试件", "categoryId", category.id().toString(),
+                "unit", "件", "minPrice", 0), com.ivs.masterdata.api.MasterdataApi.ProductView.class).id();
+        UUID warehouseId = post("/api/ivs/warehouses", Map.of("code", "APWH2-" + UUID.randomUUID().toString().substring(0, 6),
+                "name", "订单级应付仓", "type", "MAIN"), com.ivs.masterdata.api.MasterdataApi.WarehouseView.class).id();
+        String externalOrderNo = "CGAP-" + UUID.randomUUID().toString().substring(0, 8);
+        var order = post("/api/ivs/purchase-orders", Map.of("supplierId", supplierId.toString(),
+                "warehouseId", warehouseId.toString(), "externalOrderNo", externalOrderNo,
+                "lines", List.of(Map.of("productId", productId.toString(), "quantity", 10, "unitPrice", 100))),
+                com.ivs.procurement.purchase.api.ProcurementApi.PurchaseOrderView.class);
+        order = post("/api/ivs/purchase-orders/" + order.id() + "/approve", Map.of(),
+                com.ivs.procurement.purchase.api.ProcurementApi.PurchaseOrderView.class);
+        post("/api/ivs/purchase-orders/" + order.id() + "/receive", Map.of(
+                "warehouseId", warehouseId.toString(), "lines", List.of(Map.of("orderLineId",
+                        order.lines().get(0).id().toString(), "quantity", 4))),
+                com.ivs.procurement.purchase.api.ProcurementApi.PurchaseReceiptView.class);
+        post("/api/ivs/purchase-orders/" + order.id() + "/receive", Map.of(
+                "warehouseId", warehouseId.toString(), "lines", List.of(Map.of("orderLineId",
+                        order.lines().get(0).id().toString(), "quantity", 6))),
+                com.ivs.procurement.purchase.api.ProcurementApi.PurchaseReceiptView.class);
+
+        PayableApi.PayableView[] payables = restTemplate.getForEntity(
+                "/api/ivs/payables?supplierId=" + supplierId, PayableApi.PayableView[].class).getBody();
+        assertThat(payables).isNotNull().hasSize(1);
+        assertThat(payables[0].orderNo()).isEqualTo(externalOrderNo);
+        assertThat(payables[0].amount()).isEqualByComparingTo("1000.00");
+        assertThat(payables[0].purchaseQuantity()).isEqualByComparingTo("10.000");
+        assertThat(payables[0].outstanding()).isEqualByComparingTo("1000.00");
+    }
     private <T> T post(String url, Map<String, Object> body, Class<T> type) {
         return restTemplate.postForEntity(url, body, type).getBody();
     }

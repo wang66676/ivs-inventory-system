@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** 管理员系统健康检查和手工在线备份入口。 */
 @RestController
 @RequestMapping("/api/platform/system-health")
-@PreAuthorize("hasAuthority('USER_MANAGE')")
+@PreAuthorize("hasRole('ADMIN')")
 public class SystemOperationsController {
     private final SystemHealthService health;
     private final BackupService backups;

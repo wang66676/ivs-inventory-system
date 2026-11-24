@@ -1,6 +1,7 @@
 package com.ivs.platform.security;
 
 import com.ivs.platform.audit.PlatformActionAuditor;
+import com.ivs.platform.license.LicenseService;
 import com.ivs.platform.security.api.ChangePasswordCommand;
 import com.ivs.platform.security.api.LoginCommand;
 import com.ivs.platform.security.api.LoginResponse;
@@ -32,6 +33,7 @@ public class AuthenticationService {
     private final UserSessionRepository sessionRepository;
     private final PlatformActionAuditor auditor;
     private final PasswordEncoder passwordEncoder;
+    private final LicenseService licenseService;
     private final long sessionHours;
 
     public AuthenticationService(PlatformUserRepository userRepository,
@@ -40,6 +42,7 @@ public class AuthenticationService {
                                  UserSessionRepository sessionRepository,
                                  PlatformActionAuditor auditor,
                                  PasswordEncoder passwordEncoder,
+                                 LicenseService licenseService,
                                  @Value("${ivs.security.session-hours:12}") long sessionHours) {
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
@@ -47,6 +50,7 @@ public class AuthenticationService {
         this.sessionRepository = sessionRepository;
         this.auditor = auditor;
         this.passwordEncoder = passwordEncoder;
+        this.licenseService = licenseService;
         this.sessionHours = sessionHours;
     }
 
@@ -59,6 +63,7 @@ public class AuthenticationService {
         if (!passwordEncoder.matches(command.password(), user.getPasswordHash())) {
             throw new BusinessException("AUTH_INVALID_CREDENTIALS", "用户名或密码错误");
         }
+        licenseService.ensureUsable();
 
         String rawToken = generateToken();
         Instant expiresAt = Instant.now().plus(sessionHours, ChronoUnit.HOURS);
@@ -81,7 +86,7 @@ public class AuthenticationService {
 
     @Transactional
     public Optional<AuthenticatedUser> authenticate(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
+        if (rawToken == null || rawToken.isBlank() || !licenseService.isUsable()) {
             return Optional.empty();
         }
         UserSession session = sessionRepository.findByTokenHash(hashToken(rawToken)).orElse(null);
@@ -178,5 +183,3 @@ public class AuthenticationService {
         }
     }
 }
-
-

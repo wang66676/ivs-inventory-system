@@ -11,6 +11,15 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30000 })
 }
 
+test('登录页可查看试用期与本机安装码', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: '软件注册 / 查看试用期', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('软件授权与离线注册', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('本机安装码', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('离线注册', { exact: true })).toBeVisible()
+  await expect(dialog).toContainText('691288299@qq.com')
+})
 test.describe.configure({ mode: 'serial' })
 test('登录、付款入口重定向和关键业务页面冒烟', async ({ page }) => {
   test.setTimeout(180000)
@@ -29,7 +38,7 @@ test('登录、付款入口重定向和关键业务页面冒烟', async ({ page 
     '/inventory/vin', '/sales/orders', '/sales/deliveries', '/retail/records',
     '/policy/pre-entitlements', '/policy/entitlements', '/policy/claims',
     '/policy/fund-pool', '/billing/sales-invoices', '/procurement/red-invoices', '/procurement/offsets', '/billing/refunds', '/reports/monthly', '/system/approval-tasks',
-    '/system/health',
+    '/system/health', '/system/license', '/system/delete-requests',
   ]
   for (const route of routes) {
     await page.goto(route)
@@ -118,8 +127,12 @@ test('整车批量入库无采购单时自动创建采购单并收货', async ({
   await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
     name: `receipt-${suffix}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8'),
   })
-  await expect(page.getByText(/自动创建并审核/)).toBeVisible({ timeout: 60000 })
-  await expect(page.getByText(vin, { exact: true })).toBeVisible()
+  const preview = page.locator('.ant-modal-content:visible').filter({ hasText: '整车收货导入预览' })
+  await expect(preview.getByText('整车收货导入预览', { exact: true })).toBeVisible({ timeout: 60000 })
+  await expect(preview.locator('tbody')).toContainText('自动创建并审核采购单后收货')
+  await expect(preview.getByText(vin, { exact: true })).toBeVisible()
+  await preview.getByRole('button', { name: '确认导入有效项' }).click()
+  await expect(page.getByText(/已批量导入 1 台车辆/)).toBeVisible({ timeout: 60000 })
 
   const created = await page.request.get(`/api/ivs/purchase-orders?keyword=${encodeURIComponent(orderNo)}`, { headers })
   expect(created.ok()).toBeTruthy()
@@ -181,8 +194,12 @@ test('整车批量入库自动审核草稿且重复项不影响其他VIN', async
   await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
     name: `receipt-draft-${suffix}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8'),
   })
+  const preview = page.locator('.ant-modal-content:visible').filter({ hasText: '整车收货导入预览' })
+  await expect(preview.getByText('整车收货导入预览', { exact: true })).toBeVisible({ timeout: 60000 })
+  await expect(preview).toContainText('VIN/SN 重复')
+  await expect(preview.getByText(vin2, { exact: true })).toBeVisible()
+  await preview.getByRole('button', { name: '确认导入有效项' }).click()
   await expect(page.getByText(/已导入 2 台/)).toBeVisible({ timeout: 60000 })
-  await expect(page.getByText(/VIN\/SN 重复/)).toBeVisible({ timeout: 10000 })
 
   const updated = await page.request.get(`/api/ivs/purchase-orders?keyword=${encodeURIComponent(orderNo)}`, { headers })
   expect(updated.ok()).toBeTruthy()
@@ -193,6 +210,14 @@ test('整车批量入库自动审核草稿且重复项不影响其他VIN', async
   const importedSerials = receipts.flatMap((receipt: any) => receipt.lines.flatMap((line: any) => line.serialNos || []))
   expect(importedSerials).toContain(vin1)
   expect(importedSerials).toContain(vin2)
+
+  await page.goto('/procurement/orders')
+  const orderRow = page.getByRole('row').filter({ hasText: orderNo }).filter({ hasText: '标准配置' }).first()
+  await orderRow.getByText('收货', { exact: true }).click()
+  const receiveDialog = page.getByRole('dialog')
+  await expect(receiveDialog.getByText('商品', { exact: true })).toBeVisible()
+  await expect(receiveDialog.getByText('配置', { exact: true })).toBeVisible()
+  await expect(receiveDialog.getByText('电池信息', { exact: true })).toHaveCount(0)
 })
 test('车系VIN库存使用采购配置且数量可查看VIN与采购订单', async ({ page }) => {
   await login(page)

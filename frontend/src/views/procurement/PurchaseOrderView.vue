@@ -37,11 +37,11 @@
           <template v-else-if="column.key === 'warehouse'">{{ record.line.warehouseName || record.order.warehouseName || '收货时确认' }}</template>
           <template v-else-if="column.key === 'actions'">
             <a-space v-if="record.isFirstLine">
-              <a v-if="canWrite && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
+              <a v-if="canWrite && canModifyOrder(record.order) && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
               <a v-if="canWrite && record.order.status === 'DRAFT'" @click="approve(record.order)">审核</a>
               <a v-if="canWrite && (record.order.status === 'APPROVED' || record.order.status === 'PARTIALLY_RECEIVED')"
                  @click="openReceive(record.order)">收货</a>
-              <a v-if="canWrite && (record.order.status === 'DRAFT' || record.order.status === 'APPROVED')" @click="cancel(record.order)">取消</a>
+              <a v-if="canWrite && canModifyOrder(record.order) && (record.order.status === 'DRAFT' || record.order.status === 'APPROVED')" @click="cancel(record.order)">取消</a>
             </a-space>
             <span v-else>-</span>
           </template>
@@ -191,7 +191,10 @@
         <a-table :data-source="current?.lines ?? []" row-key="id" size="small" :pagination="false"
                  :scroll="{ x: 1360 }" :locale="{ emptyText: '无明细' }">
           <a-table-column v-if="props.scope !== 'BATTERY'" title="车系" :width="180"><template #default="{ record }">{{ record.series || '-' }}</template></a-table-column>
-          <a-table-column title="电池信息" :width="360"><template #default="{ record }">{{ batteryText(record) }}</template></a-table-column>
+          <a-table-column v-if="props.scope === 'BATTERY'" title="电池信息" :width="360"><template #default="{ record }">{{ batteryText(record) }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="商品" :width="180"><template #default="{ record }">{{ record.productName || '-' }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="配置" :width="180"><template #default="{ record }">{{ record.configText || record.configCode || '-' }}</template></a-table-column>
+          <a-table-column v-if="props.scope !== 'BATTERY'" title="采购价" :width="120" align="right"><template #default="{ record }">{{ money(record.unitPrice) }}</template></a-table-column>
           <a-table-column title="待收" data-index="remainingQuantity" :width="80" />
           <a-table-column title="本次收货" :width="620">
             <template #default="{ record }">
@@ -246,6 +249,7 @@ const statusLabel = (status: string) => PURCHASE_STATUS_LABELS[status as Purchas
 const statusColor = (status: string) => PURCHASE_STATUS_COLORS[status as PurchaseOrderStatus]
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_WRITE')
+function canModifyOrder(order: PurchaseOrder) { return auth.isAdmin || order.ownerId === auth.user?.userId }
 const canOffset = auth.can('IVS_FUND_OFFSET')
 const rows = ref<PurchaseOrder[]>([])
 const keyword = ref('')

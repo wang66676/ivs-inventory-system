@@ -11,7 +11,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/platform")
-@PreAuthorize("hasAuthority('USER_MANAGE')")
+@PreAuthorize("hasRole('ADMIN')")
 public class OrganizationController {
     private final OrganizationService service;
     public OrganizationController(OrganizationService service){this.service=service;}

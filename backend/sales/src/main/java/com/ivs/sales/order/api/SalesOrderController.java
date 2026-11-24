@@ -103,7 +103,7 @@ public class SalesOrderController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_WRITE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable("id") UUID id) {
         service.deleteCancelled(id);
         return ResponseEntity.noContent().build();

@@ -57,6 +57,7 @@ export interface PurchaseOrder {
   expectedDate?: string
   remark?: string
   createdAt: string
+  ownerId?: string
   lines: PurchaseOrderLine[]
 }
 
@@ -118,4 +119,3 @@ export const PURCHASE_STATUS_COLORS: Record<PurchaseOrderStatus, string> = {
   RECEIVED: 'green',
   CANCELLED: 'red',
 }
-

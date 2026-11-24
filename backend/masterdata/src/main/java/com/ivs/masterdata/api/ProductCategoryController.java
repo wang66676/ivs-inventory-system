@@ -41,7 +41,7 @@ public class ProductCategoryController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.CategoryView> create(
             @Valid @RequestBody MasterdataApi.SaveCategoryCommand command) {
         MasterdataApi.CategoryView view = service.create(command);
@@ -49,32 +49,32 @@ public class ProductCategoryController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.CategoryView update(@PathVariable("id") UUID id,
                                              @Valid @RequestBody MasterdataApi.SaveCategoryCommand command) {
         return service.update(id, command);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public void delete(@PathVariable("id") UUID id) {
         service.delete(id);
     }
 
     @PostMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.CategoryView disable(@PathVariable("id") UUID id) {
         return service.disable(id);
     }
 
     @PostMapping("/{id}/enable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.CategoryView enable(@PathVariable("id") UUID id) {
         return service.enable(id);
     }
 
     @PostMapping("/{id}/attr-defs")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.AttrDefView> createAttrDef(
             @PathVariable("id") UUID id, @Valid @RequestBody MasterdataApi.SaveAttrDefCommand command) {
         MasterdataApi.AttrDefView view = service.createAttrDef(id, command);
@@ -83,14 +83,14 @@ public class ProductCategoryController {
     }
 
     @PutMapping("/attr-defs/{attrDefId}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.AttrDefView updateAttrDef(@PathVariable("attrDefId") UUID attrDefId,
                                                    @Valid @RequestBody MasterdataApi.SaveAttrDefCommand command) {
         return service.updateAttrDef(attrDefId, command);
     }
 
     @DeleteMapping("/attr-defs/{attrDefId}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public void deleteAttrDef(@PathVariable("attrDefId") UUID attrDefId) {
         service.deleteAttrDef(attrDefId);
     }

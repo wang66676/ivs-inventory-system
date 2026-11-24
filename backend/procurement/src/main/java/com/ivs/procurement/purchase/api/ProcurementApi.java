@@ -21,14 +21,14 @@ public final class ProcurementApi {
             UUID id, String orderNo, String externalOrderNo, UUID supplierId, String supplierName, String supplierType,
             UUID warehouseId, String warehouseName, PurchaseOrderStatus status, String businessScope,
             BigDecimal totalAmount,
-            LocalDate expectedDate, String remark, Instant createdAt, List<PurchaseOrderLineView> lines
+            LocalDate expectedDate, String remark, Instant createdAt, UUID ownerId, List<PurchaseOrderLineView> lines
     ) {
         public static PurchaseOrderView from(PurchaseOrder order, SupplierInfoView supplier, WarehouseInfoView warehouse,
                                              String businessScope, List<PurchaseOrderLineView> lines) {
             return new PurchaseOrderView(order.getId(), order.getOrderNo(), order.getExternalOrderNo(), order.getSupplierId(),
                     supplier == null ? null : supplier.name(), supplier == null ? null : supplier.type(),
                     order.getWarehouseId(), warehouse == null ? null : warehouse.name(), order.getStatus(), businessScope,
-                    order.getTotalAmount(), order.getExpectedDate(), order.getRemark(), order.getCreatedAt(), lines);
+                    order.getTotalAmount(), order.getExpectedDate(), order.getRemark(), order.getCreatedAt(), order.getOwnerId(), lines);
         }
     }
 

@@ -8,21 +8,22 @@ $settings = Join-Path $root 'tools\maven-settings.xml'
 Write-Host '[1/2] 构建前端 (vue-tsc + vite build)...'
 Push-Location (Join-Path $root 'frontend')
 try {
-  $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
-  if ($pnpm) {
-    & $pnpm.Source run build
-    if ($LASTEXITCODE -ne 0) { throw '前端构建失败' }
-  } else {
-    # 没有全局 pnpm 时，直接使用已被 pnpm 安装到 node_modules 的本地构建工具。
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    $vueTsc = Join-Path (Get-Location) 'node_modules\vue-tsc\bin\vue-tsc.js'
-    $vite = Join-Path (Get-Location) 'node_modules\vite\bin\vite.js'
-    if (-not $node -or -not (Test-Path $vueTsc) -or -not (Test-Path $vite)) {
-      throw '未找到 pnpm/node 或前端依赖，请先在 frontend 目录安装依赖'
-    }
+  # 优先直接调用项目内已安装的构建工具，避免全局 pnpm 联网自更新阻断离线发布。
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  $vueTsc = Join-Path (Get-Location) 'node_modules\vue-tsc\bin\vue-tsc.js'
+  $vite = Join-Path (Get-Location) 'node_modules\vite\bin\vite.js'
+  if ($node -and (Test-Path $vueTsc) -and (Test-Path $vite)) {
     & $node.Source $vueTsc --noEmit
     if ($LASTEXITCODE -ne 0) { throw '前端 TypeScript 校验失败' }
     & $node.Source $vite build
+    if ($LASTEXITCODE -ne 0) { throw '前端构建失败' }
+  } else {
+    $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
+    if (-not $pnpm) {
+      throw '未找到 pnpm/node 或前端依赖，请先在 frontend 目录安装依赖'
+    }
+    $env:CI = 'true'
+    & $pnpm.Source run build
     if ($LASTEXITCODE -ne 0) { throw '前端构建失败' }
   }
 } finally {

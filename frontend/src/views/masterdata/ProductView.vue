@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { categoryApi, productApi } from '../../api/masterdata'
 import { useAuthStore } from '../../stores/auth'
@@ -109,7 +109,7 @@ import { TRACKING_MODE_LABELS } from '../../types/masterdata'
 import type { AttrDef, Category, Product, TrackingMode } from '../../types/masterdata'
 
 const auth = useAuthStore()
-const canWrite = auth.can('IVS_PRODUCT_MANAGE')
+const canWrite = computed(() => auth.isAdmin)
 const rows = ref<Product[]>([])
 const categories = ref<Category[]>([])
 const categoryOptions = ref<{ label: string; value: string }[]>([])
@@ -294,8 +294,3 @@ onMounted(async () => { await loadCategories(); await Promise.all([refreshSeries
 <style scoped>
 .errors { margin: 0; padding-left: 18px; color: #cf1322; }
 </style>
-
-
-
-
-

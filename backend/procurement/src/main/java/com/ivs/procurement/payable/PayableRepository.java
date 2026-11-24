@@ -12,6 +12,7 @@ import java.util.UUID;
 
 public interface PayableRepository extends JpaRepository<Payable, UUID> {
     Optional<Payable> findByPurchaseReceiptId(UUID receiptId);
+    Optional<Payable> findByPurchaseOrderId(UUID orderId);
     Optional<Payable> findByPayableNo(String payableNo);
     List<Payable> findAllByOrderByCreatedAtDesc();
     List<Payable> findBySupplierIdOrderByDueDateAscCreatedAtAsc(UUID supplierId);

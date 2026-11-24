@@ -107,7 +107,7 @@ import type { AttrDef, Category, TrackingMode } from '../../types/masterdata'
 const trackingLabel = (mode: string) => TRACKING_MODE_LABELS[mode as TrackingMode]
 
 const auth = useAuthStore()
-const canWrite = auth.can('IVS_PRODUCT_MANAGE')
+const canWrite = computed(() => auth.isAdmin)
 
 const rows = ref<Category[]>([])
 const modalOpen = ref(false)
@@ -247,6 +247,3 @@ onMounted(reload)
 <style scoped>
 .hint { color: #8b96a8; font-size: 12px; }
 </style>
-
-
-

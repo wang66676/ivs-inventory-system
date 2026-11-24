@@ -45,7 +45,7 @@ public class ProductController {
     }
 
     @PostMapping("/batch-import")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.ProductBatchImportResult batchImport(
             @RequestBody List<MasterdataApi.ProductImportRow> rows) {
         return service.batchImport(rows);
@@ -74,27 +74,27 @@ public class ProductController {
         return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\"";
     }
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.ProductView> create(@Valid @RequestBody MasterdataApi.SaveProductCommand command) {
         MasterdataApi.ProductView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/products/" + view.id())).body(view);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.ProductView update(@PathVariable("id") UUID id,
                                             @Valid @RequestBody MasterdataApi.SaveProductCommand command) {
         return service.update(id, command);
     }
 
     @PostMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.ProductView disable(@PathVariable("id") UUID id) {
         return service.disable(id);
     }
 
     @PostMapping("/{id}/enable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.ProductView enable(@PathVariable("id") UUID id) {
         return service.enable(id);
     }

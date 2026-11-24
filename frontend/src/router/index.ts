@@ -154,15 +154,17 @@ export const router = createRouter({
         : { title: page.title, description: page.description },
       meta: { permission: page.permission },
     })),
-    { path: '/system/organizations', name: 'organization-management', component: () => import('../views/system/OrganizationManagementView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/users', name: 'user-management', component: () => import('../views/system/UserManagementView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/roles', name: 'role-permission', component: () => import('../views/system/RolePermissionView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/audit', name: 'audit-log', component: () => import('../views/system/AuditLogView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/migration', name: 'data-migration', component: () => import('../views/system/DataMigrationView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/settings', name: 'system-settings', component: () => import('../views/system/SystemSettingView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/health', name: 'system-health', component: () => import('../views/system/SystemHealthView.vue'), meta: { permission: 'USER_MANAGE' } },
-    { path: '/system/update', name: 'system-update', component: () => import('../views/system/SystemUpdateView.vue'), meta: { permission: 'IVS_READ' } },
-    { path: '/system/approvals', name: 'approval-config', component: () => import('../views/system/ApprovalConfigView.vue'), meta: { permission: 'USER_MANAGE' } },
+    { path: '/system/organizations', name: 'organization-management', component: () => import('../views/system/OrganizationManagementView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/users', name: 'user-management', component: () => import('../views/system/UserManagementView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/roles', name: 'role-permission', component: () => import('../views/system/RolePermissionView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/audit', name: 'audit-log', component: () => import('../views/system/AuditLogView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/migration', name: 'data-migration', component: () => import('../views/system/DataMigrationView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/settings', name: 'system-settings', component: () => import('../views/system/SystemSettingView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/health', name: 'system-health', component: () => import('../views/system/SystemHealthView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/update', name: 'system-update', component: () => import('../views/system/SystemUpdateView.vue'), meta: { permission: 'IVS_READ', adminOnly: true } },
+    { path: '/system/approvals', name: 'approval-config', component: () => import('../views/system/ApprovalConfigView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/license', name: 'software-license', component: () => import('../views/system/LicenseView.vue'), meta: { permission: 'USER_MANAGE', adminOnly: true } },
+    { path: '/system/delete-requests', name: 'delete-requests', component: () => import('../views/system/DeleteRequestView.vue'), meta: { permission: 'IVS_READ', adminOnly: true } },
     { path: '/system/approval-tasks', name: 'approval-tasks', component: () => import('../views/system/ApprovalTaskView.vue'), meta: { permission: 'IVS_READ' } },
   ],
 })
@@ -182,18 +184,8 @@ router.beforeEach(async (to) => {
       return '/login'
     }
   }
+  if (to.meta.adminOnly && !auth.isAdmin) return '/dashboard'
   const permission = to.meta.permission as string | undefined
   if (permission && !auth.can(permission)) return '/dashboard'
   return true
 })
-
-
-
-
-
-
-
-
-
-
-

@@ -25,7 +25,7 @@ public final class SalesApi {
             UUID id, String orderNo, String externalOrderNo, UUID customerId, String customerName, String customerType,
             UUID warehouseId, String warehouseName, SalesOrderStatus status, String businessScope, BigDecimal totalAmount,
             boolean priceApprovalRequired, boolean priceApproved, Instant lockedAt, String remark, Instant createdAt,
-            String paymentMode, BigDecimal downPayment, int installmentCount, LocalDate firstDueDate,
+            String paymentMode, BigDecimal downPayment, int installmentCount, LocalDate firstDueDate, UUID ownerId,
             List<SalesOrderLineView> lines
     ) {
         public static SalesOrderView from(SalesOrder order, String customerName, String customerType,
@@ -35,7 +35,7 @@ public final class SalesApi {
                     order.getStatus(), businessScope, order.getTotalAmount(),
                     order.isPriceApprovalRequired(), order.getPriceApprovedBy() != null, order.getLockedAt(),
                     order.getRemark(), order.getCreatedAt(), order.getPaymentMode().name(), order.getDownPayment(),
-                    order.getInstallmentCount(), order.getFirstDueDate(), lines);
+                    order.getInstallmentCount(), order.getFirstDueDate(), order.getOwnerId(), lines);
         }
     }
 

@@ -26,6 +26,10 @@ public class GlobalExceptionHandler {
             status = HttpStatus.NOT_FOUND;
         } else if (exception.code().startsWith("AUTH_")) {
             status = HttpStatus.UNAUTHORIZED;
+        } else if (exception.code().startsWith("LICENSE_")
+                || exception.code().startsWith("FORBIDDEN_")
+                || exception.code().startsWith("DELETE_REQUEST_FORBIDDEN")) {
+            status = HttpStatus.FORBIDDEN;
         } else {
             status = HttpStatus.CONFLICT;
         }
