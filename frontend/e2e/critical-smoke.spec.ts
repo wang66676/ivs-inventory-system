@@ -11,6 +11,15 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30000 })
 }
 
+test('登录页可查看试用期与本机安装码', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: '软件注册 / 查看试用期', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('软件授权与离线注册', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('本机安装码', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('离线注册', { exact: true })).toBeVisible()
+  await expect(dialog).toContainText('691288299@qq.com')
+})
 test.describe.configure({ mode: 'serial' })
 test('登录、付款入口重定向和关键业务页面冒烟', async ({ page }) => {
   test.setTimeout(180000)
@@ -29,7 +38,7 @@ test('登录、付款入口重定向和关键业务页面冒烟', async ({ page 
     '/inventory/vin', '/sales/orders', '/sales/deliveries', '/retail/records',
     '/policy/pre-entitlements', '/policy/entitlements', '/policy/claims',
     '/policy/fund-pool', '/billing/sales-invoices', '/procurement/red-invoices', '/procurement/offsets', '/billing/refunds', '/reports/monthly', '/system/approval-tasks',
-    '/system/health',
+    '/system/health', '/system/license', '/system/delete-requests',
   ]
   for (const route of routes) {
     await page.goto(route)

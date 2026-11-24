@@ -30,9 +30,11 @@
           <template #icon><SettingOutlined /></template>
           <template #title>系统</template>
           <a-menu-item key="/system/approval-tasks">审批待办</a-menu-item>
-          <template v-if="auth.can('USER_MANAGE')">
+          <template v-if="auth.isAdmin">
             <a-menu-item key="/system/organizations">组织架构</a-menu-item>
             <a-menu-item key="/system/users">用户管理</a-menu-item>
+            <a-menu-item key="/system/delete-requests">删除审批</a-menu-item>
+            <a-menu-item key="/system/license">软件授权</a-menu-item>
             <a-menu-item key="/system/roles">角色权限</a-menu-item>
             <a-menu-item key="/system/approvals">审批配置</a-menu-item>
             <a-menu-item key="/system/settings">全局参数</a-menu-item>
@@ -365,6 +367,8 @@ const pageTitle = computed(() => pageTitles[selectedKeys.value[0]] ?? (route.pat
 const systemTitles: Record<string, string> = {
   '/system/organizations': '组织架构',
   '/system/users': '用户管理',
+  '/system/delete-requests': '删除审批',
+  '/system/license': '软件授权',
   '/system/roles': '角色权限',
   '/system/approvals': '审批配置',
   '/system/approval-tasks': '审批待办',
@@ -440,8 +444,3 @@ async function submitChangePassword() {
 .notification-item .unread { font-weight: 600; color: #172033; }
 .notification-time { margin-top: 5px; color: #98a2b3; font-size: 12px; }
 </style>
-
-
-
-
-

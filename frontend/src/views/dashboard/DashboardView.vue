@@ -41,10 +41,14 @@
 
     <a-card title="常用入口" :bordered="false" style="margin-top:16px">
       <a-space wrap>
-        <a-button @click="go('/system/users')">用户管理</a-button>
-        <a-button @click="go('/system/roles')">角色权限</a-button>
-        <a-button @click="go('/system/organizations')">组织架构</a-button>
-        <a-button @click="go('/system/audit')">审计日志</a-button>
+        <template v-if="auth.isAdmin">
+          <a-button @click="go('/system/users')">用户管理</a-button>
+          <a-button @click="go('/system/roles')">角色权限</a-button>
+          <a-button @click="go('/system/organizations')">组织架构</a-button>
+          <a-button @click="go('/system/audit')">审计日志</a-button>
+          <a-button @click="go('/system/license')">软件授权</a-button>
+          <a-button @click="go('/system/delete-requests')">删除审批</a-button>
+        </template>
         <a-button type="primary" @click="go('/policy/policies')">政策管理</a-button>
         <a-button @click="go('/policy/fund-pool')">返利资金池</a-button>
         <a-button @click="go('/inventory/dashboard')">库存看板</a-button>
@@ -71,4 +75,3 @@ function go(path: string) {
 .hero-title { font-size: 22px; font-weight: 700; color: #172033; }
 .hero-note { margin-top: 8px; color: #5c6b82; line-height: 1.7; }
 </style>
-

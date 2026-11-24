@@ -6,6 +6,7 @@ import com.ivs.sales.order.api.SalesApi;
 import com.ivs.sales.settlement.InstallmentPlanService;
 import com.ivs.sales.settlement.Receivable;
 import com.ivs.sales.settlement.ReceivableRepository;
+import com.ivs.shared.error.BusinessException;
 import com.ivs.shared.error.ConflictException;
 import com.ivs.shared.error.NotFoundException;
 import com.ivs.shared.event.EventEnvelope;
@@ -131,6 +132,7 @@ public class SalesOrderApplicationService {
     public SalesApi.SalesOrderView update(UUID id, SalesApi.SaveSalesOrderCommand command) {
         SalesOrder order = orderRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("销售订单", id));
+        assertOwnerOrAdmin(order.getOwnerId(), "只有订单登记人或管理员可以修改该销售订单");
         if (order.getStatus() != SalesOrderStatus.DRAFT) {
             throw new ConflictException("SALES_STATUS_INVALID", "只有草稿订单可以编辑: " + order.getStatus());
         }
@@ -242,6 +244,7 @@ public class SalesOrderApplicationService {
     public SalesApi.SalesOrderView updatePrices(UUID id, SalesApi.UpdatePricesCommand command) {
         SalesOrder order = orderRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("销售订单", id));
+        assertOwnerOrAdmin(order.getOwnerId(), "只有订单登记人或管理员可以补录成交价");
         if (order.getStatus() != SalesOrderStatus.DRAFT && order.getStatus() != SalesOrderStatus.CONFIRMED) {
             throw new ConflictException("SALES_STATUS_INVALID", "当前订单状态不允许修改成交价: " + order.getStatus());
         }
@@ -389,6 +392,7 @@ public class SalesOrderApplicationService {
     @Transactional
     public SalesApi.SalesOrderView cancel(UUID id) {
         SalesOrder order = find(id);
+        assertOwnerOrAdmin(order.getOwnerId(), "只有订单登记人或管理员可以取消该销售订单");
         try {
             order.cancel();
         } catch (IllegalStateException exception) {
@@ -616,6 +620,13 @@ public class SalesOrderApplicationService {
                 order.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
     }
 
+    private void assertOwnerOrAdmin(UUID ownerId, String message) {
+        var actor = actors.current()
+                .orElseThrow(() -> new BusinessException("FORBIDDEN_NOT_AUTHENTICATED", "未登录或登录已失效"));
+        if (!actor.isAdmin() && !actor.userId().equals(ownerId)) {
+            throw new BusinessException("FORBIDDEN_DATA_MODIFY", message);
+        }
+    }
     private UUID currentUserId() {
         return actors.current().map(actor -> actor.userId()).orElse(null);
     }

@@ -39,27 +39,27 @@ public class CustomerController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('IVS_WRITE','IVS_RETAIL_WRITE','IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.CustomerView> create(@Valid @RequestBody MasterdataApi.SaveCustomerCommand command) {
         MasterdataApi.CustomerView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/customers/" + view.id())).body(view);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.CustomerView update(@PathVariable("id") UUID id,
                                              @Valid @RequestBody MasterdataApi.SaveCustomerCommand command) {
         return service.update(id, command);
     }
 
     @PostMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.CustomerView disable(@PathVariable("id") UUID id) {
         return service.disable(id);
     }
 
     @PostMapping("/{id}/enable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.CustomerView enable(@PathVariable("id") UUID id) {
         return service.enable(id);
     }

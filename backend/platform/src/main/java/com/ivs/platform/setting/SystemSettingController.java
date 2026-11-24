@@ -10,7 +10,7 @@ import java.util.List;
 /** 全局参数：仅管理员可访问与修改。 */
 @RestController
 @RequestMapping("/api/ivs/system-settings")
-@PreAuthorize("hasAuthority('USER_MANAGE')")
+@PreAuthorize("hasRole('ADMIN')")
 public class SystemSettingController {
     private final SystemSettingService service;
 

@@ -13,7 +13,7 @@ import java.util.List;
 /** 审批配置中心：仅系统管理员可查看与修改。 */
 @RestController
 @RequestMapping("/api/ivs/approval-rules")
-@PreAuthorize("hasAuthority('USER_MANAGE')")
+@PreAuthorize("hasRole('ADMIN')")
 public class ApprovalRuleController {
     private final ApprovalRuleService service;
 

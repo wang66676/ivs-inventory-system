@@ -46,16 +46,16 @@
             <a-space v-if="record.isFirstLine" wrap>
               <a v-if="canApprovePrice && record.order.priceApprovalRequired && !record.order.priceApproved"
                  @click="approvePrice(record.order)">价格审批</a>
-              <a v-if="canWrite && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
-              <a v-if="canWrite && record.order.status === 'CONFIRMED' && hasZeroPrice(record.order)"
+              <a v-if="canWrite && canModifyOrder(record.order) && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
+              <a v-if="canWrite && canModifyOrder(record.order) && record.order.status === 'CONFIRMED' && hasZeroPrice(record.order)"
                  @click="openPriceEditor(record.order)">补录成交价</a>
               <a v-if="canWrite && record.order.status === 'DRAFT'" @click="confirm(record.order)">确认</a>
               <a v-if="canWrite && record.order.status === 'CONFIRMED' && !record.order.lockedAt" @click="lock(record.order)">锁货</a>
               <a v-if="canWrite && record.order.lockedAt && (record.order.status === 'CONFIRMED' || record.order.status === 'PARTIALLY_DELIVERED')"
                  @click="openDeliver(record.order)">出库</a>
-              <a v-if="canWrite && (record.order.status === 'DRAFT' || record.order.status === 'CONFIRMED')"
+              <a v-if="canWrite && canModifyOrder(record.order) && (record.order.status === 'DRAFT' || record.order.status === 'CONFIRMED')"
                  @click="cancel(record.order)">取消</a>
-              <a v-if="canWrite && record.order.status === 'CANCELLED'" danger @click="deleteOrder(record.order)">删除</a>
+              <a v-if="canWrite && record.order.status === 'CANCELLED'" danger @click="deleteOrder(record.order)">{{ auth.isAdmin ? '删除' : '申请删除' }}</a>
             </a-space>
             <span v-else>-</span>
           </template>
@@ -102,7 +102,7 @@
         </a-row>
         <a-divider orientation="left" style="font-size:13px">客户</a-divider>
         <a-radio-group v-model:value="customerMode" button-style="solid" style="margin-bottom:12px">
-          <a-radio-button value="MANUAL">手工输入客户</a-radio-button>
+          <a-radio-button v-if="auth.isAdmin" value="MANUAL">手工输入客户</a-radio-button>
           <a-radio-button value="EXISTING">选择已有客户</a-radio-button>
         </a-radio-group>
         <a-row v-if="customerMode === 'EXISTING'" :gutter="12">
@@ -112,7 +112,7 @@
             </a-form-item>
           </a-col>
         </a-row>
-        <a-row v-else :gutter="12">
+        <a-row v-else-if="auth.isAdmin" :gutter="12">
           <a-col :span="8"><a-form-item label="客户名称" required><a-input v-model:value="manualCustomer.name" /></a-form-item></a-col>
           <a-col :span="8"><a-form-item label="联系人"><a-input v-model:value="manualCustomer.contactName" /></a-form-item></a-col>
           <a-col :span="8"><a-form-item label="手机号" required><a-input v-model:value="manualCustomer.contactPhone" /></a-form-item></a-col>
@@ -241,6 +241,7 @@ import { salesApi } from '../../api/sales'
 import { exportCsv, exportTimestamp, parseCsv } from '../../utils/csvExport'
 import { inventoryApi } from '../../api/inventory'
 import { customerApi, productApi, serialApi, warehouseApi } from '../../api/masterdata'
+import { deletionApi } from '../../api/deletion'
 import { useAuthStore } from '../../stores/auth'
 import { SALES_STATUS_COLORS, SALES_STATUS_LABELS } from '../../types/sales'
 import type { ProductSerial } from '../../types/masterdata'
@@ -258,6 +259,7 @@ const canWrite = auth.can('IVS_WRITE')
 const importing = ref(false)
 const salesImportInput = ref<HTMLInputElement>()
 const canApprovePrice = auth.can('IVS_PRICE_APPROVE')
+function canModifyOrder(order: SalesOrder) { return auth.isAdmin || order.ownerId === auth.user?.userId }
 
 const rows = ref<SalesOrder[]>([])
 const keyword = ref('')
@@ -536,6 +538,7 @@ async function savePrices() {
 
 async function submit() {
   if (customerMode.value === 'MANUAL') {
+    if (!auth.isAdmin) { message.warning('新增客户属于主数据维护，只有管理员可以操作'); return }
     if (!manualCustomer.name.trim() || !manualCustomer.contactPhone.trim()) {
       message.warning('请填写客户名称和手机号')
       return
@@ -751,17 +754,25 @@ async function cancel(record: SalesOrder) {
   catch (error) { message.error((error as Error).message) }
 }
 function deleteOrder(record: SalesOrder) {
+  const direct = auth.isAdmin
   Modal.confirm({
-    title: `删除已取消订单 ${record.orderNo}？`,
-    content: '删除后订单及其明细不可恢复。',
-    okText: '确认删除', okType: 'danger', cancelText: '取消',
+    title: direct ? `删除已取消订单 ${record.orderNo}？` : `申请删除已取消订单 ${record.orderNo}？`,
+    content: direct ? '删除后订单及其明细不可恢复。' : '提交后需管理员批准，批准后才会删除订单并清理不再成立的下游数据。',
+    okText: direct ? '确认删除' : '提交申请', okType: 'danger', cancelText: '取消',
     onOk: async () => {
-      try { await salesApi.deleteOrder(record.id); message.success('订单已删除'); await reload() }
-      catch (error) { message.error((error as Error).message) }
+      try {
+        if (direct) {
+          await salesApi.deleteOrder(record.id)
+          message.success('订单已删除')
+        } else {
+          await deletionApi.create({ businessType: 'SALES_ORDER', businessId: record.id, reason: '销售订单删除申请' })
+          message.success('删除申请已提交，等待管理员审批')
+        }
+        await reload()
+      } catch (error) { message.error((error as Error).message) }
     },
   })
 }
-
 function openDeliver(record: SalesOrder) {
   if (!record.lockedAt) { message.warning('请先锁货再出库'); return }
   current.value = record

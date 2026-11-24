@@ -3,6 +3,7 @@ package com.ivs.procurement.purchase;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivs.procurement.payable.PayableService;
 import com.ivs.procurement.purchase.api.ProcurementApi;
+import com.ivs.shared.error.BusinessException;
 import com.ivs.shared.error.ConflictException;
 import com.ivs.shared.error.NotFoundException;
 import com.ivs.shared.event.EventEnvelope;
@@ -125,6 +126,7 @@ public class PurchaseOrderApplicationService {
     public ProcurementApi.PurchaseOrderView update(UUID id, ProcurementApi.SavePurchaseOrderCommand command) {
         PurchaseOrder order = orderRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("采购单", id));
+        assertOwnerOrAdmin(order.getOwnerId(), "只有采购单登记人或管理员可以修改该采购单");
         if (order.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new ConflictException("PURCHASE_STATUS_INVALID", "只有草稿采购单可以编辑: " + order.getStatus());
         }
@@ -254,6 +256,7 @@ public class PurchaseOrderApplicationService {
     @Transactional
     public ProcurementApi.PurchaseOrderView cancel(UUID id) {
         PurchaseOrder order = find(id);
+        assertOwnerOrAdmin(order.getOwnerId(), "只有采购单登记人或管理员可以取消该采购单");
         try {
             order.cancel();
         } catch (IllegalStateException exception) {
@@ -636,6 +639,13 @@ public class PurchaseOrderApplicationService {
                 receipt.getId(), receipt.getVersion(), null, UUID.randomUUID(), Instant.now(), payload));
     }
 
+    private void assertOwnerOrAdmin(UUID ownerId, String message) {
+        var actor = actors.current()
+                .orElseThrow(() -> new BusinessException("FORBIDDEN_NOT_AUTHENTICATED", "未登录或登录已失效"));
+        if (!actor.isAdmin() && !actor.userId().equals(ownerId)) {
+            throw new BusinessException("FORBIDDEN_DATA_MODIFY", message);
+        }
+    }
     private UUID currentUserId() {
         return actors.current().map(actor -> actor.userId()).orElse(null);
     }

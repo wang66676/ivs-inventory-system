@@ -54,6 +54,7 @@ export interface SalesOrder {
   lockedAt?: string
   remark?: string
   createdAt: string
+  ownerId?: string
   lines: SalesOrderLine[]
 }
 

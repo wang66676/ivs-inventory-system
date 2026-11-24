@@ -39,27 +39,27 @@ public class WarehouseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.WarehouseView> create(@Valid @RequestBody MasterdataApi.SaveWarehouseCommand command) {
         MasterdataApi.WarehouseView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/warehouses/" + view.id())).body(view);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.WarehouseView update(@PathVariable("id") UUID id,
                                               @Valid @RequestBody MasterdataApi.SaveWarehouseCommand command) {
         return service.update(id, command);
     }
 
     @PostMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.WarehouseView disable(@PathVariable("id") UUID id) {
         return service.disable(id);
     }
 
     @PostMapping("/{id}/enable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.WarehouseView enable(@PathVariable("id") UUID id) {
         return service.enable(id);
     }

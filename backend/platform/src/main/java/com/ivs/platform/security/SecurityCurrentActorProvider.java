@@ -18,9 +18,8 @@ public class SecurityCurrentActorProvider implements CurrentActorProvider {
         }
         Object principal = authentication.getPrincipal();
         if (principal instanceof AuthenticatedUser user) {
-            return Optional.of(new CurrentActor(user.userId(), user.username(), user.dataScope().name(), user.companyId(), user.storeId(), user.teamId()));
+            return Optional.of(new CurrentActor(user.userId(), user.username(), user.dataScope().name(), user.companyId(), user.storeId(), user.teamId(), user.roles()));
         }
         return Optional.empty();
     }
 }
-

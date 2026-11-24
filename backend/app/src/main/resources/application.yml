@@ -33,13 +33,16 @@ management:
         include: health,info,metrics
 
 ivs:
-  version: ${IVS_VERSION:1.9.31}
+  version: ${IVS_VERSION:1.9.32}
   invoice:
     storage-dir: ${IVS_INVOICE_STORAGE_DIR:${IVS_DATA_DIR:./data}/invoice-files}
   cors:
     allowed-origins: ${IVS_CORS_ALLOWED_ORIGINS:http://localhost:8090,http://localhost:5174,https://wang66676.github.io}
   desktop:
     open-browser: ${IVS_OPEN_BROWSER:false}
+  license:
+    trial-days: ${IVS_LICENSE_TRIAL_DAYS:30}
+    contact-email: ${IVS_LICENSE_CONTACT_EMAIL:691288299@qq.com}
   security:
     session-hours: 12
     # 引导管理员：生产环境请用环境变量设置强密码，或首次登录后立即修改

@@ -44,27 +44,27 @@ public class ProductSerialController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.SerialView> create(@Valid @RequestBody MasterdataApi.SaveSerialCommand command) {
         MasterdataApi.SerialView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/product-serials/" + view.id())).body(view);
     }
 
     @PostMapping("/batch-import")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.BatchImportResult importBatch(@RequestBody List<MasterdataApi.SaveSerialCommand> commands) {
         return service.importBatch(commands);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.SerialView update(@PathVariable("id") UUID id,
                                            @Valid @RequestBody MasterdataApi.SaveSerialCommand command) {
         return service.update(id, command);
     }
 
     @PostMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.SerialView moveStatus(@PathVariable("id") UUID id,
                                                @Valid @RequestBody MasterdataApi.MoveSerialStatusCommand command) {
         return service.moveStatus(id, command.targetStatus());

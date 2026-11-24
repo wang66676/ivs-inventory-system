@@ -34,3 +34,7 @@ build/
 # 一次性问题截图
 /文字遮挡问题.png
 
+
+# 离线注册器私钥（严禁提交）
+packaging/license-registrar/license-private.xml
+*.license-private.xml

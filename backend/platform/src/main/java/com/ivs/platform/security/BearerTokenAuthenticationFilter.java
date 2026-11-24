@@ -28,9 +28,10 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
             if (authorization != null && authorization.startsWith("Bearer ")) {
                 String token = authorization.substring(7).trim();
                 authenticationService.authenticate(token).ifPresent(user -> {
-                    var authorities = user.permissions().stream()
-                            .map(SimpleGrantedAuthority::new)
-                            .toList();
+                    var authorities = java.util.stream.Stream.concat(
+                            user.permissions().stream(),
+                            user.roles().stream().map(role -> "ROLE_" + role)
+                    ).map(SimpleGrantedAuthority::new).toList();
                     var authentication = new UsernamePasswordAuthenticationToken(user, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 });

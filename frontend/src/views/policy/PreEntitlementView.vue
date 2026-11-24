@@ -27,7 +27,7 @@
           <template v-else-if="column.key === 'actions'">
             <a-space v-if="canManage && record.status !== 'APPLIED' && record.status !== 'SETTLED' && record.status !== 'CANCELLED'" size="small">
               <a-button size="small" @click="openPolicyManager(record)">变更政策</a-button>
-              <a-button size="small" danger @click="removePolicy(record)">删除</a-button>
+              <a-button size="small" danger @click="removePolicy(record)">{{ auth.isAdmin ? '删除' : '申请删除' }}</a-button>
             </a-space>
             <span v-else>-</span>
           </template>
@@ -82,6 +82,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { policyApi } from '../../api/policy'
+import { deletionApi } from '../../api/deletion'
 import { purchaseApi } from '../../api/procurement'
 import { useAuthStore } from '../../stores/auth'
 import { PRE_STATUS_LABELS } from '../../types/policy'
@@ -180,22 +181,29 @@ async function savePolicies() {
 }
 
 function removePolicy(record: PreEntitlement) {
+  const direct = auth.isAdmin
   Modal.confirm({
-    title: `删除该 VIN/SN 的政策「${record.policyName}」？`,
-    content: '删除后会释放对应的政策额度；已申请或已兑现的政策不能删除。',
-    okText: '确认删除',
+    title: direct ? `删除该 VIN/SN 的政策「${record.policyName}」？` : `申请删除该 VIN/SN 的政策「${record.policyName}」？`,
+    content: direct
+      ? '删除后会释放对应的政策额度；已申请或已兑现的政策不能删除。'
+      : '提交后需管理员批准，批准后才会删除政策并释放对应额度。',
+    okText: direct ? '确认删除' : '提交申请',
     okType: 'danger',
     cancelText: '取消',
     onOk: async () => {
       try {
-        await policyApi.deletePreEntitlement(record.id)
-        message.success('政策已删除并释放额度')
+        if (direct) {
+          await policyApi.deletePreEntitlement(record.id)
+          message.success('政策已删除并释放额度')
+        } else {
+          await deletionApi.create({ businessType: 'PRE_ENTITLEMENT', businessId: record.id, reason: '预享受项删除申请' })
+          message.success('删除申请已提交，等待管理员审批')
+        }
         await reload()
       } catch (error) { message.error((error as Error).message) }
     },
   })
 }
-
 async function reload() {
   try { rows.value = await policyApi.preEntitlements() }
   catch (error) { message.error((error as Error).message) }

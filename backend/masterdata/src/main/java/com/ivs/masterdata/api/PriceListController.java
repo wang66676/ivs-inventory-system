@@ -44,40 +44,40 @@ public class PriceListController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.PriceListView> create(@Valid @RequestBody MasterdataApi.SavePriceListCommand command) {
         MasterdataApi.PriceListView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/price-lists/" + view.id())).body(view);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.PriceListView update(@PathVariable("id") UUID id,
                                               @Valid @RequestBody MasterdataApi.SavePriceListCommand command) {
         return service.update(id, command);
     }
 
     @PostMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.PriceListView disable(@PathVariable("id") UUID id) {
         return service.disable(id);
     }
 
     @PostMapping("/{id}/enable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.PriceListView enable(@PathVariable("id") UUID id) {
         return service.enable(id);
     }
 
     @PostMapping("/{id}/lines")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.PriceListView saveLine(@PathVariable("id") UUID id,
                                                 @Valid @RequestBody MasterdataApi.SavePriceListLineCommand command) {
         return service.saveLine(id, command);
     }
 
     @DeleteMapping("/{id}/lines/{lineId}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.PriceListView removeLine(@PathVariable("id") UUID id, @PathVariable("lineId") UUID lineId) {
         return service.removeLine(id, lineId);
     }

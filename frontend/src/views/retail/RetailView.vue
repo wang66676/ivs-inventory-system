@@ -63,7 +63,7 @@
           <a-col :span="12">
             <a-form-item label="终端客户">
               <a-radio-group v-model:value="customerMode" button-style="solid" style="margin-bottom:8px">
-                <a-radio-button value="MANUAL">手工输入客户</a-radio-button>
+                <a-radio-button v-if="auth.isAdmin" value="MANUAL">手工输入客户</a-radio-button>
                 <a-radio-button value="EXISTING">选择未实销客户</a-radio-button>
               </a-radio-group>
               <a-select v-if="customerMode === 'EXISTING'" v-model:value="form.customerId"
@@ -354,6 +354,8 @@ async function importRetails(file: File) {
 
     let success = 0
     const customerCache = new Map<string, string>()
+    const customerDirectory = new Map((await customerApi.list()).map((item) =>
+      [`${item.name}|${item.contactPhone || ''}`, item.id]))
     for (const row of prepared) {
       try {
         let customerId = row.customerId
@@ -361,14 +363,19 @@ async function importRetails(file: File) {
           const key = `${row.userName}|${row.userMobile}`
           customerId = customerCache.get(key)
           if (!customerId) {
-            const customer = await customerApi.create({
-              name: row.userName,
-              customerType: 'INDIVIDUAL',
-              contactName: row.userName,
-              contactPhone: row.userMobile,
-              creditLimit: 0,
-            })
-            customerId = customer.id
+            customerId = customerDirectory.get(key)
+            if (!customerId) {
+              if (!auth.isAdmin) throw new Error('客户不存在，请先由管理员在客户模块新增该客户')
+              const customer = await customerApi.create({
+                name: row.userName,
+                customerType: 'INDIVIDUAL',
+                contactName: row.userName,
+                contactPhone: row.userMobile,
+                creditLimit: 0,
+              })
+              customerId = customer.id
+              customerDirectory.set(key, customerId)
+            }
             customerCache.set(key, customerId)
           }
         }
@@ -531,6 +538,7 @@ async function save() {
   try {
     const body = editingId.value ? payload() : batchPayload()
     if (customerMode.value === 'MANUAL') {
+      if (!auth.isAdmin) throw new Error('新增客户属于主数据维护，只有管理员可以操作')
       const customer = await customerApi.create({
         name: body.userName,
         customerType: 'INDIVIDUAL',
@@ -628,4 +636,3 @@ onMounted(async () => {
 <style scoped>
 .sub { color: #8b96a8; font-size: 12px; margin-top: 2px; }
 </style>
-

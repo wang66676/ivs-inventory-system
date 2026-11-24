@@ -37,11 +37,11 @@
           <template v-else-if="column.key === 'warehouse'">{{ record.line.warehouseName || record.order.warehouseName || '收货时确认' }}</template>
           <template v-else-if="column.key === 'actions'">
             <a-space v-if="record.isFirstLine">
-              <a v-if="canWrite && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
+              <a v-if="canWrite && canModifyOrder(record.order) && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
               <a v-if="canWrite && record.order.status === 'DRAFT'" @click="approve(record.order)">审核</a>
               <a v-if="canWrite && (record.order.status === 'APPROVED' || record.order.status === 'PARTIALLY_RECEIVED')"
                  @click="openReceive(record.order)">收货</a>
-              <a v-if="canWrite && (record.order.status === 'DRAFT' || record.order.status === 'APPROVED')" @click="cancel(record.order)">取消</a>
+              <a v-if="canWrite && canModifyOrder(record.order) && (record.order.status === 'DRAFT' || record.order.status === 'APPROVED')" @click="cancel(record.order)">取消</a>
             </a-space>
             <span v-else>-</span>
           </template>
@@ -249,6 +249,7 @@ const statusLabel = (status: string) => PURCHASE_STATUS_LABELS[status as Purchas
 const statusColor = (status: string) => PURCHASE_STATUS_COLORS[status as PurchaseOrderStatus]
 const auth = useAuthStore()
 const canWrite = auth.can('IVS_WRITE')
+function canModifyOrder(order: PurchaseOrder) { return auth.isAdmin || order.ownerId === auth.user?.userId }
 const canOffset = auth.can('IVS_FUND_OFFSET')
 const rows = ref<PurchaseOrder[]>([])
 const keyword = ref('')

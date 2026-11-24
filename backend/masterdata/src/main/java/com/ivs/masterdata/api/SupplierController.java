@@ -41,27 +41,27 @@ public class SupplierController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MasterdataApi.SupplierView> create(@Valid @RequestBody MasterdataApi.SaveSupplierCommand command) {
         MasterdataApi.SupplierView view = service.create(command);
         return ResponseEntity.created(URI.create("/api/ivs/suppliers/" + view.id())).body(view);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.SupplierView update(@PathVariable("id") UUID id,
                                              @Valid @RequestBody MasterdataApi.SaveSupplierCommand command) {
         return service.update(id, command);
     }
 
     @PostMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.SupplierView disable(@PathVariable("id") UUID id) {
         return service.disable(id);
     }
 
     @PostMapping("/{id}/enable")
-    @PreAuthorize("hasAuthority('IVS_PRODUCT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public MasterdataApi.SupplierView enable(@PathVariable("id") UUID id) {
         return service.enable(id);
     }

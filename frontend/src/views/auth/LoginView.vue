@@ -16,18 +16,24 @@
           <a-input-password v-model:value="form.password" size="large" autocomplete="current-password" placeholder="请输入密码" @press-enter="submit" />
         </a-form-item>
         <a-button type="primary" html-type="submit" size="large" block :loading="loading">登录</a-button>
+        <a-button size="large" block style="margin-top:10px" @click="licenseOpen = true">软件注册 / 查看试用期</a-button>
       </a-form>
       <div class="server-address">当前登录服务：{{ serverAddress }}</div>
       <a-alert class="login-hint" type="info" show-icon message="首次使用请用随软件附带的《使用说明》中的默认账号登录，并尽快在「用户管理」中新建自己的账号。局域网客户端必须填写主机服务器地址，并使用主机端创建的账号。" />
     </a-card>
+    <a-modal v-model:open="licenseOpen" title="软件授权与离线注册" footer="" width="680px">
+      <LicensePanel />
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '../../stores/auth'
+import { licenseApi } from '../../api/license'
+import LicensePanel from '../../components/LicensePanel.vue'
 
 const brandLogoUrl = import.meta.env.BASE_URL + 'logo.png'
 const serverAddress = window.location.origin
@@ -35,6 +41,7 @@ const serverAddress = window.location.origin
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
+const licenseOpen = ref(false)
 const form = reactive({ username: '', password: '' })
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -49,6 +56,7 @@ async function submit() {
     await router.push('/dashboard')
   } catch (error) {
     const errorMessage = (error as Error).message
+    if (errorMessage.includes('试用期已结束')) licenseOpen.value = true
     message.error(errorMessage === '用户名或密码错误'
       ? '用户名或密码错误。局域网登录请确认客户端地址指向主机，并使用主机端“用户管理”中创建的账号。'
       : errorMessage)
@@ -56,6 +64,12 @@ async function submit() {
     loading.value = false
   }
 }
+onMounted(async () => {
+  try {
+    const status = await licenseApi.status()
+    if (status.state === 'EXPIRED') licenseOpen.value = true
+  } catch { /* 登录服务不可达时由登录按钮给出提示 */ }
+})
 </script>
 
 <style scoped>

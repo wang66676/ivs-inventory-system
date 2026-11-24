@@ -136,7 +136,7 @@ public class PolicyController {
     }
 
     @DeleteMapping("/pre-entitlements/{id}")
-    @PreAuthorize("hasAuthority('IVS_PRE_ENTITLEMENT_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public void deletePre(@PathVariable("id") UUID id) {
         service.deletePre(id);
     }

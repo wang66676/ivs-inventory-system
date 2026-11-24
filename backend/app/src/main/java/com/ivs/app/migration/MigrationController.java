@@ -12,7 +12,7 @@ import java.util.UUID;
 /** 历史数据迁移：试运行校验、导入、对账、回滚。 */
 @RestController
 @RequestMapping("/api/ivs/migrations")
-@PreAuthorize("hasAuthority('USER_MANAGE')")
+@PreAuthorize("hasRole('ADMIN')")
 public class MigrationController {
 
     private final MigrationService service;
