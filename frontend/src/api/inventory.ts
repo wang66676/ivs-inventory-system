@@ -11,7 +11,7 @@ export const inventoryApi = {
   locks: (params?: { status?: string }) =>
     http.get<StockLock[]>('/ivs/inventory/locks', { params }).then((r) => r.data),
   summary: () => http.get<InventorySummary>('/ivs/inventory/summary').then((r) => r.data),
-  statistics: (params: { from?: string; to?: string; granularity?: string; businessScope?: string; warehouseType?: string }) =>
+  statistics: (params: { from?: string; to?: string; businessScope?: string; warehouseType?: string }) =>
     http.get<InventoryStatistics>('/ivs/statistics/inventory', { params }).then((r) => r.data),
   vehicleSeriesDetail: (params: { series: string; config: string }) =>
     http.get<VehicleSeriesInventoryDetail[]>('/ivs/inventory/vehicle-series-detail', { params }).then((r) => r.data),

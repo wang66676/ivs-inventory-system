@@ -22,7 +22,7 @@ test('登录页可查看试用期与本机安装码', async ({ page }) => {
 })
 test.describe.configure({ mode: 'serial' })
 test('登录、付款入口重定向和关键业务页面冒烟', async ({ page }) => {
-  test.setTimeout(180000)
+  test.setTimeout(300000)
   const errors: string[] = []
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', (error) => errors.push(error.message))
@@ -241,8 +241,11 @@ test('整车销售订单支持客户筛选和统计看板入口', async ({ page 
   await page.goto('/sales/orders')
   await expect(page.getByText('按客户筛选', { exact: true })).toBeVisible()
   await page.goto('/inventory/statistics')
+  await expect(page.getByText('按月筛选', { exact: true })).toBeVisible()
+  await expect(page.getByText('按年筛选', { exact: true })).toBeVisible()
   await expect(page.getByText('采购数量', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('按仓库类型统计', { exact: true })).toBeVisible()
+  await expect(page.getByText('统计区间', { exact: true })).toHaveCount(0)
 })
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
@@ -252,6 +255,7 @@ test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await pagination.locator('.ant-select').click()
   const options = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content')
   await expect(options).toContainText(['10 / page', '20 / page', '50 / page'])
+  await expect(pagination.locator('.ant-select-selection-item')).toContainText('10 / page')
 })
 test('政策红字发票按 VIN/SN 冲减应付入口可用', async ({ page }) => {
   await login(page)

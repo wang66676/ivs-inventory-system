@@ -80,7 +80,7 @@ class InventoryStatisticsIntegrationTest {
         assertThat(filteredOrders).hasSize(1);
         String today = LocalDate.now().toString();
         Map result = get("/api/ivs/statistics/inventory?from=" + today + "&to=" + today
-                + "&granularity=DAY&businessScope=VEHICLE", Map.class);
+                + "&businessScope=VEHICLE", Map.class);
         Map summary = (Map) result.get("summary");
         assertThat(new BigDecimal(String.valueOf(summary.get("totalPurchaseQuantity"))))
                 .isEqualByComparingTo("5.000");
