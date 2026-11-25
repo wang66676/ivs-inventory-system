@@ -23,9 +23,8 @@ public class InventoryStatisticsController {
     public InventoryStatisticsService.StatisticsView inventory(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(defaultValue = "DAY") String granularity,
             @RequestParam(defaultValue = "ALL") String businessScope,
             @RequestParam(required = false) String warehouseType) {
-        return service.query(from, to, granularity, businessScope, warehouseType);
+        return service.query(from, to, businessScope, warehouseType);
     }
 }

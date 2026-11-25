@@ -15,7 +15,6 @@ import java.util.*;
 /** 采购收货与销售出库联动统计。 */
 @Service
 public class InventoryStatisticsService {
-    private static final DateTimeFormatter DAY = DateTimeFormatter.ISO_DATE;
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("yyyy-MM");
     private static final List<String> WAREHOUSE_TYPES =
             List.of("MAIN", "STORE", "SECONDARY", "CUSTOMER", "TEMPORARY", "OTHER", "UNKNOWN");
@@ -27,8 +26,7 @@ public class InventoryStatisticsService {
     }
 
     @Transactional(readOnly = true)
-    public StatisticsView query(LocalDate from, LocalDate to, String granularity,
-                                String businessScope, String warehouseType) {
+    public StatisticsView query(LocalDate from, LocalDate to, String businessScope, String warehouseType) {
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
         if (start.isAfter(end)) {
@@ -36,10 +34,6 @@ public class InventoryStatisticsService {
         }
         if (ChronoUnit.DAYS.between(start, end) > 3660) {
             throw new BusinessException("STATISTICS_DATE_RANGE_TOO_LARGE", "统计跨度不能超过 10 年");
-        }
-        String mode = granularity == null || granularity.isBlank() ? "DAY" : granularity.toUpperCase(Locale.ROOT);
-        if (!"DAY".equals(mode) && !"MONTH".equals(mode)) {
-            throw new BusinessException("STATISTICS_GRANULARITY_INVALID", "统计粒度只能选择按日或按月");
         }
         String scope = businessScope == null || businessScope.isBlank()
                 ? "ALL" : businessScope.toUpperCase(Locale.ROOT);
@@ -52,7 +46,7 @@ public class InventoryStatisticsService {
         List<MovementRow> purchases = purchaseRows(start, end, scope, type);
         List<MovementRow> sales = salesRows(start, end, scope, type);
 
-        Map<String, TrendAccumulator> trend = initializeTrend(start, end, mode);
+        Map<String, TrendAccumulator> trend = initializeMonthlyTrend(start, end);
         Map<String, WarehouseAccumulator> byWarehouseType = initializeWarehouses();
         Set<UUID> purchaseOrders = new HashSet<>();
         Set<UUID> salesOrders = new HashSet<>();
@@ -60,7 +54,7 @@ public class InventoryStatisticsService {
         BigDecimal salesQuantity = BigDecimal.ZERO;
 
         for (MovementRow row : purchases) {
-            String period = period(row.date(), mode);
+            String period = YearMonth.from(row.date()).format(MONTH);
             trend.get(period).purchase = trend.get(period).purchase.add(row.quantity());
             WarehouseAccumulator purchaseWarehouse = byWarehouseType.computeIfAbsent(
                     row.warehouseType(), key -> new WarehouseAccumulator());
@@ -69,7 +63,7 @@ public class InventoryStatisticsService {
             if (row.orderId() != null) purchaseOrders.add(row.orderId());
         }
         for (MovementRow row : sales) {
-            String period = period(row.date(), mode);
+            String period = YearMonth.from(row.date()).format(MONTH);
             trend.get(period).sales = trend.get(period).sales.add(row.quantity());
             WarehouseAccumulator salesWarehouse = byWarehouseType.computeIfAbsent(
                     row.warehouseType(), key -> new WarehouseAccumulator());
@@ -88,7 +82,7 @@ public class InventoryStatisticsService {
         Summary summary = new Summary(scale(purchaseQuantity), scale(salesQuantity),
                 scale(salesQuantity.subtract(purchaseQuantity)), purchaseOrders.size(), salesOrders.size());
 
-        return new StatisticsView(start, end, mode, scope, type, summary, trendPoints, warehousePoints,
+        return new StatisticsView(start, end, scope, type, summary, trendPoints, warehousePoints,
                 List.of("采购数量按已入库收货单的实际收货数量统计。",
                         "销售数量按已出库销售单的实际出库数量统计。",
                         "仓库类型分别取实际收货仓库和实际出库仓库。",
@@ -149,21 +143,13 @@ public class InventoryStatisticsService {
                 rs.getBigDecimal("quantity"), rs.getObject("order_id", UUID.class)), args.toArray());
     }
 
-    private Map<String, TrendAccumulator> initializeTrend(LocalDate from, LocalDate to, String mode) {
+    private Map<String, TrendAccumulator> initializeMonthlyTrend(LocalDate from, LocalDate to) {
         Map<String, TrendAccumulator> result = new TreeMap<>();
-        if ("MONTH".equals(mode)) {
-            YearMonth cursor = YearMonth.from(from);
-            YearMonth end = YearMonth.from(to);
-            while (!cursor.isAfter(end)) {
-                result.put(cursor.format(MONTH), new TrendAccumulator());
-                cursor = cursor.plusMonths(1);
-            }
-        } else {
-            LocalDate cursor = from;
-            while (!cursor.isAfter(to)) {
-                result.put(cursor.format(DAY), new TrendAccumulator());
-                cursor = cursor.plusDays(1);
-            }
+        YearMonth cursor = YearMonth.from(from);
+        YearMonth end = YearMonth.from(to);
+        while (!cursor.isAfter(end)) {
+            result.put(cursor.format(MONTH), new TrendAccumulator());
+            cursor = cursor.plusMonths(1);
         }
         return result;
     }
@@ -172,10 +158,6 @@ public class InventoryStatisticsService {
         Map<String, WarehouseAccumulator> result = new LinkedHashMap<>();
         for (String type : WAREHOUSE_TYPES) result.put(type, new WarehouseAccumulator());
         return result;
-    }
-
-    private String period(LocalDate date, String mode) {
-        return "MONTH".equals(mode) ? YearMonth.from(date).format(MONTH) : date.format(DAY);
     }
 
     private String warehouseLabel(String type) {
@@ -218,7 +200,7 @@ public class InventoryStatisticsService {
                                      BigDecimal purchaseQuantity, BigDecimal salesQuantity) {
     }
 
-    public record StatisticsView(LocalDate from, LocalDate to, String granularity, String businessScope,
+    public record StatisticsView(LocalDate from, LocalDate to, String businessScope,
                                  String warehouseType, Summary summary, List<TrendPoint> trend,
                                  List<WarehouseTypePoint> byWarehouseType, List<String> notes) {
     }

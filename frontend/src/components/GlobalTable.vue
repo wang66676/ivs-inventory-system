@@ -19,8 +19,8 @@ const props = defineProps<{
 
 const normalizedPagination = computed<Record<string, any>>(() => {
   const source = props.pagination && typeof props.pagination === 'object' ? props.pagination : {}
-  const configuredSize = Number(source.defaultPageSize ?? source.pageSize)
-  const defaultPageSize = [10, 20, 50].includes(configuredSize) ? configuredSize : 20
+  // 全站表格默认每页 10 条；用户仍可通过分页器切换 20/50 条。
+  const defaultPageSize = 10
   const { pageSize: _ignoredPageSize, ...rest } = source
   return {
     ...rest,

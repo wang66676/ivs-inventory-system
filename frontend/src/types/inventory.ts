@@ -177,7 +177,6 @@ export interface InventoryStatisticsWarehouseTypePoint {
 export interface InventoryStatistics {
   from: string
   to: string
-  granularity: 'DAY' | 'MONTH'
   businessScope: 'ALL' | 'VEHICLE' | 'BATTERY'
   warehouseType?: string
   summary: InventoryStatisticsSummary
