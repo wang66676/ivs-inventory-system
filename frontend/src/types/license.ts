@@ -8,6 +8,10 @@ export interface LicenseStatus {
   trialEndsAt: string
   licensedUntil?: string
   customerName?: string
+  username?: string
+  licenseFilePresent: boolean
+  licenseFileState: string
+  licenseFileName: string
   contactEmail: string
   message: string
 }

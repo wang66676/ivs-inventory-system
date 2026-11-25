@@ -46,7 +46,7 @@ public class SecurityConfiguration {
                 .exceptionHandling(handler -> handler.authenticationEntryPoint(
                         new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/platform/auth/login", "/api/platform/license/status", "/api/platform/license/activate", "/api/erp/refunds/callback", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/api/platform/auth/login", "/api/platform/license/status", "/api/platform/license/activate", "/api/platform/license/import", "/api/erp/refunds/callback", "/actuator/health", "/error").permitAll()
                         // 业务接口与运维端点一律要求认证
                         .requestMatchers("/api/**", "/actuator/**").authenticated()
                         // 其余为前端静态资源（SPA 外壳，不含业务数据），放行以便登录页可加载；

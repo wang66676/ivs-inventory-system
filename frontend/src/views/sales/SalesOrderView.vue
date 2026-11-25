@@ -14,6 +14,8 @@
         <a-select v-model:value="filterStatus" :options="statusOptions" allow-clear placeholder="按状态筛选"
                   style="width:180px" @change="reload" />
         <a-input v-model:value="keyword" placeholder="订单号" allow-clear style="width:190px" @press-enter="reload" />
+        <a-select v-model:value="filterCustomerId" :options="customerOptions" allow-clear show-search
+                  option-filter-prop="label" placeholder="按客户筛选" style="width:240px" @change="reload" />
       </a-space>
       <a-table v-resizable-columns :data-source="salesRows" :columns="columns" row-key="rowKey" size="middle"
                :pagination="false" :scroll="{ x: 1900 }">
@@ -264,6 +266,7 @@ function canModifyOrder(order: SalesOrder) { return auth.isAdmin || order.ownerI
 const rows = ref<SalesOrder[]>([])
 const keyword = ref('')
 const filterStatus = ref<string | undefined>(undefined)
+const filterCustomerId = ref<string | undefined>(undefined)
 const formOpen = ref(false)
 const customerMode = ref<'MANUAL' | 'EXISTING'>('EXISTING')
 const priceOpen = ref(false)
@@ -433,7 +436,7 @@ function hasZeroPrice(order: SalesOrder) {
 
 async function reload() {
   try {
-    const result = await salesApi.orders({ keyword: keyword.value || undefined, status: filterStatus.value })
+    const result = await salesApi.orders({ keyword: keyword.value || undefined, status: filterStatus.value, customerId: filterCustomerId.value })
     rows.value = result.filter((order) => (order.businessScope || 'VEHICLE') === props.scope)
   }
   catch (error) { message.error((error as Error).message) }

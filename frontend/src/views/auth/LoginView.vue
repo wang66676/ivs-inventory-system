@@ -16,12 +16,12 @@
           <a-input-password v-model:value="form.password" size="large" autocomplete="current-password" placeholder="请输入密码" @press-enter="submit" />
         </a-form-item>
         <a-button type="primary" html-type="submit" size="large" block :loading="loading">登录</a-button>
-        <a-button size="large" block style="margin-top:10px" @click="licenseOpen = true">软件注册 / 查看试用期</a-button>
+        <a-button size="large" block style="margin-top:10px" @click="licenseOpen = true">软件授权 / 购买延期</a-button>
       </a-form>
       <div class="server-address">当前登录服务：{{ serverAddress }}</div>
       <a-alert class="login-hint" type="info" show-icon message="首次使用请用随软件附带的《使用说明》中的默认账号登录，并尽快在「用户管理」中新建自己的账号。局域网客户端必须填写主机服务器地址，并使用主机端创建的账号。" />
     </a-card>
-    <a-modal v-model:open="licenseOpen" title="软件授权与离线注册" footer="" width="680px">
+    <a-modal v-model:open="licenseOpen" title="软件授权与授权文件" footer="" width="680px">
       <LicensePanel />
     </a-modal>
   </div>
