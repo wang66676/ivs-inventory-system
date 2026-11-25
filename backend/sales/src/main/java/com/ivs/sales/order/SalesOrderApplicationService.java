@@ -80,17 +80,16 @@ public class SalesOrderApplicationService {
 
     @Transactional(readOnly = true)
     public List<SalesApi.SalesOrderView> list(String keyword, SalesOrderStatus status, UUID customerId) {
-        List<SalesOrder> orders;
-        if (keyword != null && !keyword.isBlank()) {
-            orders = orderRepository.searchByOrderNo("%" + keyword.trim().toLowerCase() + "%");
-        } else if (customerId != null) {
-            orders = orderRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
-        } else if (status != null) {
-            orders = orderRepository.findByStatusOrderByCreatedAtDesc(status);
-        } else {
-            orders = orderRepository.findAllByOrderByCreatedAtDesc();
-        }
-        return orders.stream().map(this::toView).toList();
+        String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase();
+        return orderRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(order -> normalizedKeyword.isBlank()
+                        || order.getOrderNo().toLowerCase().contains(normalizedKeyword)
+                        || (order.getExternalOrderNo() != null
+                            && order.getExternalOrderNo().toLowerCase().contains(normalizedKeyword)))
+                .filter(order -> status == null || order.getStatus() == status)
+                .filter(order -> customerId == null || customerId.equals(order.getCustomerId()))
+                .map(this::toView)
+                .toList();
     }
 
     @Transactional(readOnly = true)

@@ -8,6 +8,12 @@ final class TestDatabaseCleaner {
     }
 
     static void clean(JdbcTemplate jdbcTemplate) {
+        try {
+            java.nio.file.Files.deleteIfExists(java.nio.file.Path.of(
+                    System.getProperty("java.io.tmpdir"), "ivs-test-license.lic"));
+        } catch (java.io.IOException ignored) {
+            // 测试授权文件清理失败不影响数据库清理。
+        }
         jdbcTemplate.execute("delete from ivs.user_notification_read");
         jdbcTemplate.execute("delete from ivs.user_notification");
         jdbcTemplate.execute("delete from ivs.approval_task");

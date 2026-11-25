@@ -155,3 +155,33 @@ export const LOCK_STATUS_LABELS: Record<StockLockStatus, string> = {
   CONSUMED: '已消耗',
   EXPIRED: '已超时',
 }
+
+export interface InventoryStatisticsSummary {
+  totalPurchaseQuantity: number
+  totalSalesQuantity: number
+  netQuantity: number
+  purchaseOrderCount: number
+  salesOrderCount: number
+}
+export interface InventoryStatisticsTrendPoint {
+  period: string
+  purchaseQuantity: number
+  salesQuantity: number
+}
+export interface InventoryStatisticsWarehouseTypePoint {
+  warehouseType: string
+  warehouseTypeLabel: string
+  purchaseQuantity: number
+  salesQuantity: number
+}
+export interface InventoryStatistics {
+  from: string
+  to: string
+  granularity: 'DAY' | 'MONTH'
+  businessScope: 'ALL' | 'VEHICLE' | 'BATTERY'
+  warehouseType?: string
+  summary: InventoryStatisticsSummary
+  trend: InventoryStatisticsTrendPoint[]
+  byWarehouseType: InventoryStatisticsWarehouseTypePoint[]
+  notes: string[]
+}

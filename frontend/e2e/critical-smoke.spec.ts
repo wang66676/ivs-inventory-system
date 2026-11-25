@@ -13,11 +13,11 @@ async function login(page: Page) {
 
 test('登录页可查看试用期与本机安装码', async ({ page }) => {
   await page.goto('/login')
-  await page.getByRole('button', { name: '软件注册 / 查看试用期', exact: true }).click()
+  await page.getByRole('button', { name: '软件授权 / 购买延期', exact: true }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByText('软件授权与离线注册', { exact: true })).toBeVisible()
-  await expect(dialog.getByText('本机安装码', { exact: true })).toBeVisible()
-  await expect(dialog.getByText('离线注册', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('软件授权与授权文件', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('本机软件码', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('导入授权文件', { exact: true })).toBeVisible()
   await expect(dialog).toContainText('691288299@qq.com')
 })
 test.describe.configure({ mode: 'serial' })
@@ -34,7 +34,7 @@ test('登录、付款入口重定向和关键业务页面冒烟', async ({ page 
 
   const routes = [
     '/masterdata/products', '/procurement/orders', '/procurement/receipts',
-    '/procurement/invoices', '/procurement/battery-invoices', '/procurement/payables', '/procurement/battery-payables', '/inventory/dashboard',
+    '/procurement/invoices', '/procurement/battery-invoices', '/procurement/payables', '/procurement/battery-payables', '/inventory/dashboard', '/inventory/statistics',
     '/inventory/vin', '/sales/orders', '/sales/deliveries', '/retail/records',
     '/policy/pre-entitlements', '/policy/entitlements', '/policy/claims',
     '/policy/fund-pool', '/billing/sales-invoices', '/procurement/red-invoices', '/procurement/offsets', '/billing/refunds', '/reports/monthly', '/system/approval-tasks',
@@ -235,6 +235,14 @@ test('车系VIN库存使用采购配置且数量可查看VIN与采购订单', as
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText(target.serialNo, { exact: true })).toBeVisible()
   await expect(dialog.getByText(target.purchaseOrderNo, { exact: true })).toBeVisible()
+})
+test('整车销售订单支持客户筛选和统计看板入口', async ({ page }) => {
+  await login(page)
+  await page.goto('/sales/orders')
+  await expect(page.getByText('按客户筛选', { exact: true })).toBeVisible()
+  await page.goto('/inventory/statistics')
+  await expect(page.getByText('采购数量', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('按仓库类型统计', { exact: true })).toBeVisible()
 })
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)

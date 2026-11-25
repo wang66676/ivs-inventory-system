@@ -78,7 +78,6 @@ jobs:
           Compress-Archive -Path windows-app\IVS\* -DestinationPath "windows-app\IVS-Portable-$env:APP_VERSION.zip" -Force
           Compress-Archive -Path packaging\lan-host-tools\* -DestinationPath "windows-app\IVS-LAN-Host-Tools.zip" -Force
           Compress-Archive -Path packaging\lan-client\* -DestinationPath "windows-app\IVS-LAN-Client-Kit.zip" -Force
-          Compress-Archive -Path packaging\license-registrar\IVSRegistrar.exe,packaging\license-registrar\使用说明.txt -DestinationPath "windows-app\IVS-License-Registrar.zip" -Force
 
       - uses: actions/upload-artifact@v4
         with:
@@ -88,7 +87,6 @@ jobs:
             windows-app/IVS-Portable-*.zip
             windows-app/IVS-LAN-Host-Tools.zip
             windows-app/IVS-LAN-Client-Kit.zip
-            windows-app/IVS-License-Registrar.zip
             packaging/web/网页登录版.url
 
   android-apk:
