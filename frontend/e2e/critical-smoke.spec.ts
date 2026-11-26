@@ -289,6 +289,14 @@ test('整车销售订单导入支持车系匹配和成交单价', async ({ page 
   const orders = await created.json()
   expect(orders.some((order: any) => order.externalOrderNo === orderNo)).toBeTruthy()
 })
+test('新建销售订单显示手工客户自动同步入口', async ({ page }) => {
+  await login(page)
+  await page.goto('/sales/orders')
+  await page.getByRole('button', { name: /^新\s*建\s*销\s*售\s*订\s*单$/ }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByText('手工输入客户', { exact: true }).click()
+  await expect(dialog.getByText('客户名称已存在时自动复用，不存在时自动新增到客户模块。')).toBeVisible()
+})
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
   await page.goto('/masterdata/products')

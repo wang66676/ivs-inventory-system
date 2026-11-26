@@ -26,6 +26,8 @@ public interface SalesMasterDataPort {
 
     CustomerInfo requireCustomer(UUID customerId);
 
+    CustomerInfo findOrCreateCustomer(String name, String contactName, String contactPhone);
+
     WarehouseInfo requireWarehouse(UUID warehouseId);
 
     WarehouseInfo requireBatteryWarehouse();

@@ -104,7 +104,7 @@
         </a-row>
         <a-divider orientation="left" style="font-size:13px">客户</a-divider>
         <a-radio-group v-model:value="customerMode" button-style="solid" style="margin-bottom:12px">
-          <a-radio-button v-if="auth.isAdmin" value="MANUAL">手工输入客户</a-radio-button>
+          <a-radio-button value="MANUAL">手工输入客户</a-radio-button>
           <a-radio-button value="EXISTING">选择已有客户</a-radio-button>
         </a-radio-group>
         <a-row v-if="customerMode === 'EXISTING'" :gutter="12">
@@ -114,11 +114,12 @@
             </a-form-item>
           </a-col>
         </a-row>
-        <a-row v-else-if="auth.isAdmin" :gutter="12">
+        <a-row v-else :gutter="12">
           <a-col :span="8"><a-form-item label="客户名称" required><a-input v-model:value="manualCustomer.name" /></a-form-item></a-col>
           <a-col :span="8"><a-form-item label="联系人"><a-input v-model:value="manualCustomer.contactName" /></a-form-item></a-col>
           <a-col :span="8"><a-form-item label="手机号" required><a-input v-model:value="manualCustomer.contactPhone" /></a-form-item></a-col>
         </a-row>
+        <div v-if="customerMode === 'MANUAL'" class="hint">客户名称已存在时自动复用，不存在时自动新增到客户模块。</div>
         <a-divider orientation="left" style="font-size:13px">订单明细（VIN/SN 可先不选，保存后点“编辑”补全）</a-divider>
         <a-table :data-source="form.lines" row-key="_key" size="small" :pagination="false" :scroll="{ x: 1900 }">
           <a-table-column title="商品" :width="280">
@@ -541,7 +542,6 @@ async function savePrices() {
 
 async function submit() {
   if (customerMode.value === 'MANUAL') {
-    if (!auth.isAdmin) { message.warning('新增客户属于主数据维护，只有管理员可以操作'); return }
     if (!manualCustomer.name.trim() || !manualCustomer.contactPhone.trim()) {
       message.warning('请填写客户名称和手机号')
       return
@@ -596,18 +596,18 @@ async function submit() {
   saving.value = true
   try {
     if (customerMode.value === 'MANUAL') {
-      const createdCustomer = await customerApi.create({
+      const resolvedCustomer = await salesApi.resolveCustomer({
         name: manualCustomer.name.trim(),
-        customerType: 'INDIVIDUAL',
         contactName: manualCustomer.contactName.trim() || manualCustomer.name.trim(),
         contactPhone: manualCustomer.contactPhone.trim(),
-        creditLimit: 0,
       })
-      form.customerId = createdCustomer.id
-      payload.customerId = createdCustomer.id
-      customerOptions.value.unshift({
-        label: `${createdCustomer.name}（${createdCustomer.code}）`, value: createdCustomer.id,
-      })
+      form.customerId = resolvedCustomer.id
+      payload.customerId = resolvedCustomer.id
+      if (!customerOptions.value.some((item) => item.value === resolvedCustomer.id)) {
+        customerOptions.value.unshift({
+          label: `${resolvedCustomer.name}（${resolvedCustomer.code}）`, value: resolvedCustomer.id,
+        })
+      }
     }
     if (editingId.value) await salesApi.update(editingId.value, payload)
     else await salesApi.create(payload)

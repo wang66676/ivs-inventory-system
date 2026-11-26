@@ -5,6 +5,8 @@ export const salesApi = {
   orders: (params?: { keyword?: string; status?: string; customerId?: string }) =>
     http.get<SalesOrder[]>('/ivs/sales-orders', { params }).then((r) => r.data),
   order: (id: string) => http.get<SalesOrder>(`/ivs/sales-orders/${id}`).then((r) => r.data),
+  resolveCustomer: (body: { name: string; contactName?: string; contactPhone?: string }) =>
+    http.post<{ id: string; code: string; name: string }>('/ivs/sales-orders/customer-resolve', body).then((r) => r.data),
   create: (body: Record<string, unknown>) => http.post<SalesOrder>('/ivs/sales-orders', body).then((r) => r.data),
   update: (id: string, body: Record<string, unknown>) =>
     http.put<SalesOrder>(`/ivs/sales-orders/${id}`, body).then((r) => r.data),

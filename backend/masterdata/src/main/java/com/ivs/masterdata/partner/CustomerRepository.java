@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
     Optional<Customer> findByCode(String code);
+    Optional<Customer> findFirstByNameIgnoreCase(String name);
 
     boolean existsByCode(String code);
 

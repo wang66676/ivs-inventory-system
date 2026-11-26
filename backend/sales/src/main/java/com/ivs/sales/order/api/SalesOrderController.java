@@ -52,6 +52,12 @@ public class SalesOrderController {
         return ResponseEntity.created(URI.create("/api/ivs/sales-orders/" + view.id())).body(view);
     }
 
+    /** 按名称查找客户；不存在时由销售订单登记流程自动创建。 */
+    @PostMapping("/customer-resolve")
+    @PreAuthorize("hasAuthority('IVS_WRITE')")
+    public SalesApi.ResolvedCustomerView resolveCustomer(@RequestBody SalesApi.ResolveCustomerCommand command) {
+        return service.resolveCustomer(command);
+    }
     /** 草稿编辑：补全 VIN、客户、仓库与备注，锁货后不可修改。 */
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('IVS_WRITE')")

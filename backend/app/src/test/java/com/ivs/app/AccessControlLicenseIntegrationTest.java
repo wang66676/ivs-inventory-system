@@ -125,6 +125,35 @@ class AccessControlLicenseIntegrationTest {
     }
 
     @Test
+    void 销售订单登记可为普通用户自动新增并复用客户() {
+        String username = "cust_" + suffix();
+        createSalesUser(username);
+        LoginResponse login = login(username);
+        String customerName = "自动同步客户-" + suffix();
+
+        ResponseEntity<Map> first = exchange("/api/ivs/sales-orders/customer-resolve", HttpMethod.POST,
+                login.token(), Map.of("name", customerName, "contactName", "车辆使用人", "contactPhone", "13800138000"),
+                Map.class);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(first.getBody()).isNotNull();
+        assertThat(first.getBody().get("name")).isEqualTo(customerName);
+        String customerId = String.valueOf(first.getBody().get("id"));
+        assertThat(first.getBody().get("code")).isNotNull();
+
+        ResponseEntity<Map> second = exchange("/api/ivs/sales-orders/customer-resolve", HttpMethod.POST,
+                login.token(), Map.of("name", customerName, "contactName", "车辆使用人", "contactPhone", "13800138000"),
+                Map.class);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(second.getBody()).isNotNull();
+        assertThat(second.getBody().get("id")).isEqualTo(customerId);
+
+        ResponseEntity<Map> customer = exchange("/api/ivs/customers/" + customerId, HttpMethod.GET,
+                TestAuthSupport.currentToken(), null, Map.class);
+        assertThat(customer.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(customer.getBody()).isNotNull();
+        assertThat(customer.getBody().get("name")).isEqualTo(customerName);
+    }
+    @Test
     void 试用期到期后禁止登录并返回作者联系方式() {
         try {
             jdbc.update("update ivs.software_license set trial_ends_at = DATEADD('DAY', -1, CURRENT_TIMESTAMP),"

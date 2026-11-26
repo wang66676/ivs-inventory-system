@@ -126,6 +126,16 @@ public class SalesOrderApplicationService {
         return toView(saved);
     }
 
+    /** 销售订单登记时按客户名称复用或自动创建客户。 */
+    @Transactional
+    public SalesApi.ResolvedCustomerView resolveCustomer(SalesApi.ResolveCustomerCommand command) {
+        if (command == null || command.name() == null || command.name().isBlank()) {
+            throw new ConflictException("SALES_CUSTOMER_NAME_REQUIRED", "请填写客户名称");
+        }
+        SalesMasterDataPort.CustomerInfo customer = masterData.findOrCreateCustomer(
+                command.name().trim(), command.contactName(), command.contactPhone());
+        return new SalesApi.ResolvedCustomerView(customer.id(), customer.code(), customer.name());
+    }
     /** 草稿订单补全 VIN、客户、仓库或备注；一旦确认锁货后不可再修改。 */
     @Transactional
     public SalesApi.SalesOrderView update(UUID id, SalesApi.SaveSalesOrderCommand command) {
