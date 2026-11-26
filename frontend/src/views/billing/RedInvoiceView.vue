@@ -129,7 +129,6 @@ const claimSerialOptions = computed(() => {
   }))
 })
 const columns = [
-  { title: '内部发票号', key: 'invoiceNo', dataIndex: 'invoiceNo', width: 150 },
   { title: '类型', key: 'type', width: 100 },
   { title: '厂家', key: 'supplier', width: 190 },
   { title: '红字金额', key: 'amount', width: 130 },
@@ -140,10 +139,8 @@ const columns = [
   { title: '外部票号', key: 'externalInvoiceNo', dataIndex: 'externalInvoiceNo', width: 150 },
   { title: 'VIN/SN', key: 'serialNos', width: 240 },
   { title: '关联申报单', key: 'claim', width: 180 },
-  { title: '状态', key: 'status', dataIndex: 'status', width: 100 },
   { title: '开票日期', key: 'issuedAt', width: 130 },
   { title: '电子发票', key: 'pdf', width: 180 },
-  { title: '登记时间', key: 'createdAt', width: 170 },
 ]
 
 function money(value?: number) { return value == null ? '-' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` }
@@ -268,4 +265,3 @@ onMounted(async () => {
 .sub { color: #8b96a8; font-size: 12px; }
 .pdf-alert { margin: 12px 0; }
 </style>
-

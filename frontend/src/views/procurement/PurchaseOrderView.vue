@@ -9,7 +9,7 @@
         <a-button @click="exportOrders">导出采购单</a-button>
         <a-select v-model:value="filterStatus" :options="statusOptions" allow-clear placeholder="按状态筛选"
                   style="width:170px" @change="reload" />
-        <a-input v-model:value="keyword" placeholder="订单编号" allow-clear style="width:220px" @press-enter="reload" />
+        <a-input v-model:value="keyword" placeholder="按车系查找" allow-clear style="width:220px" />
       </a-space>
       <a-table v-resizable-columns :data-source="purchaseRows" :columns="columns" row-key="rowKey" size="middle"
                :pagination="tablePagination" :scroll="{ x: 2260 }" @change="onTableChange">
@@ -325,12 +325,16 @@ const allCreditsSelected = computed(() => {
   return credits.length > 0 && selectedOffsetTxnIds.value.length === credits.length
 })
 const someCreditsSelected = computed(() => selectedOffsetTxnIds.value.length > 0 && !allCreditsSelected.value)
-const purchaseRows = computed<PurchaseListRow[]>(() => rows.value.flatMap((order) => order.lines.map((line, index) => ({
-  rowKey: `${order.id}-${line.id}`,
-  order,
-  line,
-  isFirstLine: index === 0,
-}))))
+const purchaseRows = computed<PurchaseListRow[]>(() => {
+  const query = keyword.value.trim().toLowerCase()
+  return rows.value.flatMap((order) => order.lines.map((line, index) => ({
+    rowKey: `${order.id}-${line.id}`,
+    order,
+    line,
+    isFirstLine: index === 0,
+  }))).filter((row) => !query || String(row.line.series || row.line.productName || '')
+    .toLowerCase().includes(query))
+})
 function compareText(left?: string | number | null, right?: string | number | null) {
   return String(left ?? '').localeCompare(String(right ?? ''), 'zh-CN', { numeric: true })
 }
@@ -450,7 +454,7 @@ function onSupplierChange() {
 }
 async function reload() {
   try {
-    const result = await purchaseApi.list({ keyword: keyword.value || undefined, status: filterStatus.value })
+    const result = await purchaseApi.list({ status: filterStatus.value })
     rows.value = result.filter((order) => (order.businessScope || 'VEHICLE') === props.scope)
     tableCurrent.value = 1
   }

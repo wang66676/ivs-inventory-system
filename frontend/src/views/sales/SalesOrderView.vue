@@ -50,7 +50,7 @@
                  @click="approvePrice(record.order)">价格审批</a>
               <a v-if="canWrite && canModifyOrder(record.order) && record.order.status === 'DRAFT'" @click="openEdit(record.order)">编辑</a>
               <a v-if="canWrite && canModifyOrder(record.order) && record.order.status === 'CONFIRMED' && hasZeroPrice(record.order)"
-                 @click="openPriceEditor(record.order)">补录成交价</a>
+                 @click="openPriceEditor(record.order)">补录成交单价</a>
               <a v-if="canWrite && record.order.status === 'DRAFT'" @click="confirm(record.order)">确认</a>
               <a v-if="canWrite && record.order.status === 'CONFIRMED' && !record.order.lockedAt" @click="lock(record.order)">锁货</a>
               <a v-if="canWrite && record.order.lockedAt && (record.order.status === 'CONFIRMED' || record.order.status === 'PARTIALLY_DELIVERED')"
@@ -152,7 +152,7 @@
               <a-input-number v-model:value="line.quantity" :min="0.001" style="width:100%" />
             </template>
           </a-table-column>
-          <a-table-column title="合计单价 / 成交价" :width="160">
+          <a-table-column title="合计单价 / 成交单价" :width="160">
             <template #default="{ record: line }">
               <span v-if="isBatteryLine(line)">{{ money(batteryUnitPrice(line)) }}</span>
               <MoneyInput v-else v-model:value="line.unitPrice" :min="0" :precision="2" placeholder="留空取指导价" style="width:100%" />
@@ -176,28 +176,28 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="priceOpen" :title="`补录成交价 - ${priceOrder?.orderNo ?? ''}`"
-             :confirm-loading="saving" ok-text="保存成交价" cancel-text="取消" width="1100px" @ok="savePrices">
+    <a-modal v-model:open="priceOpen" :title="`补录成交单价 - ${priceOrder?.orderNo ?? ''}`"
+             :confirm-loading="saving" ok-text="保存成交单价" cancel-text="取消" width="1100px" @ok="savePrices">
       <a-alert type="warning" show-icon style="margin-bottom:12px"
-               message="该订单存在 0 元成交明细，补齐所有商品成交价后才能继续出库。" />
+               message="该订单存在 0 元成交明细，补齐所有商品成交单价后才能继续出库。" />
       <a-table :data-source="priceLines" row-key="orderLineId" size="small" :pagination="false">
         <a-table-column title="商品" :width="300">
           <template #default="{ record }">{{ record.productName }}</template>
         </a-table-column>
         <a-table-column title="数量" data-index="quantity" :width="100" />
-        <a-table-column v-if="props.scope === 'BATTERY'" title="电池箱成交价" :width="180">
+        <a-table-column v-if="props.scope === 'BATTERY'" title="电池箱成交单价" :width="180">
           <template #default="{ record }">
             <MoneyInput v-if="record.isBattery" v-model:value="record.batteryBoxUnitPrice" :min="0" :precision="2" style="width:100%" />
             <span v-else>-</span>
           </template>
         </a-table-column>
-        <a-table-column v-if="props.scope === 'BATTERY'" title="电池包成交价" :width="180">
+        <a-table-column v-if="props.scope === 'BATTERY'" title="电池包成交单价" :width="180">
           <template #default="{ record }">
             <MoneyInput v-if="record.isBattery" v-model:value="record.batteryPackUnitPrice" :min="0" :precision="2" style="width:100%" />
             <span v-else>-</span>
           </template>
         </a-table-column>
-        <a-table-column title="成交价" :width="180">
+        <a-table-column title="成交单价" :width="180">
           <template #default="{ record }">
             <span v-if="record.isBattery">{{ money(Number(record.batteryBoxUnitPrice || 0) + Number(record.batteryPackUnitPrice || 0)) }}</span>
             <MoneyInput v-else v-model:value="record.unitPrice" :min="0.01" :precision="2" style="width:100%" />
@@ -253,7 +253,7 @@ import type { BusinessScope } from '../../utils/businessScope'
 
 const props = withDefaults(defineProps<{ scope?: BusinessScope }>(), { scope: 'VEHICLE' })
 const scopeHint = computed(() => props.scope === 'BATTERY'
-  ? '电池销售独立入口：按电池 SN 匹配库存，明细填写电池箱、电池包、能量及分项成交价。'
+  ? '电池销售独立入口：按电池 SN 匹配库存，明细填写电池箱、电池包、能量及分项成交单价。'
   : '整车销售入口：车辆按 VIN 匹配库存，原有政策、锁货和出库流程保持不变。')
 
 const auth = useAuthStore()
@@ -279,7 +279,7 @@ const priceLines = ref<{ orderLineId: string; productName: string; quantity: num
 const customerOptions = ref<{ label: string; value: string }[]>([])
 const manualCustomer = reactive({ name: '', contactName: '', contactPhone: '' })
 const warehouseOptions = ref<{ label: string; value: string }[]>([])
-const productOptions = ref<{ label: string; value: string; name: string; trackingMode: 'QUANTITY' | 'SERIAL'; categoryCode?: string; categoryName?: string; isBattery: boolean }[]>([])
+const productOptions = ref<{ label: string; value: string; name: string; productNo?: string; series?: string; model?: string; trackingMode: 'QUANTITY' | 'SERIAL'; categoryCode?: string; categoryName?: string; isBattery: boolean }[]>([])
 const availableSerials = ref<ProductSerial[]>([])
 const stockBalances = ref<StockBalance[]>([])
 interface SalesListRow {
@@ -305,7 +305,7 @@ const vehicleColumns = [
   { title: '商品', key: 'product', width: 240 },
   { title: '数量', key: 'quantity', width: 90, align: 'right' },
   { title: '已出', key: 'deliveredQuantity', width: 90, align: 'right' },
-  { title: '成交价', key: 'unitPrice', width: 150, align: 'right' },
+  { title: '成交单价', key: 'unitPrice', width: 150, align: 'right' },
   { title: '金额', key: 'amount', width: 130, align: 'right' },
   { title: 'VIN/SN', key: 'vin', width: 260 },
   { title: '操作', key: 'actions', width: 330, fixed: 'right' },
@@ -511,11 +511,11 @@ async function savePrices() {
     if (line.isBattery) {
       if (Number(line.batteryBoxUnitPrice || 0) < 0 || Number(line.batteryPackUnitPrice || 0) < 0
           || Number(line.batteryBoxUnitPrice || 0) + Number(line.batteryPackUnitPrice || 0) <= 0) {
-        message.warning('请填写有效的电池箱和电池包成交价')
+        message.warning('请填写有效的电池箱和电池包成交单价')
         return
       }
     } else if (!line.unitPrice || Number(line.unitPrice) <= 0) {
-      message.warning('请为所有商品填写大于 0 的成交价')
+      message.warning('请为所有商品填写大于 0 的成交单价')
       return
     }
   }
@@ -529,7 +529,7 @@ async function savePrices() {
       batteryBoxUnitPrice: line.isBattery ? Number(line.batteryBoxUnitPrice || 0) : null,
       batteryPackUnitPrice: line.isBattery ? Number(line.batteryPackUnitPrice || 0) : null,
     })))
-    message.success('成交价已补录，可以继续出库')
+    message.success('成交单价已补录，可以继续出库')
     priceOpen.value = false
     await reload()
   } catch (error) {
@@ -562,7 +562,7 @@ async function submit() {
     if (!(Number(line.batteryEnergyKwh) > 0)) { message.warning('电池能量（kWh）必须大于 0'); return }
     if (Number(line.batteryBoxUnitPrice || 0) < 0 || Number(line.batteryPackUnitPrice || 0) < 0
         || batteryUnitPrice(line) <= 0) {
-      message.warning('请填写有效的电池箱和电池包成交价')
+      message.warning('请填写有效的电池箱和电池包成交单价')
       return
     }
   }
@@ -629,7 +629,7 @@ function exportOrders() {
     { title: '商品', value: (row: SalesListRow) => row.line.productName },
     { title: '数量', value: (row: SalesListRow) => row.line.quantity },
     { title: '已出', value: (row: SalesListRow) => row.line.deliveredQuantity },
-    { title: '成交价', value: (row: SalesListRow) => row.line.unitPrice },
+    { title: '成交单价', value: (row: SalesListRow) => row.line.unitPrice },
     { title: '金额', value: (row: SalesListRow) => row.line.amount },
     { title: 'VIN/SN', value: (row: SalesListRow) => (row.line.serialIds || []).map(serialNoOf).join('、') },
     { title: '状态', value: (row: SalesListRow) => SALES_STATUS_LABELS[row.order.status] },
@@ -643,7 +643,7 @@ function downloadSalesTemplate() {
     { title: '仓库', value: () => '主体仓' },
     { title: '商品', value: () => '示例车系' },
     { title: '数量', value: () => 1 },
-    { title: '成交价', value: () => 420000 },
+    { title: '成交单价', value: () => 420000 },
     { title: 'VIN/SN', value: () => 'LZZ1EXAMPLE000001' },
     { title: '备注', value: () => '批量导入' },
   ], [{}] as Record<string, never>[])
@@ -662,29 +662,39 @@ async function importSalesOrders(file: File) {
     if (csv.length < 2) throw new Error('CSV 没有有效数据')
     const headers = new Map(csv[0].map((header, index) => [header.trim(), index]))
     const column = (row: string[], name: string) => row[headers.get(name) ?? -1]?.trim() || ''
-    const customerByName = new Map(customerOptions.value.map((item) => [item.label.replace(/（.*/, ''), item.value]))
-    const warehouseByName = new Map(warehouseOptions.value.map((item) => [item.label.replace(/（.*/, ''), item.value]))
+    const customerByName = new Map(customerOptions.value.map((item) => [item.label.replace(/（.*/, '').trim(), item.value]))
+    const warehouseByName = new Map(warehouseOptions.value.map((item) => [item.label.replace(/（.*/, '').trim(), item.value]))
     const productByName = new Map<string, typeof productOptions.value[number]>()
-    for (const item of productOptions.value) productByName.set(item.name, item)
+    for (const item of productOptions.value) {
+      for (const key of [item.name, item.series, item.model, item.productNo, item.label]) {
+        if (key) productByName.set(String(key).trim(), item)
+      }
+    }
     const serialByName = new Map(availableSerials.value.map((item) => [item.serialNo.toUpperCase(), item]))
     const groups = new Map<string, { customerId: string; warehouseId: string; remark: string; lines: Record<string, unknown>[] }>()
     const errors: string[] = []
     for (let index = 1; index < csv.length; index += 1) {
       const row = csv[index]
-      const orderNo = column(row, '销售订单编号')
-      const customerName = column(row, '客户名称')
-      const warehouseName = column(row, '仓库')
-      const productName = column(row, '商品')
+      const orderNo = column(row, '销售订单编号') || column(row, '订单编号')
+      const customerName = column(row, '客户名称') || column(row, '客户')
+      const warehouseName = column(row, '仓库') || column(row, '收货仓库')
+      const productName = column(row, '商品') || column(row, '车系') || column(row, '商品名称')
       if (!orderNo && !customerName && !productName) continue
       const customerId = customerByName.get(customerName)
       const warehouseId = warehouseByName.get(warehouseName)
       const product = productByName.get(productName) || [...productByName.values()].find((item) => item.label === productName)
-      if (!orderNo || !customerId || !warehouseId || !product) {
-        errors.push(`第${index + 1}行订单编号、客户、仓库或商品无法匹配`); continue
+      const missing: string[] = []
+      if (!orderNo) missing.push('销售订单编号')
+      if (!customerId) missing.push(`客户「${customerName || '空'}」`)
+      if (!warehouseId) missing.push(`仓库「${warehouseName || '空'}」`)
+      if (!product) missing.push(`商品/车系「${productName || '空'}」`)
+      if (missing.length) {
+        errors.push(`第${index + 1}行无法匹配：${missing.join('、')}`); continue
       }
+      if (!orderNo || !customerId || !warehouseId || !product) continue
       const quantity = Number(column(row, '数量') || 1)
-      const unitPrice = Number(column(row, '成交价') || 0)
-      if (!(quantity > 0) || unitPrice < 0) { errors.push(`第${index + 1}行数量或成交价无效`); continue }
+      const unitPrice = Number(column(row, '成交单价') || column(row, '成交价') || 0)
+      if (!(quantity > 0) || unitPrice < 0) { errors.push(`第${index + 1}行数量或成交单价无效`); continue }
       const serials = column(row, 'VIN/SN').split(/[,，、]/).map((item) => item.trim().toUpperCase()).filter(Boolean)
       const serialIds: string[] = []
       let serialError = ''
@@ -821,6 +831,9 @@ onMounted(async () => {
       label: item.name,
       value: item.id,
       name: item.name,
+      productNo: item.productNo,
+      series: item.series,
+      model: item.model,
       trackingMode: item.trackingMode,
       categoryCode: item.categoryCode,
       categoryName: item.categoryName,

@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-               message="库存台账：只追加的事实表。每一笔变动都记录方向、数量、单位成本、金额与变动后余额，并关联业务单据（收货单号等）。台账可完整重建余额。" />
+               :message="props.scope === 'BATTERY' ? '库存台账：记录方向、数量、单位成本、金额、变动后余额和业务单据。' : '整车库存台账：记录采购订单编号、商品、VIN/SN、仓库、方向、类型、数量、单位成本和金额。'" />
       <a-space wrap style="margin-bottom:12px">
         <a-button @click="reload">刷新</a-button>
         <a-select v-model:value="productSeries" :options="productOptions" allow-clear show-search placeholder="按车系筛选"
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { inventoryApi } from '../../api/inventory'
 import { productApi, warehouseApi } from '../../api/masterdata'
@@ -61,7 +61,7 @@ const warehouseOptions = ref<{ label: string; value: string }[]>([])
 const scopedProductIds = ref<Set<string>>(new Set())
 const moveTypeOptions = Object.entries(MOVE_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 
-const columns = [
+const allColumns = [
   { title: '采购订单编号', key: 'purchaseOrderNo', width: 170 },
   { title: '商品', key: 'productName', dataIndex: 'productName', width: 200 },
   { title: '序列号', key: 'serialNo', width: 190 },
@@ -74,6 +74,9 @@ const columns = [
   { title: '变动后余额', key: 'balanceAfter', dataIndex: 'balanceAfter', width: 120 },
   { title: '业务单据', key: 'bizNo', dataIndex: 'bizNo', width: 140 },
 ]
+const columns = computed(() => props.scope === 'BATTERY'
+  ? allColumns
+  : allColumns.filter((column) => !['balanceAfter', 'bizNo'].includes(column.key)))
 
 async function reload() {
   try {
@@ -89,21 +92,26 @@ async function reload() {
 
 function exportLedger() {
   if (!rows.value.length) { message.warning('当前没有可导出的库存台账数据'); return }
-  exportCsv<LedgerEntry>(`库存台账-${exportTimestamp()}`, [
-    { title: '采购订单编号', value: (row) => row.purchaseOrderNo },
-    { title: '商品编码', value: (row) => row.productNo },
-    { title: '商品名称', value: (row) => row.productName },
-    { title: 'VIN/SN', value: (row) => row.serialNo },
-    { title: '仓库', value: (row) => row.warehouseName },
-    { title: '方向', value: (row) => row.direction === 'IN' ? '入库' : '出库' },
-    { title: '类型', value: (row) => MOVE_TYPE_LABELS[row.moveType] ?? row.moveType },
-    { title: '数量', value: (row) => row.quantity },
-    { title: '单位成本', value: (row) => row.unitCost },
-    { title: '金额', value: (row) => row.amount },
-    { title: '变动后余额', value: (row) => row.balanceAfter },
-    { title: '业务单据', value: (row) => row.bizNo },
-    { title: '备注', value: (row) => row.remark },
-  ], rows.value)
+  const exportColumns = [
+    { title: '采购订单编号', value: (row: LedgerEntry) => row.purchaseOrderNo },
+    { title: '商品编码', value: (row: LedgerEntry) => row.productNo },
+    { title: '商品名称', value: (row: LedgerEntry) => row.productName },
+    { title: 'VIN/SN', value: (row: LedgerEntry) => row.serialNo },
+    { title: '仓库', value: (row: LedgerEntry) => row.warehouseName },
+    { title: '方向', value: (row: LedgerEntry) => row.direction === 'IN' ? '入库' : '出库' },
+    { title: '类型', value: (row: LedgerEntry) => MOVE_TYPE_LABELS[row.moveType] ?? row.moveType },
+    { title: '数量', value: (row: LedgerEntry) => row.quantity },
+    { title: '单位成本', value: (row: LedgerEntry) => row.unitCost },
+    { title: '金额', value: (row: LedgerEntry) => row.amount },
+  ]
+  if (props.scope === 'BATTERY') {
+    exportColumns.push(
+      { title: '变动后余额', value: (row: LedgerEntry) => row.balanceAfter },
+      { title: '业务单据', value: (row: LedgerEntry) => row.bizNo },
+    )
+  }
+  exportColumns.push({ title: '备注', value: (row: LedgerEntry) => row.remark })
+  exportCsv<LedgerEntry>(`库存台账-${exportTimestamp()}`, exportColumns, rows.value)
   message.success('库存台账已导出')
 }
 

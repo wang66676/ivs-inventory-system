@@ -11,8 +11,13 @@
           <a-button type="primary" :loading="importing" @click="triggerImport">批量导入</a-button>
           <input ref="importInput" type="file" accept=".csv,text/csv" style="display:none" @change="handleImportFile" />
         </template>
+        <template v-if="props.scope === 'VEHICLE'">
+          <a-select v-model:value="filterSeries" :options="seriesFilterOptions" allow-clear show-search placeholder="按车系筛选" style="width:170px" />
+          <a-select v-model:value="filterCertificate" :options="certificateFilterOptions" allow-clear placeholder="按合格证筛选" style="width:170px" />
+          <a-select v-model:value="filterWarehouseId" :options="warehouseOptions" allow-clear placeholder="按收货仓库筛选" style="width:210px" />
+        </template>
       </a-space>
-      <a-table v-resizable-columns :data-source="lines" :columns="columns" row-key="id" size="middle"
+      <a-table v-resizable-columns :data-source="filteredLines" :columns="columns" row-key="id" size="middle"
                :pagination="{ pageSize: 20 }" :scroll="{ x: 1600 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'unitPrice'">{{ money(record.unitPrice) }}</template>
@@ -127,6 +132,9 @@ const previewRows = ref<PreviewRow[]>([])
 const importInput = ref<HTMLInputElement>()
 const products = ref<Product[]>([])
 const suppliers = ref<Supplier[]>([])
+const filterSeries = ref<string>()
+const filterCertificate = ref<'YES' | 'NO'>()
+const filterWarehouseId = ref<string>()
 
 const lines = computed<ReceiptLineRow[]>(() => receipts.value.flatMap((receipt) =>
   (receipt.businessScope || 'VEHICLE') !== props.scope ? [] : receipt.lines.map((line) => ({
@@ -154,6 +162,15 @@ const batteryColumns = [
   { title: 'B-BOX', key: 'bBox', dataIndex: 'bBox', width: 90, align: 'center' },
   { title: '状态', key: 'status', width: 110, align: 'center' },
 ]
+const filteredLines = computed(() => lines.value.filter((line) =>
+  (!filterSeries.value || line.series === filterSeries.value)
+  && (!filterCertificate.value || (filterCertificate.value === 'YES'
+    ? Boolean(line.certificateApplicationDate) : !line.certificateApplicationDate))
+  && (!filterWarehouseId.value || line.warehouseId === filterWarehouseId.value)))
+const seriesFilterOptions = computed(() => [...new Set(lines.value.map((line) => line.series).filter(Boolean))]
+  .sort((a, b) => String(a).localeCompare(String(b), 'zh-CN'))
+  .map((value) => ({ label: String(value), value: String(value) })))
+const certificateFilterOptions = [{ label: '已登记合格证', value: 'YES' }, { label: '未登记合格证', value: 'NO' }]
 const columns = computed(() => props.scope === 'BATTERY' ? batteryColumns : vehicleColumns)
 
 function money(value?: number) {
@@ -170,7 +187,7 @@ function batteryText(line: PurchaseReceiptLine) {
   return `箱：${line.batteryBoxManufacturer || '-'} / ${line.batteryBoxModel || '-'}；包：${line.batteryPackManufacturer || '-'} / ${line.batteryEnergyKwh ?? '-'}kWh`
 }
 function exportReceipts() {
-  if (!lines.value.length) { message.warning('当前没有可导出的收货入库数据'); return }
+  if (!filteredLines.value.length) { message.warning('当前没有可导出的收货入库数据'); return }
   if (props.scope === 'BATTERY') {
     exportCsv<ReceiptLineRow>(`电池收货入库-${exportTimestamp()}`, [
       { title: '订单编号', value: (row) => row.orderNo },
@@ -182,7 +199,7 @@ function exportReceipts() {
       { title: '收货仓库', value: () => '天津容大' },
       { title: 'B-BOX', value: (row) => row.bBox || '-' },
       { title: '状态', value: (row) => receiptStatusLabel(row.status) },
-    ], lines.value)
+    ], filteredLines.value)
     message.success('电池收货入库数据已导出')
     return
   }
@@ -196,7 +213,7 @@ function exportReceipts() {
     { title: '单价', value: (row) => row.unitPrice },
     { title: '收货仓库', value: (row) => row.warehouseName },
     { title: '状态', value: (row) => receiptStatusLabel(row.status) },
-  ], lines.value)
+  ], filteredLines.value)
   message.success('收货入库数据已导出')
 }
 function openCertificate(line: ReceiptLineRow) {
