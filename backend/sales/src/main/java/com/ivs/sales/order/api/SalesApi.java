@@ -58,11 +58,20 @@ public final class SalesApi {
     public record SaveSalesOrderCommand(
             String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
             List<SaveSalesOrderLineCommand> lines, String paymentMode, BigDecimal downPayment,
-            int installmentCount, LocalDate firstDueDate
+            int installmentCount, LocalDate firstDueDate, String customerName,
+            String customerContactName, String customerContactPhone
     ) {
         public SaveSalesOrderCommand(String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
                                      List<SaveSalesOrderLineCommand> lines) {
-            this(externalOrderNo, customerId, warehouseId, remark, lines, "CASH", BigDecimal.ZERO, 0, null);
+            this(externalOrderNo, customerId, warehouseId, remark, lines, "CASH", BigDecimal.ZERO, 0, null,
+                    null, null, null);
+        }
+
+        public SaveSalesOrderCommand(String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
+                                     List<SaveSalesOrderLineCommand> lines, String paymentMode,
+                                     BigDecimal downPayment, int installmentCount, LocalDate firstDueDate) {
+            this(externalOrderNo, customerId, warehouseId, remark, lines, paymentMode, downPayment,
+                    installmentCount, firstDueDate, null, null, null);
         }
     }
 

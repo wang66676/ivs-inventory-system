@@ -102,7 +102,7 @@ public class SalesOrderApplicationService {
         if (command.lines() == null || command.lines().isEmpty()) {
             throw new ConflictException("SALES_LINE_REQUIRED", "销售订单至少需要一行明细");
         }
-        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
+        SalesMasterDataPort.CustomerInfo customer = resolveOrderCustomer(command);
         UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
                 : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
                     ? masterData.requireBatteryWarehouse().id() : command.warehouseId());
@@ -145,7 +145,7 @@ public class SalesOrderApplicationService {
         if (order.getStatus() != SalesOrderStatus.DRAFT) {
             throw new ConflictException("SALES_STATUS_INVALID", "只有草稿订单可以编辑: " + order.getStatus());
         }
-        SalesMasterDataPort.CustomerInfo customer = masterData.requireCustomer(command.customerId());
+        SalesMasterDataPort.CustomerInfo customer = resolveOrderCustomer(command);
         PaymentMode paymentMode = paymentMode(command.paymentMode());
         UUID orderWarehouseId = command.lines().isEmpty() ? command.warehouseId()
                 : (isBattery(masterData.requireProduct(command.lines().get(0).productId()))
@@ -174,6 +174,21 @@ public class SalesOrderApplicationService {
                 prepared.approvalDecision());
         publish(saved, "SalesOrderUpdated", Map.of("orderNo", saved.getOrderNo(), "totalAmount", prepared.total()));
         return toView(saved);
+    }
+
+    /**
+     * 销售订单可通过 customerId 复用已有客户，也可直接提交客户名称。
+     * 名称不存在时在同一事务内自动创建客户，确保单张建单与批量导入行为一致。
+     */
+    private SalesMasterDataPort.CustomerInfo resolveOrderCustomer(SalesApi.SaveSalesOrderCommand command) {
+        if (command.customerId() != null) {
+            return masterData.requireCustomer(command.customerId());
+        }
+        if (command.customerName() == null || command.customerName().isBlank()) {
+            throw new ConflictException("SALES_CUSTOMER_REQUIRED", "请选择已有客户或填写新客户名称");
+        }
+        return masterData.findOrCreateCustomer(command.customerName().trim(),
+                command.customerContactName(), command.customerContactPhone());
     }
 
     private PreparedOrder prepareLines(SalesOrder order, SalesMasterDataPort.CustomerInfo customer,

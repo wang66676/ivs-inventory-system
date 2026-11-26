@@ -154,6 +154,50 @@ class AccessControlLicenseIntegrationTest {
         assertThat(customer.getBody().get("name")).isEqualTo(customerName);
     }
     @Test
+    void 销售订单可直接按新客户名称创建并同步客户() {
+        MasterdataApi.CategoryView category = post("/api/ivs/product-categories", Map.of(
+                "code", "SALES-CUST-" + suffix(), "name", "销售新客户测试商品", "trackingMode", "QUANTITY",
+                "statusTemplate", "SIMPLE", "unit", "件", "sortOrder", 0), MasterdataApi.CategoryView.class);
+        MasterdataApi.ProductView product = post("/api/ivs/products", Map.of(
+                "name", "销售新客户测试商品", "categoryId", category.id().toString(), "unit", "件",
+                "minPrice", 100, "purchasePriceRef", 80), MasterdataApi.ProductView.class);
+        MasterdataApi.WarehouseView warehouse = post("/api/ivs/warehouses", Map.of(
+                "code", "SALES-CUST-WH-" + suffix(), "name", "销售新客户测试仓", "type", "MAIN"),
+                MasterdataApi.WarehouseView.class);
+
+        String username = "sales_customer_" + suffix();
+        createSalesUser(username);
+        LoginResponse login = login(username);
+        String customerName = "批量导入自动客户-" + suffix();
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("externalOrderNo", "SO-IMPORT-" + suffix());
+        body.put("customerName", customerName);
+        body.put("customerContactName", customerName);
+        body.put("customerContactPhone", "13900000000");
+        body.put("warehouseId", warehouse.id().toString());
+        body.put("remark", "批量上传自动建档测试");
+        body.put("paymentMode", "CASH");
+        body.put("downPayment", 0);
+        body.put("installmentCount", 0);
+        body.put("lines", List.of(Map.of(
+                "productId", product.id().toString(),
+                "quantity", 1,
+                "unitPrice", 120
+        )));
+
+        ResponseEntity<SalesApi.SalesOrderView> created = exchange("/api/ivs/sales-orders", HttpMethod.POST,
+                login.token(), body, SalesApi.SalesOrderView.class);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).isNotNull();
+        assertThat(created.getBody().customerName()).isEqualTo(customerName);
+
+        ResponseEntity<Map[]> customers = exchange("/api/ivs/customers", HttpMethod.GET,
+                login.token(), null, Map[].class);
+        assertThat(customers.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(customers.getBody()).anySatisfy(row -> assertThat(row.get("name")).isEqualTo(customerName));
+    }
+
+    @Test
     void 试用期到期后禁止登录并返回作者联系方式() {
         try {
             jdbc.update("update ivs.software_license set trial_ends_at = DATEADD('DAY', -1, CURRENT_TIMESTAMP),"

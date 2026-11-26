@@ -255,6 +255,7 @@ test('整车销售订单导入支持车系匹配和成交单价', async ({ page 
   const series = `E2E导入车系-${suffix}`
   const productName = `E2E导入商品-${suffix}`
   const orderNo = `XS202611${suffix.slice(-6)}`
+  const customerName = `E2E导入新客户-${suffix}`
   const category = await page.request.post('/api/ivs/product-categories', {
     headers, data: { code: `E2E-SALES-${suffix.slice(-8)}`, name: `E2E销售导入-${suffix}`,
       trackingMode: 'QUANTITY', statusTemplate: 'SIMPLE', unit: '台', sortOrder: 0 },
@@ -266,10 +267,6 @@ test('整车销售订单导入支持车系匹配和成交单价', async ({ page 
   })
   expect(warehouse.ok()).toBeTruthy()
   const warehouseBody = await warehouse.json()
-  const customer = await page.request.post('/api/ivs/customers', {
-    headers, data: { name: `E2E销售客户-${suffix}`, customerType: 'COMPANY', creditLimit: 1000000, paymentTermDays: 30 },
-  })
-  expect(customer.ok()).toBeTruthy()
   const product = await page.request.post('/api/ivs/products', {
     headers, data: { name: productName, series, categoryId: categoryBody.id, unit: '台',
       minPrice: 100000, purchasePriceRef: 90000, salePriceGuide: 120000 },
@@ -277,7 +274,7 @@ test('整车销售订单导入支持车系匹配和成交单价', async ({ page 
   expect(product.ok()).toBeTruthy()
   const csv = [
     '销售订单编号,客户名称,仓库,车系,数量,成交单价,VIN/SN,备注',
-    `${orderNo},E2E销售客户-${suffix},E2E销售仓-${suffix},${series},1,120000,,E2E车系导入`,
+    `${orderNo},${customerName},E2E销售仓-${suffix},${series},1,120000,,E2E车系导入`,
   ].join('\n')
   await page.goto('/sales/orders')
   await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
@@ -287,7 +284,12 @@ test('整车销售订单导入支持车系匹配和成交单价', async ({ page 
   const created = await page.request.get(`/api/ivs/sales-orders?keyword=${encodeURIComponent(orderNo)}`, { headers })
   expect(created.ok()).toBeTruthy()
   const orders = await created.json()
-  expect(orders.some((order: any) => order.externalOrderNo === orderNo)).toBeTruthy()
+  expect(orders.some((order: any) => order.externalOrderNo === orderNo
+    && order.customerName === customerName)).toBeTruthy()
+  const customersResponse = await page.request.get('/api/ivs/customers', { headers })
+  expect(customersResponse.ok()).toBeTruthy()
+  const customers = await customersResponse.json()
+  expect(customers.some((customer: any) => customer.name === customerName)).toBeTruthy()
 })
 test('新建销售订单显示手工客户自动同步入口', async ({ page }) => {
   await login(page)

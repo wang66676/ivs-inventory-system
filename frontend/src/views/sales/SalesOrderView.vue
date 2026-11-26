@@ -110,7 +110,8 @@
         <a-row v-if="customerMode === 'EXISTING'" :gutter="12">
           <a-col :span="12">
             <a-form-item label="客户" required>
-              <a-select v-model:value="form.customerId" :options="customerOptions" show-search />
+              <a-select v-model:value="form.customerId" :options="customerOptions" show-search
+                        option-filter-prop="label" placeholder="输入客户名称搜索" />
             </a-form-item>
           </a-col>
         </a-row>
@@ -277,9 +278,10 @@ const editingId = ref<string>()
 const current = ref<SalesOrder | null>(null)
 const priceOrder = ref<SalesOrder>()
 const priceLines = ref<{ orderLineId: string; productName: string; quantity: number; unitPrice?: number; isBattery: boolean; batteryBoxUnitPrice?: number; batteryPackUnitPrice?: number }[]>([])
-const customerOptions = ref<{ label: string; value: string }[]>([])
+interface NamedOption { label: string; value: string; name: string; code?: string }
+const customerOptions = ref<NamedOption[]>([])
 const manualCustomer = reactive({ name: '', contactName: '', contactPhone: '' })
-const warehouseOptions = ref<{ label: string; value: string }[]>([])
+const warehouseOptions = ref<NamedOption[]>([])
 const productOptions = ref<{ label: string; value: string; name: string; productNo?: string; series?: string; model?: string; trackingMode: 'QUANTITY' | 'SERIAL'; categoryCode?: string; categoryName?: string; isBattery: boolean }[]>([])
 const availableSerials = ref<ProductSerial[]>([])
 const stockBalances = ref<StockBalance[]>([])
@@ -447,6 +449,15 @@ async function refreshSerials() {
   availableSerials.value = serials
   stockBalances.value = balances
 }
+async function refreshCustomerOptions() {
+  const customers = await customerApi.list()
+  customerOptions.value = customers.map((item) => ({
+    label: `${item.name}（${item.code}）`, value: item.id, name: item.name, code: item.code,
+  }))
+}
+function normalizeLookup(value?: string | null) {
+  return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('zh-CN')
+}
 
 async function openCreate() {
   await refreshSerials()
@@ -573,7 +584,10 @@ async function submit() {
   }
   const payload = {
     externalOrderNo: form.externalOrderNo || null,
-    customerId: form.customerId,
+    customerId: customerMode.value === 'EXISTING' ? form.customerId : null,
+    customerName: customerMode.value === 'MANUAL' ? manualCustomer.name.trim() : null,
+    customerContactName: customerMode.value === 'MANUAL' ? (manualCustomer.contactName.trim() || manualCustomer.name.trim()) : null,
+    customerContactPhone: customerMode.value === 'MANUAL' ? manualCustomer.contactPhone.trim() : null,
     warehouseId: form.warehouseId,
     remark: form.remark,
     paymentMode: form.paymentMode || 'CASH',
@@ -595,25 +609,16 @@ async function submit() {
   }
   saving.value = true
   try {
-    if (customerMode.value === 'MANUAL') {
-      const resolvedCustomer = await salesApi.resolveCustomer({
-        name: manualCustomer.name.trim(),
-        contactName: manualCustomer.contactName.trim() || manualCustomer.name.trim(),
-        contactPhone: manualCustomer.contactPhone.trim(),
-      })
-      form.customerId = resolvedCustomer.id
-      payload.customerId = resolvedCustomer.id
-      if (!customerOptions.value.some((item) => item.value === resolvedCustomer.id)) {
-        customerOptions.value.unshift({
-          label: `${resolvedCustomer.name}（${resolvedCustomer.code}）`, value: resolvedCustomer.id,
-        })
-      }
-    }
-    if (editingId.value) await salesApi.update(editingId.value, payload)
-    else await salesApi.create(payload)
-    message.success(editingId.value ? '销售订单已更新' : '销售订单已创建')
+    const saved = editingId.value
+      ? await salesApi.update(editingId.value, payload)
+      : await salesApi.create(payload)
+    form.customerId = saved.customerId
+    message.success(editingId.value
+      ? '销售订单已更新'
+      : customerMode.value === 'MANUAL' ? '销售订单已创建，客户已同步到客户模块' : '销售订单已创建')
     formOpen.value = false
     await Promise.all([reload(), refreshSerials()])
+    refreshCustomerOptions().catch(() => {})
   } catch (error) {
     message.error((error as Error).message)
   } finally {
@@ -662,16 +667,26 @@ async function importSalesOrders(file: File) {
     if (csv.length < 2) throw new Error('CSV 没有有效数据')
     const headers = new Map(csv[0].map((header, index) => [header.trim(), index]))
     const column = (row: string[], name: string) => row[headers.get(name) ?? -1]?.trim() || ''
-    const customerByName = new Map(customerOptions.value.map((item) => [item.label.replace(/（.*/, '').trim(), item.value]))
-    const warehouseByName = new Map(warehouseOptions.value.map((item) => [item.label.replace(/（.*/, '').trim(), item.value]))
+    const customerByName = new Map<string, NamedOption>()
+    for (const item of customerOptions.value) {
+      for (const key of [item.name, item.code, item.label]) {
+        if (key) customerByName.set(normalizeLookup(key), item)
+      }
+    }
+    const warehouseByName = new Map<string, NamedOption>()
+    for (const item of warehouseOptions.value) {
+      for (const key of [item.name, item.code, item.label]) {
+        if (key) warehouseByName.set(normalizeLookup(key), item)
+      }
+    }
     const productByName = new Map<string, typeof productOptions.value[number]>()
     for (const item of productOptions.value) {
       for (const key of [item.name, item.series, item.model, item.productNo, item.label]) {
-        if (key) productByName.set(String(key).trim(), item)
+        if (key) productByName.set(normalizeLookup(key), item)
       }
     }
     const serialByName = new Map(availableSerials.value.map((item) => [item.serialNo.toUpperCase(), item]))
-    const groups = new Map<string, { customerId: string; warehouseId: string; remark: string; lines: Record<string, unknown>[] }>()
+    const groups = new Map<string, { customerId?: string; customerName: string; warehouseId: string; remark: string; lines: Record<string, unknown>[] }>()
     const errors: string[] = []
     for (let index = 1; index < csv.length; index += 1) {
       const row = csv[index]
@@ -680,18 +695,20 @@ async function importSalesOrders(file: File) {
       const warehouseName = column(row, '仓库') || column(row, '收货仓库')
       const productName = column(row, '商品') || column(row, '车系') || column(row, '商品名称')
       if (!orderNo && !customerName && !productName) continue
-      const customerId = customerByName.get(customerName)
-      const warehouseId = warehouseByName.get(warehouseName)
-      const product = productByName.get(productName) || [...productByName.values()].find((item) => item.label === productName)
+      const customer = customerByName.get(normalizeLookup(customerName))
+      const warehouse = warehouseByName.get(normalizeLookup(warehouseName))
+      const warehouseId = warehouse?.value
+      const product = productByName.get(normalizeLookup(productName))
+        || [...productByName.values()].find((item) => normalizeLookup(item.label) === normalizeLookup(productName))
       const missing: string[] = []
       if (!orderNo) missing.push('销售订单编号')
-      if (!customerId) missing.push(`客户「${customerName || '空'}」`)
+      if (!customerName) missing.push('客户名称')
       if (!warehouseId) missing.push(`仓库「${warehouseName || '空'}」`)
       if (!product) missing.push(`商品/车系「${productName || '空'}」`)
       if (missing.length) {
         errors.push(`第${index + 1}行无法匹配：${missing.join('、')}`); continue
       }
-      if (!orderNo || !customerId || !warehouseId || !product) continue
+      if (!orderNo || !warehouseId || !product) continue
       const quantity = Number(column(row, '数量') || 1)
       const unitPrice = Number(column(row, '成交单价') || column(row, '成交价') || 0)
       if (!(quantity > 0) || unitPrice < 0) { errors.push(`第${index + 1}行数量或成交单价无效`); continue }
@@ -709,8 +726,12 @@ async function importSalesOrders(file: File) {
       if (serialError) { errors.push(`第${index + 1}行${serialError}`); continue }
       let group = groups.get(orderNo)
       if (!group) {
-        group = { customerId, warehouseId, remark: column(row, '备注') || '批量导入', lines: [] }
+        group = { customerId: customer?.value, customerName, warehouseId,
+          remark: column(row, '备注') || '批量导入', lines: [] }
         groups.set(orderNo, group)
+      } else if (normalizeLookup(group.customerName) !== normalizeLookup(customerName)) {
+        errors.push(`第${index + 1}行同一销售订单编号的客户名称不一致`)
+        continue
       }
       group.lines.push({
         productId: product.value,
@@ -729,7 +750,10 @@ async function importSalesOrders(file: File) {
     for (const [orderNo, group] of groups) {
       await salesApi.create({
         externalOrderNo: orderNo,
-        customerId: group.customerId,
+        customerId: group.customerId || null,
+        customerName: group.customerName,
+        customerContactName: group.customerName,
+        customerContactPhone: null,
         warehouseId: group.warehouseId,
         remark: group.remark,
         paymentMode: 'CASH',
@@ -743,6 +767,7 @@ async function importSalesOrders(file: File) {
     if (errors.length) message.warning(`已导入 ${created} 张订单；${errors.length} 行未导入：${errors.slice(0, 3).join('；')}`)
     else message.success(`已批量导入 ${created} 张销售订单`)
     await Promise.all([reload(), refreshSerials()])
+    refreshCustomerOptions().catch(() => {})
   } catch (error) { message.error((error as Error).message) } finally { importing.value = false }
 }
 async function approvePrice(record: SalesOrder) {
@@ -825,8 +850,12 @@ onMounted(async () => {
     const [customers, warehouses, products, serials, balances] = await Promise.all([
       customerApi.list(), warehouseApi.list(), productApi.list(), serialApi.list(), inventoryApi.balances(),
     ])
-    customerOptions.value = customers.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
-    warehouseOptions.value = warehouses.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))
+    customerOptions.value = customers.map((item) => ({
+      label: `${item.name}（${item.code}）`, value: item.id, name: item.name, code: item.code,
+    }))
+    warehouseOptions.value = warehouses.map((item) => ({
+      label: `${item.name}（${item.code}）`, value: item.id, name: item.name, code: item.code,
+    }))
     productOptions.value = products.map((item) => ({
       label: item.name,
       value: item.id,
