@@ -2,7 +2,7 @@
   <div>
     <a-card :bordered="false">
       <a-alert type="info" show-icon style="margin-bottom:14px"
-               message="统计看板与采购收货、销售出库实时联动。采购数量按实际收货入库统计，销售数量按实际出库统计；已取消、已退回和未过账数据不计入。" />
+               message="统计看板与采购收货、销售出库实时联动。采购月份取采购订单编号第3-4位年份、第5-6位月份；销售月份取销售订单编号第3-6位年份、第7-8位月份。已取消、已退回和未过账数据不计入。" />
       <a-space wrap style="margin-bottom:14px">
         <a-segmented v-model:value="filterMode" :options="modeOptions" @change="handleModeChange" />
         <a-range-picker v-model:value="rangeValue" :picker="filterMode === 'MONTH' ? 'month' : 'year'"

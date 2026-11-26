@@ -26,10 +26,10 @@
       <a-col :xs="24" :lg="18">
         <a-card title="车系 VIN 库存" :bordered="false">
           <div class="hint" style="margin-bottom:8px">数量仅统计状态为“在库”的 VIN/SN；已锁定车辆不计入。</div>
-          <a-table :data-source="summary?.vehicleSeriesInventory ?? []" :row-key="(record: any) => `${record.series}-${record.config}`" size="small" :pagination="false">
-            <a-table-column title="车系" data-index="series" :width="180" />
-            <a-table-column title="配置" data-index="config" :width="220" />
-            <a-table-column title="数量" key="quantity" :width="110" align="right">
+          <a-table :data-source="summary?.vehicleSeriesInventory ?? []" :row-key="(record: any) => `${record.series}-${record.config}`" size="small" :pagination="false" table-layout="fixed" :scroll="{ x: 520 }">
+            <a-table-column title="车系" data-index="series" :width="150" ellipsis />
+            <a-table-column title="配置" data-index="config" :width="290" ellipsis />
+            <a-table-column title="数量" key="quantity" :width="80" align="right">
               <template #default="{ record }">
                 <a-button type="link" size="small" style="padding:0" @click="openVinDetail(record)">
                   {{ record.quantity }}

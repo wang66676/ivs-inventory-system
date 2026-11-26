@@ -35,6 +35,8 @@ class InventoryStatisticsIntegrationTest {
     @Test
     void 统计看板按日期和仓库类型汇总采购销售数量() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String purchaseOrderNo = "CG2512" + suffix;
+        String salesOrderNo = "XS202512" + suffix;
         Map category = post("/api/ivs/product-categories", Map.of(
                 "code", "STAT-" + suffix, "name", "统计测试商品", "trackingMode", "QUANTITY",
                 "statusTemplate", "SIMPLE", "unit", "件", "sortOrder", 0), Map.class);
@@ -50,7 +52,7 @@ class InventoryStatisticsIntegrationTest {
                 "creditLimit", 1000000, "paymentTermDays", 30), Map.class);
 
         Map order = post("/api/ivs/purchase-orders", Map.of(
-                "supplierId", supplier.get("id"), "externalOrderNo", "PO-STAT-" + suffix,
+                "supplierId", supplier.get("id"), "externalOrderNo", purchaseOrderNo,
                 "warehouseId", warehouse.get("id"),
                 "lines", List.of(Map.of("productId", product.get("id"), "quantity", 5,
                         "unitPrice", 100, "policyIds", List.of()))), Map.class);
@@ -62,7 +64,7 @@ class InventoryStatisticsIntegrationTest {
                 "offsetTxnIds", List.of()), Map.class);
 
         Map salesOrder = post("/api/ivs/sales-orders", Map.of(
-                "externalOrderNo", "SO-STAT-" + suffix, "customerId", customer.get("id"),
+                "externalOrderNo", salesOrderNo, "customerId", customer.get("id"),
                 "warehouseId", warehouse.get("id"), "remark", "统计销售",
                 "paymentMode", "CASH", "downPayment", 0, "installmentCount", 0,
                 "lines", List.of(Map.of("productId", product.get("id"), "quantity", 2,
@@ -76,10 +78,11 @@ class InventoryStatisticsIntegrationTest {
                 "lines", List.of(Map.of("orderLineId", salesLine.get("id"), "quantity", 2))), Map.class);
 
         Map[] filteredOrders = get("/api/ivs/sales-orders?customerId=" + customer.get("id")
-                + "&status=DELIVERED&keyword=SO-STAT-" + suffix, Map[].class);
+                + "&status=DELIVERED&keyword=" + salesOrderNo, Map[].class);
         assertThat(filteredOrders).hasSize(1);
-        String today = LocalDate.now().toString();
-        Map result = get("/api/ivs/statistics/inventory?from=" + today + "&to=" + today
+        String from = "2025-12-01";
+        String to = "2025-12-31";
+        Map result = get("/api/ivs/statistics/inventory?from=" + from + "&to=" + to
                 + "&businessScope=VEHICLE", Map.class);
         Map summary = (Map) result.get("summary");
         assertThat(new BigDecimal(String.valueOf(summary.get("totalPurchaseQuantity"))))
@@ -92,6 +95,12 @@ class InventoryStatisticsIntegrationTest {
         Map main = warehouseRows.stream().filter(row -> "MAIN".equals(row.get("warehouseType"))).findFirst().orElseThrow();
         assertThat(new BigDecimal(String.valueOf(main.get("purchaseQuantity")))).isEqualByComparingTo("5.000");
         assertThat(new BigDecimal(String.valueOf(main.get("salesQuantity")))).isEqualByComparingTo("2.000");
+        List<Map> trend = (List<Map>) result.get("trend");
+        assertThat(trend).anySatisfy(row -> {
+            assertThat(row.get("period")).isEqualTo("2025-12");
+            assertThat(new BigDecimal(String.valueOf(row.get("purchaseQuantity")))).isEqualByComparingTo("5.000");
+            assertThat(new BigDecimal(String.valueOf(row.get("salesQuantity")))).isEqualByComparingTo("2.000");
+        });
     }
 
     private <T> T post(String path, Map body, Class<T> type) {

@@ -247,6 +247,48 @@ test('整车销售订单支持客户筛选和统计看板入口', async ({ page 
   await expect(page.getByText('按仓库类型统计', { exact: true })).toBeVisible()
   await expect(page.getByText('统计区间', { exact: true })).toHaveCount(0)
 })
+test('整车销售订单导入支持车系匹配和成交单价', async ({ page }) => {
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const suffix = Date.now().toString()
+  const series = `E2E导入车系-${suffix}`
+  const productName = `E2E导入商品-${suffix}`
+  const orderNo = `XS202611${suffix.slice(-6)}`
+  const category = await page.request.post('/api/ivs/product-categories', {
+    headers, data: { code: `E2E-SALES-${suffix.slice(-8)}`, name: `E2E销售导入-${suffix}`,
+      trackingMode: 'QUANTITY', statusTemplate: 'SIMPLE', unit: '台', sortOrder: 0 },
+  })
+  expect(category.ok()).toBeTruthy()
+  const categoryBody = await category.json()
+  const warehouse = await page.request.post('/api/ivs/warehouses', {
+    headers, data: { code: `E2E-SWH-${suffix.slice(-8)}`, name: `E2E销售仓-${suffix}`, type: 'MAIN' },
+  })
+  expect(warehouse.ok()).toBeTruthy()
+  const warehouseBody = await warehouse.json()
+  const customer = await page.request.post('/api/ivs/customers', {
+    headers, data: { name: `E2E销售客户-${suffix}`, customerType: 'COMPANY', creditLimit: 1000000, paymentTermDays: 30 },
+  })
+  expect(customer.ok()).toBeTruthy()
+  const product = await page.request.post('/api/ivs/products', {
+    headers, data: { name: productName, series, categoryId: categoryBody.id, unit: '台',
+      minPrice: 100000, purchasePriceRef: 90000, salePriceGuide: 120000 },
+  })
+  expect(product.ok()).toBeTruthy()
+  const csv = [
+    '销售订单编号,客户名称,仓库,车系,数量,成交单价,VIN/SN,备注',
+    `${orderNo},E2E销售客户-${suffix},E2E销售仓-${suffix},${series},1,120000,,E2E车系导入`,
+  ].join('\n')
+  await page.goto('/sales/orders')
+  await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+    name: `sales-import-${suffix}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8'),
+  })
+  await expect(page.getByText('已批量导入 1 张销售订单')).toBeVisible({ timeout: 60000 })
+  const created = await page.request.get(`/api/ivs/sales-orders?keyword=${encodeURIComponent(orderNo)}`, { headers })
+  expect(created.ok()).toBeTruthy()
+  const orders = await created.json()
+  expect(orders.some((order: any) => order.externalOrderNo === orderNo)).toBeTruthy()
+})
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
   await page.goto('/masterdata/products')

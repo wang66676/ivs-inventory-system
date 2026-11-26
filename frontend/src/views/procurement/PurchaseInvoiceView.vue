@@ -185,7 +185,7 @@ const batchInput = ref<HTMLInputElement>()
 const batchPreparing = ref(false)
 const batchSaving = ref(false)
 const batchRows = ref<PurchaseBatchRow[]>([])
-const columns = [
+const allColumns = [
   { title: '内部发票号', key: 'invoiceNo', dataIndex: 'invoiceNo', width: 150 },
   { title: '业务类型', key: 'type', width: 110 },
   { title: '发票类型', key: 'invoiceType', dataIndex: 'invoiceType', width: 220 },
@@ -203,6 +203,9 @@ const columns = [
   { title: '登记日期', key: 'createdAt', width: 120 },
   { title: '操作', key: 'actions', width: 120, fixed: 'right' },
 ]
+const columns = computed(() => props.scope === 'BATTERY'
+  ? allColumns
+  : allColumns.filter((column) => !['invoiceNo', 'status', 'createdAt'].includes(column.key)))
 
 const batchColumns = [
   { title: 'PDF 文件', key: 'fileName', width: 190 },

@@ -43,8 +43,8 @@ public class InventoryStatisticsService {
         String type = warehouseType == null || warehouseType.isBlank()
                 ? null : warehouseType.toUpperCase(Locale.ROOT);
 
-        List<MovementRow> purchases = purchaseRows(start, end, scope, type);
-        List<MovementRow> sales = salesRows(start, end, scope, type);
+        List<MovementRow> purchases = purchaseRows(scope, type);
+        List<MovementRow> sales = salesRows(scope, type);
 
         Map<String, TrendAccumulator> trend = initializeMonthlyTrend(start, end);
         Map<String, WarehouseAccumulator> byWarehouseType = initializeWarehouses();
@@ -53,9 +53,14 @@ public class InventoryStatisticsService {
         BigDecimal purchaseQuantity = BigDecimal.ZERO;
         BigDecimal salesQuantity = BigDecimal.ZERO;
 
+        YearMonth rangeStart = YearMonth.from(start);
+        YearMonth rangeEnd = YearMonth.from(end);
         for (MovementRow row : purchases) {
-            String period = YearMonth.from(row.date()).format(MONTH);
-            trend.get(period).purchase = trend.get(period).purchase.add(row.quantity());
+            YearMonth month = purchaseOrderMonth(row.orderNo(), row.date());
+            if (month.isBefore(rangeStart) || month.isAfter(rangeEnd)) continue;
+            TrendAccumulator period = trend.get(month.format(MONTH));
+            if (period == null) continue;
+            period.purchase = period.purchase.add(row.quantity());
             WarehouseAccumulator purchaseWarehouse = byWarehouseType.computeIfAbsent(
                     row.warehouseType(), key -> new WarehouseAccumulator());
             purchaseWarehouse.purchase = purchaseWarehouse.purchase.add(row.quantity());
@@ -63,8 +68,11 @@ public class InventoryStatisticsService {
             if (row.orderId() != null) purchaseOrders.add(row.orderId());
         }
         for (MovementRow row : sales) {
-            String period = YearMonth.from(row.date()).format(MONTH);
-            trend.get(period).sales = trend.get(period).sales.add(row.quantity());
+            YearMonth month = salesOrderMonth(row.orderNo(), row.date());
+            if (month.isBefore(rangeStart) || month.isAfter(rangeEnd)) continue;
+            TrendAccumulator period = trend.get(month.format(MONTH));
+            if (period == null) continue;
+            period.sales = period.sales.add(row.quantity());
             WarehouseAccumulator salesWarehouse = byWarehouseType.computeIfAbsent(
                     row.warehouseType(), key -> new WarehouseAccumulator());
             salesWarehouse.sales = salesWarehouse.sales.add(row.quantity());
@@ -83,64 +91,67 @@ public class InventoryStatisticsService {
                 scale(salesQuantity.subtract(purchaseQuantity)), purchaseOrders.size(), salesOrders.size());
 
         return new StatisticsView(start, end, scope, type, summary, trendPoints, warehousePoints,
-                List.of("采购数量按已入库收货单的实际收货数量统计。",
-                        "销售数量按已出库销售单的实际出库数量统计。",
+                List.of("采购数量按实际收货数量统计，月份取采购订单编号第3-4位年份、第5-6位月份。",
+                        "销售数量按实际出库数量统计，月份取销售订单编号第3-6位年份、第7-8位月份。",
+                        "订单编号无法解析年月时，回退使用实际收货或出库日期。",
                         "仓库类型分别取实际收货仓库和实际出库仓库。",
                         "已退回、已取消及未过账数据不计入。"));
     }
 
-    private List<MovementRow> purchaseRows(LocalDate from, LocalDate to, String scope, String warehouseType) {
+    private List<MovementRow> purchaseRows(String scope, String warehouseType) {
         StringBuilder sql = new StringBuilder("""
                 select cast(pr.received_at as date) as stat_date,
                        coalesce(w.type, 'UNKNOWN') as warehouse_type,
                        prl.quantity as quantity,
-                       pr.order_id as order_id
+                       pr.order_id as order_id,
+                       coalesce(po.external_order_no, po.order_no) as order_no
                   from ivs.purchase_receipt pr
+                  join ivs.purchase_order po on po.id = pr.order_id
                   join ivs.purchase_receipt_line prl on prl.receipt_id = pr.id
                   join ivs.product p on p.id = prl.product_id
                   join ivs.product_category c on c.id = p.category_id
                   left join ivs.warehouse w on w.id = coalesce(prl.warehouse_id, pr.warehouse_id)
                  where pr.status = 'POSTED'
-                   and cast(pr.received_at as date) between ? and ?
                    and (? = 'ALL' or
                         (case when upper(c.code) like 'BATTERY%' or c.name like '%电池%'
                               then 'BATTERY' else 'VEHICLE' end) = ?)
                 """);
-        List<Object> args = new ArrayList<>(List.of(from, to, scope, scope));
+        List<Object> args = new ArrayList<>(List.of(scope, scope));
         if (warehouseType != null) {
             sql.append(" and coalesce(w.type, 'UNKNOWN') = ?");
             args.add(warehouseType);
         }
         return jdbc.query(sql.toString(), (rs, rowNum) -> new MovementRow(
                 rs.getDate("stat_date").toLocalDate(), rs.getString("warehouse_type"),
-                rs.getBigDecimal("quantity"), rs.getObject("order_id", UUID.class)), args.toArray());
+                rs.getBigDecimal("quantity"), rs.getObject("order_id", UUID.class), rs.getString("order_no")), args.toArray());
     }
 
-    private List<MovementRow> salesRows(LocalDate from, LocalDate to, String scope, String warehouseType) {
+    private List<MovementRow> salesRows(String scope, String warehouseType) {
         StringBuilder sql = new StringBuilder("""
                 select cast(sd.delivered_at as date) as stat_date,
                        coalesce(w.type, 'UNKNOWN') as warehouse_type,
                        sdl.quantity as quantity,
-                       sd.order_id as order_id
+                       sd.order_id as order_id,
+                       coalesce(so.external_order_no, so.order_no) as order_no
                   from ivs.sales_delivery sd
+                  join ivs.sales_order so on so.id = sd.order_id
                   join ivs.sales_delivery_line sdl on sdl.delivery_id = sd.id
                   join ivs.product p on p.id = sdl.product_id
                   join ivs.product_category c on c.id = p.category_id
                   left join ivs.warehouse w on w.id = sd.warehouse_id
                  where sd.status = 'POSTED'
-                   and cast(sd.delivered_at as date) between ? and ?
                    and (? = 'ALL' or
                         (case when upper(c.code) like 'BATTERY%' or c.name like '%电池%'
                               then 'BATTERY' else 'VEHICLE' end) = ?)
                 """);
-        List<Object> args = new ArrayList<>(List.of(from, to, scope, scope));
+        List<Object> args = new ArrayList<>(List.of(scope, scope));
         if (warehouseType != null) {
             sql.append(" and coalesce(w.type, 'UNKNOWN') = ?");
             args.add(warehouseType);
         }
         return jdbc.query(sql.toString(), (rs, rowNum) -> new MovementRow(
                 rs.getDate("stat_date").toLocalDate(), rs.getString("warehouse_type"),
-                rs.getBigDecimal("quantity"), rs.getObject("order_id", UUID.class)), args.toArray());
+                rs.getBigDecimal("quantity"), rs.getObject("order_id", UUID.class), rs.getString("order_no")), args.toArray());
     }
 
     private Map<String, TrendAccumulator> initializeMonthlyTrend(LocalDate from, LocalDate to) {
@@ -176,7 +187,31 @@ public class InventoryStatisticsService {
         return value.setScale(3, java.math.RoundingMode.HALF_UP);
     }
 
-    private record MovementRow(LocalDate date, String warehouseType, BigDecimal quantity, UUID orderId) {
+    private YearMonth purchaseOrderMonth(String orderNo, LocalDate fallbackDate) {
+        if (orderNo != null && orderNo.length() >= 6) {
+            String yearText = orderNo.substring(2, 4);
+            String monthText = orderNo.substring(4, 6);
+            if (yearText.chars().allMatch(Character::isDigit) && monthText.chars().allMatch(Character::isDigit)) {
+                int month = Integer.parseInt(monthText);
+                if (month >= 1 && month <= 12) return YearMonth.of(2000 + Integer.parseInt(yearText), month);
+            }
+        }
+        return YearMonth.from(fallbackDate);
+    }
+
+    private YearMonth salesOrderMonth(String orderNo, LocalDate fallbackDate) {
+        if (orderNo != null && orderNo.length() >= 8) {
+            String yearText = orderNo.substring(2, 6);
+            String monthText = orderNo.substring(6, 8);
+            if (yearText.chars().allMatch(Character::isDigit) && monthText.chars().allMatch(Character::isDigit)) {
+                int month = Integer.parseInt(monthText);
+                if (month >= 1 && month <= 12) return YearMonth.of(Integer.parseInt(yearText), month);
+            }
+        }
+        return YearMonth.from(fallbackDate);
+    }
+
+    private record MovementRow(LocalDate date, String warehouseType, BigDecimal quantity, UUID orderId, String orderNo) {
     }
 
     private static final class TrendAccumulator {

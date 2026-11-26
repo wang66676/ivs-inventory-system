@@ -50,9 +50,9 @@ const modulePages: MenuPage[] = [
   { path: '/inventory/battery-ledger', name: 'stock-ledger-battery', component: () => import('../views/inventory/StockLedgerView.vue'), title: '电池库存台账', scope: 'BATTERY', description: '动力电池库存入出库事实台账。', permission: 'IVS_READ' },
   { path: '/inventory/locks', name: 'stock-lock', component: () => import('../views/inventory/StockLockView.vue'), title: '整车库存锁定', scope: 'VEHICLE', description: '整车销售订单锁货与超时自动释放。', permission: 'IVS_READ', hideable: true },
   { path: '/inventory/battery-locks', name: 'stock-lock-battery', component: () => import('../views/inventory/StockLockView.vue'), title: '电池库存锁定', scope: 'BATTERY', description: '动力电池销售订单锁货与超时自动释放。', permission: 'IVS_READ' },
-  { path: '/inventory/stocktakes', name: 'stocktake', component: () => import('../views/inventory/StocktakeView.vue'), title: '库存盘点', description: '盘点单：草稿 → 过账，差异写台账。', permission: 'IVS_STOCK_ADJUST' },
+  { path: '/inventory/stocktakes', name: 'stocktake', component: () => import('../views/inventory/StocktakeView.vue'), title: '库存盘点', description: '盘点单：草稿 → 过账，差异写台账。', permission: 'IVS_STOCK_ADJUST', hideable: true },
   { path: '/inventory/transfers', name: 'stock-transfer', component: () => import('../views/inventory/StockTransferView.vue'), title: '库存调拨', description: '调拨单：审核、在途、签收与差异处理。', permission: 'IVS_STOCK_TRANSFER' },
-  { path: '/inventory/age', name: 'stock-age', component: () => import('../views/inventory/AgeAnalysisView.vue'), title: '库龄分析', description: '按 VIN/SN 查看 0-30 / 31-60 / 61-90 / 90+ 天库龄与呆滞预警。', permission: 'IVS_READ' },
+  { path: '/inventory/age', name: 'stock-age', component: () => import('../views/inventory/AgeAnalysisView.vue'), title: '库龄分析', description: '按 VIN/SN 查看 0-30 / 31-60 / 61-90 / 90+ 天库龄与呆滞预警。', permission: 'IVS_READ', hideable: true },
 
   // 销售
   { path: '/sales/orders', name: 'sales-order', component: () => import('../views/sales/SalesOrderView.vue'), title: '整车销售订单', scope: 'VEHICLE', description: '整车销售订单、VIN 锁货与出库。', permission: 'IVS_READ' },
