@@ -50,6 +50,11 @@ public final class SalesApi {
     ) {
     }
 
+    public record ResolveCustomerCommand(String name, String contactName, String contactPhone) {
+    }
+
+    public record ResolvedCustomerView(UUID id, String code, String name) {
+    }
     public record SaveSalesOrderCommand(
             String externalOrderNo, UUID customerId, UUID warehouseId, String remark,
             List<SaveSalesOrderLineCommand> lines, String paymentMode, BigDecimal downPayment,

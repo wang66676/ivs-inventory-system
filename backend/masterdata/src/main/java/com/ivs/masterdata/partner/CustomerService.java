@@ -65,6 +65,26 @@ public class CustomerService {
         return MasterdataApi.CustomerView.from(customerRepository.save(customer));
     }
 
+    /** 销售订单登记时按客户名称查找；不存在则自动创建个人客户。 */
+    @Transactional
+    public MasterdataApi.CustomerView findOrCreateByName(String name, String contactName, String contactPhone) {
+        String normalizedName = name == null ? "" : name.trim();
+        if (normalizedName.isBlank()) {
+            throw new IllegalArgumentException("客户名称不能为空");
+        }
+        return customerRepository.findFirstByNameIgnoreCase(normalizedName)
+                .map(MasterdataApi.CustomerView::from)
+                .orElseGet(() -> create(new MasterdataApi.SaveCustomerCommand(
+                        null,
+                        normalizedName,
+                        com.ivs.masterdata.CustomerType.INDIVIDUAL,
+                        contactName == null || contactName.isBlank() ? normalizedName : contactName.trim(),
+                        contactPhone == null ? null : contactPhone.trim(),
+                        null,
+                        java.math.BigDecimal.ZERO,
+                        "销售订单登记自动同步"
+                )));
+    }
     @Transactional(readOnly = true)
     public Customer find(UUID id) {
         return customerRepository.findById(id).orElseThrow(() -> new NotFoundException("客户", id));

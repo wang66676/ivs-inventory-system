@@ -54,6 +54,12 @@ public class SalesMasterDataAdapter implements SalesMasterDataPort {
     }
 
     @Override
+    public CustomerInfo findOrCreateCustomer(String name, String contactName, String contactPhone) {
+        MasterdataApi.CustomerView customer = customerService.findOrCreateByName(name, contactName, contactPhone);
+        return new CustomerInfo(customer.id(), customer.code(), customer.name(),
+                customer.customerType().name(), customer.creditLimit(), DEFAULT_PAYMENT_TERM_DAYS);
+    }
+    @Override
     public WarehouseInfo requireWarehouse(UUID warehouseId) {
         MasterdataApi.WarehouseView warehouse = warehouseService.get(warehouseId);
         return new WarehouseInfo(warehouse.id(), warehouse.name());
@@ -88,4 +94,3 @@ public class SalesMasterDataAdapter implements SalesMasterDataPort {
                 product.minPrice(), "PRODUCT_GUIDE");
     }
 }
-
