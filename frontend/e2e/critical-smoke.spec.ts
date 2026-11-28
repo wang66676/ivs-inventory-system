@@ -299,6 +299,19 @@ test('新建销售订单显示手工客户自动同步入口', async ({ page }) 
   await dialog.getByText('手工输入客户', { exact: true }).click()
   await expect(dialog.getByText('客户名称已存在时自动复用，不存在时自动新增到客户模块。')).toBeVisible()
 })
+test('整车收货支持VIN搜索且电池库存模块可隐藏', async ({ page }) => {
+  await login(page)
+  await page.goto('/procurement/receipts')
+  await expect(page.getByPlaceholder('搜索 VIN/SN', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: /系统管理员/ }).click()
+  await page.getByText('模块显示设置', { exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('模块显示设置', { exact: true })).toBeVisible()
+  for (const title of ['电池库存查询', '电池 SN 库存', '电池库存台账', '电池库存锁定']) {
+    await expect(dialog.getByText(title, { exact: true })).toBeVisible()
+  }
+})
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
   await page.goto('/masterdata/products')

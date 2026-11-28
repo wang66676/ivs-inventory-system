@@ -12,6 +12,7 @@
           <input ref="importInput" type="file" accept=".csv,text/csv" style="display:none" @change="handleImportFile" />
         </template>
         <template v-if="props.scope === 'VEHICLE'">
+          <a-input v-model:value="filterVin" allow-clear placeholder="搜索 VIN/SN" style="width:210px" />
           <a-select v-model:value="filterSeries" :options="seriesFilterOptions" allow-clear show-search placeholder="按车系筛选" style="width:170px" />
           <a-select v-model:value="filterCertificate" :options="certificateFilterOptions" allow-clear placeholder="按合格证筛选" style="width:170px" />
           <a-select v-model:value="filterWarehouseId" :options="warehouseOptions" allow-clear placeholder="按收货仓库筛选" style="width:210px" />
@@ -132,6 +133,7 @@ const previewRows = ref<PreviewRow[]>([])
 const importInput = ref<HTMLInputElement>()
 const products = ref<Product[]>([])
 const suppliers = ref<Supplier[]>([])
+const filterVin = ref('')
 const filterSeries = ref<string>()
 const filterCertificate = ref<'YES' | 'NO'>()
 const filterWarehouseId = ref<string>()
@@ -162,11 +164,15 @@ const batteryColumns = [
   { title: 'B-BOX', key: 'bBox', dataIndex: 'bBox', width: 90, align: 'center' },
   { title: '状态', key: 'status', width: 110, align: 'center' },
 ]
-const filteredLines = computed(() => lines.value.filter((line) =>
-  (!filterSeries.value || line.series === filterSeries.value)
-  && (!filterCertificate.value || (filterCertificate.value === 'YES'
-    ? Boolean(line.certificateApplicationDate) : !line.certificateApplicationDate))
-  && (!filterWarehouseId.value || line.warehouseId === filterWarehouseId.value)))
+const filteredLines = computed(() => {
+  const vinKeyword = filterVin.value.trim().toUpperCase()
+  return lines.value.filter((line) =>
+    (!vinKeyword || line.serialNos?.some((serialNo) => serialNo.toUpperCase().includes(vinKeyword)))
+    && (!filterSeries.value || line.series === filterSeries.value)
+    && (!filterCertificate.value || (filterCertificate.value === 'YES'
+      ? Boolean(line.certificateApplicationDate) : !line.certificateApplicationDate))
+    && (!filterWarehouseId.value || line.warehouseId === filterWarehouseId.value))
+})
 const seriesFilterOptions = computed(() => [...new Set(lines.value.map((line) => line.series).filter(Boolean))]
   .sort((a, b) => String(a).localeCompare(String(b), 'zh-CN'))
   .map((value) => ({ label: String(value), value: String(value) })))
