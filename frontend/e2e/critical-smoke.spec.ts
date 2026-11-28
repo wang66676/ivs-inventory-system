@@ -312,6 +312,32 @@ test('整车收货支持VIN搜索且电池库存模块可隐藏', async ({ page 
     await expect(dialog.getByText(title, { exact: true })).toBeVisible()
   }
 })
+test('普通用户可查看版本更新内容', async ({ page }) => {
+  await login(page)
+  const token = await page.evaluate(() => localStorage.getItem('ivs_token'))
+  const username = `upd_${Date.now()}`
+  const created = await page.request.post('/api/platform/users', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      username, displayName: '版本查看测试用户', password: 'Update12345',
+      dataScope: 'SELF', roles: ['SALES'],
+    },
+  })
+  expect(created.ok()).toBeTruthy()
+
+  await page.evaluate(() => localStorage.clear())
+  await page.goto('/login')
+  await page.getByPlaceholder('请输入用户名').fill(username)
+  await page.getByPlaceholder('请输入密码').fill('Update12345')
+  await page.getByRole('button', { name: '登 录', exact: true }).click()
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30000 })
+
+  await page.goto('/system/update')
+  await expect(page).toHaveURL(/\/system\/update$/)
+  await expect(page.getByText('在线检查更新', { exact: true })).toBeVisible()
+  await expect(page.getByText('当前版本', { exact: true })).toBeVisible()
+  await expect(page.getByText('线上最新版本', { exact: true })).toBeVisible()
+})
 test('全站表格分页支持10条20条50条选择', async ({ page }) => {
   await login(page)
   await page.goto('/masterdata/products')

@@ -1,7 +1,7 @@
 {
   "name": "ivs-web",
   "private": true,
-  "version": "1.9.38",
+  "version": "1.9.39",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",

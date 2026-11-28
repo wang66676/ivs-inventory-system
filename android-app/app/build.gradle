@@ -1,7 +1,7 @@
 plugins { id 'com.android.application' }
 
-def appVersionName = System.getenv('APP_VERSION') ?: '1.9.38'
-def appVersionCode = (System.getenv('APP_VERSION_CODE') ?: '10938') as Integer
+def appVersionName = System.getenv('APP_VERSION') ?: '1.9.39'
+def appVersionCode = (System.getenv('APP_VERSION_CODE') ?: '10939') as Integer
 def serverUrl = System.getenv('IVS_SERVER_URL') ?: 'https://mailto-drum-seeker-darwin.trycloudflare.com/'
 
 android {

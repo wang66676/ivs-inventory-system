@@ -26,10 +26,11 @@
             <a-menu-item v-for="item in section.items" :key="item.path">{{ item.title }}</a-menu-item>
           </a-menu-item-group>
         </a-sub-menu>
-        <a-sub-menu v-if="auth.can('USER_MANAGE') || auth.can('IVS_READ')" key="system">
+        <a-sub-menu key="system">
           <template #icon><SettingOutlined /></template>
           <template #title>系统</template>
-          <a-menu-item key="/system/approval-tasks">审批待办</a-menu-item>
+          <a-menu-item v-if="auth.can('IVS_READ')" key="/system/approval-tasks">审批待办</a-menu-item>
+          <a-menu-item key="/system/update">在线更新</a-menu-item>
           <template v-if="auth.isAdmin">
             <a-menu-item key="/system/organizations">组织架构</a-menu-item>
             <a-menu-item key="/system/users">用户管理</a-menu-item>
@@ -39,7 +40,6 @@
             <a-menu-item key="/system/approvals">审批配置</a-menu-item>
             <a-menu-item key="/system/settings">全局参数</a-menu-item>
             <a-menu-item key="/system/health">系统健康</a-menu-item>
-            <a-menu-item key="/system/update">在线更新</a-menu-item>
             <a-menu-item key="/system/migration">数据迁移</a-menu-item>
             <a-menu-item key="/system/audit">审计日志</a-menu-item>
           </template>
